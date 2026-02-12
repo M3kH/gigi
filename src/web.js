@@ -58,6 +58,47 @@ export const createApp = () => {
     }
   })
 
+  app.post('/api/chat/stream', async (c) => {
+    const { message } = await c.req.json()
+    if (!message) return c.json({ error: 'message required' }, 400)
+
+    const stream = new ReadableStream({
+      async start(controller) {
+        try {
+          // Send initial event
+          controller.enqueue(new TextEncoder().encode('data: {"type":"start"}\n\n'))
+
+          // Get response
+          const response = await handleMessage('web', 'default', message)
+
+          // Stream response in chunks
+          const text = response.text || ''
+          const chunkSize = 20
+          for (let i = 0; i < text.length; i += chunkSize) {
+            const chunk = text.slice(i, i + chunkSize)
+            controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ type: 'chunk', text: chunk })}\n\n`))
+            // Small delay to simulate streaming
+            await new Promise(resolve => setTimeout(resolve, 10))
+          }
+
+          controller.enqueue(new TextEncoder().encode('data: {"type":"done"}\n\n'))
+          controller.close()
+        } catch (err) {
+          controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ type: 'error', error: err.message })}\n\n`))
+          controller.close()
+        }
+      }
+    })
+
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive'
+      }
+    })
+  })
+
   // Webhook endpoint
   app.post('/webhook/gitea', handleWebhook)
 
