@@ -1,5 +1,6 @@
 import { serve } from '@hono/node-server'
 import { connect, disconnect, cleanupOldActions } from './store.js'
+import { initEnforcer } from './task_enforcer.js'
 import { createApp } from './web.js'
 import { startTelegram, stopTelegram } from './telegram.js'
 
@@ -14,8 +15,12 @@ if (!DATABASE_URL) {
 const main = async () => {
   // Connect to database and run migrations
   console.log('Connecting to database...')
-  await connect(DATABASE_URL)
+  const pool = await connect(DATABASE_URL)
   console.log('Database ready')
+
+  // Initialize task enforcer
+  await initEnforcer(pool)
+  console.log('Task enforcer ready')
 
   // Start HTTP server
   const app = createApp()

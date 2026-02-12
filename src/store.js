@@ -11,6 +11,8 @@ export const connect = async (databaseUrl) => {
   return pool
 }
 
+export const getPool = () => pool
+
 export const disconnect = () => pool?.end()
 
 const migrate = async () => {
