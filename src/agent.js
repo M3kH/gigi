@@ -78,10 +78,10 @@ export const runAgent = async (messages, onChunk) => {
           }
         },
         maxTurns: 20,
-        model: 'sonnet',
         permissionMode: 'bypassPermissions',
         allowDangerouslySkipPermissions: true,
-        persistSession: false
+        persistSession: false,
+        stderr: (data) => console.error('[claude-code]', data.toString().trim())
       }
     })
 
@@ -99,6 +99,7 @@ export const runAgent = async (messages, onChunk) => {
       }
     }
   } catch (err) {
+    console.error('[agent] query failed:', err)
     fullText = `Error: ${err.message}`
   }
 
