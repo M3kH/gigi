@@ -6,9 +6,10 @@ const verifySignature = (payload, signature, secret) => {
   if (!signature || !secret) return false
   const expected = createHmac('sha256', secret).update(payload).digest('hex')
   try {
+    // Both signature and expected are hex strings, compare as buffers
     return timingSafeEqual(
-      Buffer.from(signature),
-      Buffer.from(expected)
+      Buffer.from(signature, 'hex'),
+      Buffer.from(expected, 'hex')
     )
   } catch {
     return false
