@@ -1,0 +1,3 @@
+claude.cluster.local {
+	reverse_proxy ideabile-biancifiore-gigi_gigi:3000
+}

@@ -78,3 +78,8 @@ jobs:
               > /tmp/gigi-compose.yml
             docker stack deploy -c /tmp/gigi-compose.yml --with-registry-auth ideabile-biancifiore-gigi
             rm /tmp/gigi-compose.yml"
+
+      - name: Deploy Caddy config
+        uses: http://192.168.1.80:3000/ideabile/deploy-site@main
+        with:
+          caddy_file: Caddyfile
