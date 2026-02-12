@@ -3,7 +3,8 @@ import { serveStatic } from '@hono/node-server/serve-static'
 import { readFile } from 'node:fs/promises'
 import { healthCheck } from './health.js'
 import { getSetupStatus, setupStep } from './setup.js'
-import { handleMessage, newConversation } from './router.js'
+import { handleMessage, newConversation, resumeConversation } from './router.js'
+import { subscribe } from './events.js'
 import { handleWebhook } from './webhooks.js'
 import * as store from './store.js'
 
@@ -32,7 +33,9 @@ export const createApp = () => {
   // Chat API
   app.get('/api/conversations', async (c) => {
     const channel = c.req.query('channel') || null
-    const convs = await store.listConversations(channel)
+    const status = c.req.query('status') || undefined
+    const tag = c.req.query('tag') || undefined
+    const convs = await store.listConversations(channel, 20, { status, tag })
     return c.json(convs)
   })
 
@@ -41,11 +44,106 @@ export const createApp = () => {
     return c.json(messages)
   })
 
+  app.get('/api/conversations/:id', async (c) => {
+    const conv = await store.getConversation(c.req.param('id'))
+    if (!conv) return c.json({ error: 'not found' }, 404)
+    return c.json(conv)
+  })
+
+  app.patch('/api/conversations/:id', async (c) => {
+    const id = c.req.param('id')
+    const body = await c.req.json()
+    const { tags, status, repo, topic } = body
+    if (tags) await store.addTags(id, tags)
+    const updates = {}
+    if (status) updates.status = status
+    if (repo) updates.repo = repo
+    if (topic) updates.topic = topic
+    if (Object.keys(updates).length) await store.updateConversation(id, updates)
+    const conv = await store.getConversation(id)
+    return c.json(conv)
+  })
+
+  // Title edit endpoint
+  app.patch('/api/conversations/:id/title', async (c) => {
+    const id = c.req.param('id')
+    const { title } = await c.req.json()
+    if (!title) return c.json({ error: 'title required' }, 400)
+    await store.updateConversation(id, { topic: title })
+    return c.json({ ok: true })
+  })
+
+  app.post('/api/conversations/:id/close', async (c) => {
+    await store.closeConversation(c.req.param('id'))
+    return c.json({ ok: true })
+  })
+
+  app.delete('/api/conversations/:id', async (c) => {
+    await store.deleteConversation(c.req.param('id'))
+    return c.json({ ok: true })
+  })
+
   app.post('/api/conversations/new', async (c) => {
     newConversation('web', 'default')
     return c.json({ ok: true })
   })
 
+  // SSE event stream — persistent connection, receives all agent events
+  app.get('/api/events', (c) => {
+    const stream = new ReadableStream({
+      start(controller) {
+        const encoder = new TextEncoder()
+        const send = (data) => {
+          try { controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`)) } catch {}
+        }
+
+        // Subscribe to event bus
+        const unsubscribe = subscribe(send)
+
+        // Keepalive every 30s
+        const keepalive = setInterval(() => {
+          try { controller.enqueue(encoder.encode(': keepalive\n\n')) } catch {}
+        }, 30000)
+
+        // Cleanup on close
+        c.req.raw.signal.addEventListener('abort', () => {
+          unsubscribe()
+          clearInterval(keepalive)
+          try { controller.close() } catch {}
+        })
+      }
+    })
+
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive'
+      }
+    })
+  })
+
+  // Async chat — fire-and-forget, events flow through SSE
+  app.post('/api/chat/send', async (c) => {
+    const { message, conversationId } = await c.req.json()
+    if (!message) return c.json({ error: 'message required' }, 400)
+
+    const channelId = conversationId || 'default'
+
+    // Resume a specific conversation if ID provided
+    if (conversationId) {
+      resumeConversation('web', channelId, conversationId)
+    }
+
+    // Fire and forget — don't await
+    handleMessage('web', channelId, message).catch(err => {
+      console.error('[web] async chat error:', err.message)
+    })
+
+    return c.json({ ok: true })
+  })
+
+  // Legacy sync chat endpoint (backward compat)
   app.post('/api/chat', async (c) => {
     const { message } = await c.req.json()
     if (!message) return c.json({ error: 'message required' }, 400)
@@ -58,6 +156,7 @@ export const createApp = () => {
     }
   })
 
+  // Legacy stream endpoint (backward compat)
   app.post('/api/chat/stream', async (c) => {
     const { message } = await c.req.json()
     if (!message) return c.json({ error: 'message required' }, 400)

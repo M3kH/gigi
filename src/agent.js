@@ -102,6 +102,9 @@ If you realize you haven't completed the checklist, continue immediately.
 
 gigi (this service), org-press, website, biancifiore, deploy-docker-compose, deploy-site
 
+## Response format hint
+On your first reply in a new conversation, begin with [title: brief 3-5 word description] on its own line.
+
 Be concise, upbeat, and proactive. Call Mauro by name.`
 
 // Configure git credentials globally so Claude Code's Bash can use git with auth
@@ -169,11 +172,11 @@ export const resetClient = () => {
   configured = false
 }
 
-export const runAgent = async (messages, onChunk) => {
+export const runAgent = async (messages, onEvent, { sessionId = null } = {}) => {
   await ensureReady()
+  const env = await getAgentEnv()
 
-  // Format conversation history into a single prompt
-  const prompt = messages
+  const formatMessages = (msgs) => msgs
     .map(m => {
       const text = Array.isArray(m.content)
         ? m.content.filter(b => b.type === 'text').map(b => b.text).join('')
@@ -182,44 +185,103 @@ export const runAgent = async (messages, onChunk) => {
     })
     .join('\n\n')
 
-  const env = await getAgentEnv()
   let fullText = ''
+  let capturedSessionId = null
+  const toolCalls = []
+  const toolResults = {}
+  const startTime = Date.now()
+  let turns = 0
 
-  try {
-    const response = query({
-      prompt,
-      options: {
-        systemPrompt: SYSTEM_PROMPT,
-        env,
-        cwd: '/workspace',
-        maxTurns: 20,
-        permissionMode: 'bypassPermissions',
-        allowDangerouslySkipPermissions: true,
-        persistSession: false,
-        stderr: (data) => console.error('[claude-code]', data.toString().trim())
-      }
-    })
-
+  const processResponse = async (response) => {
     for await (const message of response) {
+      if (!capturedSessionId && message.session_id) {
+        capturedSessionId = message.session_id
+      }
+
       if (message.type === 'assistant' && message.message?.content) {
+        turns++
         for (const block of message.message.content) {
           if (block.type === 'text' && block.text) {
             fullText += block.text
-            if (onChunk) onChunk(block.text)
+            if (onEvent) onEvent({ type: 'text_chunk', text: block.text })
+          }
+          if (block.type === 'tool_use') {
+            const tc = { toolUseId: block.id, name: block.name, input: block.input }
+            toolCalls.push(tc)
+            if (onEvent) onEvent({ type: 'tool_use', ...tc })
           }
         }
       }
+
+      if (message.type === 'user' && message.message?.content) {
+        for (const block of message.message.content) {
+          if (block.type === 'tool_result') {
+            const resultContent = Array.isArray(block.content)
+              ? block.content.map(b => b.type === 'text' ? b.text : JSON.stringify(b)).join('')
+              : (typeof block.content === 'string' ? block.content : JSON.stringify(block.content))
+            toolResults[block.tool_use_id] = resultContent
+            if (onEvent) onEvent({ type: 'tool_result', toolUseId: block.tool_use_id, result: resultContent })
+          }
+        }
+      }
+
       if (message.type === 'result') {
-        fullText = message.result || fullText
+        if (message.result) fullText = message.result
+        const duration = Date.now() - startTime
+        if (onEvent) onEvent({
+          type: 'agent_done',
+          cost: message.cost_usd ?? null,
+          duration,
+          turns,
+          isError: !!message.is_error
+        })
       }
     }
+  }
+
+  const baseOptions = {
+    systemPrompt: SYSTEM_PROMPT,
+    env,
+    cwd: '/workspace',
+    maxTurns: 20,
+    permissionMode: 'bypassPermissions',
+    allowDangerouslySkipPermissions: true,
+    persistSession: true,
+    stderr: (data) => console.error('[claude-code]', data.toString().trim())
+  }
+
+  try {
+    if (sessionId) {
+      try {
+        const lastMsg = messages[messages.length - 1]
+        const prompt = formatMessages([lastMsg])
+        console.log('[agent] Resuming session:', sessionId)
+        const response = query({ prompt, options: { ...baseOptions, resume: sessionId } })
+        await processResponse(response)
+        return { content: [{ type: 'text', text: fullText }], text: fullText, toolCalls, toolResults, sessionId: capturedSessionId }
+      } catch (err) {
+        console.warn('[agent] Session resume failed, falling back to fresh:', err.message)
+        fullText = ''
+        capturedSessionId = null
+        toolCalls.length = 0
+        Object.keys(toolResults).forEach(k => delete toolResults[k])
+      }
+    }
+
+    const prompt = formatMessages(messages)
+    const response = query({ prompt, options: baseOptions })
+    await processResponse(response)
   } catch (err) {
     console.error('[agent] query failed:', err)
     fullText = `Error: ${err.message}`
+    if (onEvent) onEvent({ type: 'agent_done', cost: null, duration: Date.now() - startTime, turns, isError: true })
   }
 
   return {
     content: [{ type: 'text', text: fullText }],
-    text: fullText
+    text: fullText,
+    toolCalls,
+    toolResults,
+    sessionId: capturedSessionId
   }
 }

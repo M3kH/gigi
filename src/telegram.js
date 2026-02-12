@@ -1,6 +1,7 @@
 import { Bot } from 'grammy'
 import { getConfig, setConfig } from './store.js'
-import { handleMessage, newConversation } from './router.js'
+import * as store from './store.js'
+import { handleMessage, newConversation, resumeConversation, clearConversation } from './router.js'
 import { setBotInstance } from './tools/telegram.js'
 
 let bot = null
@@ -50,6 +51,39 @@ export const startTelegram = async () => {
   bot.command('new', async (ctx) => {
     newConversation('telegram', String(ctx.chat.id))
     await ctx.reply('Started a fresh conversation.')
+  })
+
+  bot.command('resume', async (ctx) => {
+    const chatId = String(ctx.chat.id)
+    const arg = ctx.match?.trim() || 'latest'
+
+    try {
+      let conv
+      if (arg === 'latest') {
+        conv = await store.findLatest('telegram')
+      } else {
+        const matches = await store.findByTag(arg)
+        conv = matches[0] ?? null
+      }
+
+      if (!conv) {
+        await ctx.reply('No matching conversation found.')
+        return
+      }
+
+      resumeConversation('telegram', chatId, conv.id)
+      const tags = conv.tags?.length ? conv.tags.join(', ') : 'none'
+      const date = new Date(conv.updated_at).toLocaleDateString()
+      await ctx.reply(`Resumed conversation from ${date} (tags: ${tags})`)
+    } catch (err) {
+      await ctx.reply(`Error: ${err.message}`)
+    }
+  })
+
+  bot.command('clear', async (ctx) => {
+    const chatId = String(ctx.chat.id)
+    await clearConversation('telegram', chatId)
+    await ctx.reply('Conversation closed.')
   })
 
   bot.command('status', async (ctx) => {

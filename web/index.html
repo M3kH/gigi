@@ -14,44 +14,78 @@
   <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/typescript.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/go.min.js"></script>
   <style>
+    :root {
+      --bg-primary: #0a0a0a;
+      --bg-secondary: #111;
+      --bg-elevated: #1a1a1a;
+      --border: #222;
+      --text-primary: #e0e0e0;
+      --text-secondary: #aaa;
+      --text-muted: #666;
+      --accent-green: #1a6;
+      --status-open: #4a4;
+      --status-active: #ca4;
+      --status-closed: #666;
+    }
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: system-ui, sans-serif; background: #0a0a0a; color: #e0e0e0; height: 100vh; display: flex; }
+    body { font-family: system-ui, sans-serif; background: var(--bg-primary); color: var(--text-primary); height: 100vh; display: flex; }
 
     /* Sidebar */
-    .sidebar { width: 260px; background: #111; border-right: 1px solid #222; display: flex; flex-direction: column; }
-    .sidebar-header { padding: 1rem; border-bottom: 1px solid #222; display: flex; justify-content: space-between; align-items: center; }
+    .sidebar { width: 280px; background: var(--bg-secondary); border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; }
+    .sidebar-header { padding: 1rem; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
     .sidebar-header h2 { font-size: 1rem; }
-    .new-btn { background: #1a6; color: #fff; border: none; border-radius: 4px; padding: 0.3rem 0.6rem; cursor: pointer; font-size: 0.8rem; }
+    .new-btn { background: var(--accent-green); color: #fff; border: none; border-radius: 4px; padding: 0.3rem 0.6rem; cursor: pointer; font-size: 0.8rem; }
+    .new-btn:hover { opacity: 0.9; }
     .conv-list { flex: 1; overflow-y: auto; padding: 0.5rem; }
-    .conv-item { padding: 0.5rem 0.75rem; border-radius: 4px; cursor: pointer; font-size: 0.85rem; color: #aaa; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .conv-item:hover { background: #1a1a1a; }
-    .conv-item.active { background: #1a1a1a; color: #fff; }
+
+    .conv-item { padding: 0.6rem 0.75rem; border-radius: 6px; cursor: pointer; margin-bottom: 2px; transition: background 0.15s; }
+    .conv-item:hover { background: var(--bg-elevated); }
+    .conv-item.active { background: var(--bg-elevated); }
+    .conv-item-header { display: flex; align-items: center; gap: 0.4rem; }
+    .conv-item-title { font-size: 0.85rem; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; }
+    .conv-item.active .conv-item-title { color: var(--text-primary); }
+    .conv-item-spinner { font-size: 0.75rem; animation: spin 1s linear infinite; display: none; }
+    .conv-item-spinner.visible { display: inline; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .conv-item-tags { display: flex; gap: 0.3rem; margin-top: 0.2rem; flex-wrap: wrap; }
+    .conv-tag { font-size: 0.65rem; color: var(--text-muted); background: #1a1a1a; padding: 0.1rem 0.35rem; border-radius: 3px; }
+
+    .status-badge { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .status-badge.open { background: var(--status-open); }
+    .status-badge.active { background: var(--status-active); }
+    .status-badge.closed { background: var(--status-closed); }
 
     /* Status bar */
-    .status-bar { padding: 0.75rem 1rem; border-top: 1px solid #222; font-size: 0.75rem; color: #666; }
+    .status-bar { padding: 0.75rem 1rem; border-top: 1px solid var(--border); font-size: 0.75rem; color: var(--text-muted); }
     .status-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 4px; }
-    .status-dot.ok { background: #4a4; }
-    .status-dot.warn { background: #a84; }
+    .status-dot.ok { background: var(--status-open); }
+    .status-dot.warn { background: var(--status-active); }
     .status-dot.err { background: #a44; }
 
     /* Hamburger menu */
-    .menu-btn { display: none; position: fixed; top: 1rem; left: 1rem; z-index: 1000; background: #1a1a1a; border: 1px solid #333; border-radius: 4px; padding: 0.5rem; cursor: pointer; }
-    .menu-btn span { display: block; width: 20px; height: 2px; background: #e0e0e0; margin: 4px 0; }
+    .menu-btn { display: none; position: fixed; top: 0.75rem; left: 0.75rem; z-index: 1000; background: var(--bg-elevated); border: 1px solid #333; border-radius: 4px; padding: 0.5rem; cursor: pointer; }
+    .menu-btn span { display: block; width: 20px; height: 2px; background: var(--text-primary); margin: 4px 0; }
 
     /* Chat area */
-    .chat { flex: 1; display: flex; flex-direction: column; }
-    .chat-header { padding: 1rem 2rem; border-bottom: 1px solid #222; }
-    .chat-header h1 { font-size: 1.1rem; font-weight: 500; color: #999; }
+    .chat { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+    .chat-header { padding: 0.75rem 2rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 0.75rem; min-height: 52px; }
+    .chat-title-wrap { flex: 1; display: flex; align-items: center; gap: 0.5rem; min-width: 0; }
+    .chat-title { font-size: 1rem; font-weight: 500; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .chat-title-input { font-size: 1rem; font-weight: 500; background: var(--bg-elevated); border: 1px solid #444; border-radius: 4px; color: var(--text-primary); padding: 0.15rem 0.5rem; width: 100%; display: none; }
+    .chat-title-edit { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 0.75rem; padding: 0.2rem 0.4rem; border-radius: 3px; flex-shrink: 0; }
+    .chat-title-edit:hover { color: var(--text-secondary); background: var(--bg-elevated); }
+    .chat-header-tags { display: flex; gap: 0.3rem; flex-shrink: 0; }
+    .chat-header-tag { font-size: 0.7rem; color: var(--text-muted); background: var(--bg-elevated); padding: 0.15rem 0.4rem; border-radius: 3px; }
+
     .messages { flex: 1; overflow-y: auto; padding: 1rem 2rem; }
     .message { margin-bottom: 1.5rem; max-width: 720px; }
     .message.user { margin-left: auto; }
-    .message .meta { display: flex; gap: 0.5rem; font-size: 0.75rem; color: #666; margin-bottom: 0.25rem; align-items: center; }
+    .message .meta { display: flex; gap: 0.5rem; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem; align-items: center; }
     .message .role { font-weight: 500; }
-    .message .timestamp { }
     .message .content { padding: 0.75rem 1rem; border-radius: 8px; font-size: 0.9rem; line-height: 1.6; }
     .message.user .content { background: #1a3a2a; }
-    .message.assistant .content { background: #141414; border: 1px solid #222; }
-    .message .tool { font-size: 0.8rem; color: #886; font-family: monospace; }
+    .message.assistant .content { background: #141414; border: 1px solid var(--border); }
 
     /* Markdown styling */
     .message .content p { margin: 0.5em 0; }
@@ -59,10 +93,10 @@
     .message .content p:last-child { margin-bottom: 0; }
     .message .content ul, .message .content ol { margin: 0.5em 0; padding-left: 1.5em; }
     .message .content li { margin: 0.25em 0; }
-    .message .content pre { background: #0a0a0a; border: 1px solid #333; border-radius: 4px; padding: 0.75rem; margin: 0.5em 0; overflow-x: auto; }
+    .message .content pre { background: var(--bg-primary); border: 1px solid #333; border-radius: 4px; padding: 0.75rem; margin: 0.5em 0; overflow-x: auto; }
     .message .content code { font-family: 'Monaco', 'Courier New', monospace; font-size: 0.85em; }
     .message .content pre code { font-size: 0.8em; }
-    .message .content:not(pre) > code { background: #1a1a1a; padding: 0.1em 0.3em; border-radius: 3px; }
+    .message .content:not(pre) > code { background: var(--bg-elevated); padding: 0.1em 0.3em; border-radius: 3px; }
     .message .content blockquote { border-left: 3px solid #444; padding-left: 1em; margin: 0.5em 0; color: #999; }
     .message .content h1, .message .content h2, .message .content h3 { margin: 1em 0 0.5em 0; }
     .message .content h1 { font-size: 1.3em; }
@@ -71,9 +105,26 @@
     .message .content a { color: #5a9fd4; text-decoration: none; }
     .message .content a:hover { text-decoration: underline; }
 
+    /* Tool blocks */
+    .tool-block { margin: 0.5rem 0; border: 1px solid #2a2a2a; border-radius: 6px; font-size: 0.8rem; overflow: hidden; }
+    .tool-header { display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem 0.75rem; background: #151515; cursor: pointer; user-select: none; color: var(--text-secondary); }
+    .tool-header:hover { background: #1a1a1a; }
+    .tool-arrow { font-size: 0.65rem; transition: transform 0.15s; color: var(--text-muted); }
+    .tool-arrow.open { transform: rotate(90deg); }
+    .tool-name { font-weight: 600; color: #7a8a6a; }
+    .tool-summary { flex: 1; color: var(--text-muted); font-family: 'Monaco', 'Courier New', monospace; font-size: 0.75rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .tool-elapsed { color: var(--text-muted); font-size: 0.7rem; flex-shrink: 0; }
+    .tool-status { font-size: 0.7rem; flex-shrink: 0; }
+    .tool-status.running { color: var(--status-active); }
+    .tool-status.done { color: var(--status-open); }
+    .tool-body { display: none; border-top: 1px solid #2a2a2a; }
+    .tool-body.open { display: block; }
+    .tool-body pre { margin: 0; padding: 0.5rem 0.75rem; background: #0d0d0d; font-size: 0.75rem; overflow-x: auto; max-height: 300px; overflow-y: auto; color: var(--text-secondary); }
+    .tool-body .tool-label { font-size: 0.65rem; color: var(--text-muted); padding: 0.3rem 0.75rem 0; text-transform: uppercase; letter-spacing: 0.05em; }
+
     /* Typing indicator */
     .typing-indicator { display: inline-flex; gap: 4px; padding: 0.75rem 1rem; }
-    .typing-indicator span { width: 6px; height: 6px; background: #666; border-radius: 50%; animation: typing 1.4s infinite; }
+    .typing-indicator span { width: 6px; height: 6px; background: var(--text-muted); border-radius: 50%; animation: typing 1.4s infinite; }
     .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
     .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
     @keyframes typing {
@@ -82,19 +133,22 @@
     }
 
     /* Input */
-    .input-area { padding: 1rem 2rem; border-top: 1px solid #222; }
+    .input-area { padding: 1rem 2rem; border-top: 1px solid var(--border); }
     .input-row { display: flex; gap: 0.5rem; max-width: 720px; }
-    .input-row textarea { flex: 1; padding: 0.6rem 0.75rem; background: #141414; border: 1px solid #222; border-radius: 6px; color: #e0e0e0; font-family: system-ui, sans-serif; font-size: 0.9rem; resize: none; min-height: 42px; max-height: 200px; }
+    .input-row textarea { flex: 1; padding: 0.6rem 0.75rem; background: #141414; border: 1px solid var(--border); border-radius: 6px; color: var(--text-primary); font-family: system-ui, sans-serif; font-size: 0.9rem; resize: none; min-height: 42px; max-height: 200px; }
     .input-row textarea:focus { outline: none; border-color: #444; }
-    .input-row button { padding: 0.6rem 1.2rem; background: #1a6; color: #fff; border: none; border-radius: 6px; cursor: pointer; white-space: nowrap; }
-    .input-row button:disabled { background: #333; color: #666; cursor: not-allowed; }
+    .input-row button { padding: 0.6rem 1.2rem; background: var(--accent-green); color: #fff; border: none; border-radius: 6px; cursor: pointer; white-space: nowrap; }
+    .input-row button:disabled { background: #333; color: var(--text-muted); cursor: not-allowed; }
+
+    /* Empty state */
+    .empty-state { flex: 1; display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 0.9rem; }
 
     /* Mobile */
     @media (max-width: 768px) {
-      .sidebar { position: fixed; top: 0; left: -260px; height: 100vh; z-index: 999; transition: left 0.3s; }
+      .sidebar { position: fixed; top: 0; left: -280px; height: 100vh; z-index: 999; transition: left 0.3s; }
       .sidebar.open { left: 0; }
       .menu-btn { display: block; }
-      .chat-header { padding: 1rem 1rem 1rem 3.5rem; }
+      .chat-header { padding: 0.75rem 1rem 0.75rem 3.5rem; }
       .messages { padding: 1rem; }
       .input-area { padding: 0.75rem; }
       .overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 998; }
@@ -126,37 +180,49 @@
 
   <div class="chat">
     <div class="chat-header">
-      <h1 id="chat-title">New conversation</h1>
+      <div class="chat-title-wrap">
+        <span class="chat-title" id="chat-title">New conversation</span>
+        <input class="chat-title-input" id="chat-title-input" type="text" onkeydown="if(event.key==='Enter')Chat.saveTitle();if(event.key==='Escape')Chat.cancelTitleEdit()">
+        <button class="chat-title-edit" id="chat-title-edit" onclick="Chat.editTitle()" style="display:none">edit</button>
+      </div>
+      <div class="chat-header-tags" id="chat-header-tags"></div>
     </div>
-    <div class="messages" id="messages"></div>
+    <div class="messages" id="messages">
+      <div class="empty-state">Send a message to start a conversation</div>
+    </div>
     <div class="input-area">
       <div class="input-row">
         <textarea id="input" placeholder="Talk to Gigi..." rows="1"
-          onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();send()}"></textarea>
-        <button id="send-btn" onclick="send()">Send</button>
+          onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();Chat.send()}"></textarea>
+        <button id="send-btn" onclick="Chat.send()">Send</button>
       </div>
     </div>
   </div>
 
   <script>
-    // Configure marked for syntax highlighting
+    // Configure marked
     marked.setOptions({
-      highlight: function(code, lang) {
-        if (lang && hljs.getLanguage(lang)) {
-          return hljs.highlight(code, { language: lang }).value
-        }
+      highlight: (code, lang) => {
+        if (lang && hljs.getLanguage(lang)) return hljs.highlight(code, { language: lang }).value
         return hljs.highlightAuto(code).value
       },
       breaks: true,
       gfm: true
     })
 
-    const messagesEl = document.getElementById('messages')
-    const inputEl = document.getElementById('input')
-    const sendBtn = document.getElementById('send-btn')
-    const chatTitle = document.getElementById('chat-title')
-    let sending = false
-    let messageCount = 0
+    // ── State ──────────────────────────────────────────────────
+    const State = {
+      conversations: [],
+      activeConvId: null,
+      activeConv: null,
+      agentRunning: new Set(),
+      currentAssistantEl: null,
+      currentAssistantText: ''
+    }
+
+    // ── Helpers ────────────────────────────────────────────────
+    const $ = (sel) => document.querySelector(sel)
+    const $$ = (sel) => document.querySelectorAll(sel)
 
     const formatTime = (date) => {
       const d = new Date(date)
@@ -166,207 +232,535 @@
       return isToday ? timeStr : `${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} ${timeStr}`
     }
 
-    const addMessage = (role, text, timestamp = new Date()) => {
+    const toolSummary = (name, input) => {
+      if (!input) return ''
+      if (name === 'Bash' || name === 'bash') return (input.command || '').slice(0, 80)
+      if (name === 'Read' || name === 'read_file') return input.file_path || input.path || ''
+      if (name === 'Write' || name === 'write_file') return input.file_path || input.path || ''
+      if (name === 'Edit') return input.file_path || ''
+      if (name === 'Grep' || name === 'grep') return input.pattern || ''
+      if (name === 'Glob' || name === 'glob') return input.pattern || ''
+      return JSON.stringify(input).slice(0, 80)
+    }
+
+    const escapeHtml = (s) => {
       const div = document.createElement('div')
-      div.className = `message ${role}`
-      div.innerHTML = `
-        <div class="meta">
-          <span class="role">${role === 'user' ? 'You' : 'Gigi'}</span>
-          <span class="timestamp">${formatTime(timestamp)}</span>
-        </div>
-        <div class="content"></div>
-      `
-      const contentEl = div.querySelector('.content')
-      if (role === 'assistant') {
-        contentEl.innerHTML = marked.parse(text)
-      } else {
-        contentEl.textContent = text
-      }
-      messagesEl.appendChild(div)
-      messagesEl.scrollTop = messagesEl.scrollHeight
-      return div
+      div.textContent = s
+      return div.innerHTML
     }
 
-    const updateChatTitle = (text) => {
-      // Generate title from first message
-      const title = text.slice(0, 50).trim() + (text.length > 50 ? '...' : '')
-      chatTitle.textContent = title
+    // ── SSE ────────────────────────────────────────────────────
+    const SSE = {
+      source: null,
+
+      connect() {
+        if (SSE.source) SSE.source.close()
+        SSE.source = new EventSource('/api/events')
+
+        SSE.source.onmessage = (e) => {
+          try {
+            const event = JSON.parse(e.data)
+            SSE.handleEvent(event)
+          } catch {}
+        }
+
+        SSE.source.onerror = () => {
+          $('#status-dot').className = 'status-dot err'
+          $('#status-text').textContent = 'SSE disconnected'
+          // EventSource auto-reconnects
+        }
+
+        SSE.source.onopen = () => {
+          $('#status-dot').className = 'status-dot ok'
+          $('#status-text').textContent = 'Connected'
+        }
+      },
+
+      handleEvent(event) {
+        const convId = event.conversationId
+
+        switch (event.type) {
+          case 'agent_start':
+            State.agentRunning.add(convId)
+            Sidebar.updateSpinner(convId, true)
+            if (convId === State.activeConvId) {
+              Chat.showTyping()
+            }
+            break
+
+          case 'text_chunk':
+            if (convId === State.activeConvId) {
+              Chat.hideTyping()
+              Chat.appendText(event.text)
+            }
+            break
+
+          case 'tool_use':
+            if (convId === State.activeConvId) {
+              Chat.hideTyping()
+              Chat.addToolBlock(event.toolUseId, event.name, event.input)
+            }
+            break
+
+          case 'tool_result':
+            if (convId === State.activeConvId) {
+              Chat.updateToolResult(event.toolUseId, event.result)
+            }
+            break
+
+          case 'agent_done':
+            State.agentRunning.delete(convId)
+            Sidebar.updateSpinner(convId, false)
+            if (convId === State.activeConvId) {
+              Chat.hideTyping()
+              Chat.finalizeAssistantMessage()
+            }
+            Sidebar.refresh()
+            break
+
+          case 'title_update':
+            Sidebar.updateTitle(convId, event.title)
+            if (convId === State.activeConvId) {
+              $('#chat-title').textContent = event.title
+            }
+            break
+        }
+      }
     }
 
-    const send = async () => {
-      const text = inputEl.value.trim()
-      if (!text || sending) return
+    // ── Sidebar ────────────────────────────────────────────────
+    const Sidebar = {
+      async refresh() {
+        try {
+          const res = await fetch('/api/conversations')
+          State.conversations = await res.json()
+          Sidebar.render(State.conversations)
+        } catch {}
+      },
 
-      sending = true
-      sendBtn.disabled = true
-      inputEl.value = ''
+      render(conversations) {
+        const list = $('#conv-list')
+        list.innerHTML = conversations.map(c => {
+          const isActive = c.id === State.activeConvId
+          const statusClass = State.agentRunning.has(c.id) ? 'active' : (c.status || 'open')
+          const title = c.topic || c.channel || 'Untitled'
+          const tags = (c.tags || []).filter(Boolean)
+          return `
+            <div class="conv-item${isActive ? ' active' : ''}" onclick="Chat.load('${c.id}')" data-conv-id="${c.id}">
+              <div class="conv-item-header">
+                <span class="status-badge ${statusClass}"></span>
+                <span class="conv-item-title">${escapeHtml(title)}</span>
+                <span class="conv-item-spinner${State.agentRunning.has(c.id) ? ' visible' : ''}" data-spinner="${c.id}">⟳</span>
+              </div>
+              ${tags.length ? `<div class="conv-item-tags">${tags.map(t => `<span class="conv-tag">${escapeHtml(t)}</span>`).join('')}</div>` : ''}
+            </div>
+          `
+        }).join('')
+      },
 
-      // Update title after first message
-      if (messageCount === 0) {
-        updateChatTitle(text)
+      updateSpinner(convId, on) {
+        const el = document.querySelector(`[data-spinner="${convId}"]`)
+        if (el) el.classList.toggle('visible', on)
+        // Also update status badge
+        const item = document.querySelector(`[data-conv-id="${convId}"] .status-badge`)
+        if (item) {
+          item.classList.remove('open', 'active', 'closed')
+          item.classList.add(on ? 'active' : 'open')
+        }
+      },
+
+      updateTitle(convId, title) {
+        const item = document.querySelector(`[data-conv-id="${convId}"] .conv-item-title`)
+        if (item) item.textContent = title
       }
-      messageCount++
+    }
 
-      addMessage('user', text)
+    // ── Chat ───────────────────────────────────────────────────
+    const Chat = {
+      typingEl: null,
 
-      // Add typing indicator
-      const typingDiv = document.createElement('div')
-      typingDiv.className = 'message assistant'
-      typingDiv.innerHTML = `
-        <div class="meta">
-          <span class="role">Gigi</span>
-          <span class="timestamp">${formatTime(new Date())}</span>
-        </div>
-        <div class="content">
-          <div class="typing-indicator">
-            <span></span><span></span><span></span>
-          </div>
-        </div>
-      `
-      messagesEl.appendChild(typingDiv)
-      messagesEl.scrollTop = messagesEl.scrollHeight
+      async load(convId) {
+        State.activeConvId = convId
+        State.currentAssistantEl = null
+        State.currentAssistantText = ''
 
-      try {
-        const response = await fetch('/api/chat/stream', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message: text })
-        })
+        const messagesEl = $('#messages')
+        messagesEl.innerHTML = ''
 
-        // Remove typing indicator
-        typingDiv.remove()
+        // Fetch conversation metadata
+        try {
+          const res = await fetch(`/api/conversations/${convId}`)
+          State.activeConv = await res.json()
+          $('#chat-title').textContent = State.activeConv.topic || 'Untitled'
+          $('#chat-title-edit').style.display = ''
 
-        // Create assistant message
-        const timestamp = new Date()
-        const assistantDiv = document.createElement('div')
-        assistantDiv.className = 'message assistant'
-        assistantDiv.innerHTML = `
+          // Render header tags
+          const tagsEl = $('#chat-header-tags')
+          const tags = (State.activeConv.tags || []).filter(Boolean)
+          tagsEl.innerHTML = tags.map(t => `<span class="chat-header-tag">${escapeHtml(t)}</span>`).join('')
+        } catch {}
+
+        // Fetch messages
+        try {
+          const res = await fetch(`/api/conversations/${convId}/messages`)
+          const msgs = await res.json()
+          msgs.forEach(m => Chat.renderMessage(m))
+          messagesEl.scrollTop = messagesEl.scrollHeight
+        } catch {}
+
+        // If agent is running for this conv, show typing
+        if (State.agentRunning.has(convId)) {
+          Chat.showTyping()
+        }
+
+        // Highlight active in sidebar
+        $$('.conv-item').forEach(el => el.classList.toggle('active', el.dataset.convId === convId))
+
+        closeSidebar()
+      },
+
+      renderMessage(msg) {
+        const messagesEl = $('#messages')
+
+        // Skip tool_result type messages (shown via tool_calls on assistant message)
+        if (msg.message_type === 'tool_result') return
+
+        if (msg.role === 'user') {
+          const text = Array.isArray(msg.content)
+            ? msg.content.filter(b => b.type === 'text').map(b => b.text).join('')
+            : (typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content))
+
+          const div = document.createElement('div')
+          div.className = 'message user'
+          div.innerHTML = `
+            <div class="meta">
+              <span class="role">You</span>
+              <span class="timestamp">${formatTime(msg.created_at)}</span>
+            </div>
+            <div class="content">${escapeHtml(text)}</div>
+          `
+          messagesEl.appendChild(div)
+          return
+        }
+
+        // Assistant message
+        const text = Array.isArray(msg.content)
+          ? msg.content.filter(b => b.type === 'text').map(b => b.text).join('')
+          : (typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content))
+
+        const div = document.createElement('div')
+        div.className = 'message assistant'
+
+        // Build tool blocks HTML from stored data
+        let toolBlocksHtml = ''
+        if (msg.tool_calls && Array.isArray(msg.tool_calls)) {
+          const outputs = msg.tool_outputs || {}
+          toolBlocksHtml = msg.tool_calls.map(tc => {
+            const summary = toolSummary(tc.name, tc.input)
+            const result = outputs[tc.toolUseId] || ''
+            const inputStr = tc.input ? JSON.stringify(tc.input, null, 2) : ''
+            return `
+              <div class="tool-block" data-tool-use-id="${tc.toolUseId}">
+                <div class="tool-header" onclick="toggleTool(this)">
+                  <span class="tool-arrow">▶</span>
+                  <span class="tool-name">${escapeHtml(tc.name)}</span>
+                  <span class="tool-summary">${escapeHtml(summary)}</span>
+                  <span class="tool-status done">done</span>
+                </div>
+                <div class="tool-body">
+                  <div class="tool-label">Input</div>
+                  <pre>${escapeHtml(inputStr)}</pre>
+                  ${result ? `<div class="tool-label">Output</div><pre>${escapeHtml(result)}</pre>` : ''}
+                </div>
+              </div>
+            `
+          }).join('')
+        }
+
+        div.innerHTML = `
           <div class="meta">
             <span class="role">Gigi</span>
-            <span class="timestamp">${formatTime(timestamp)}</span>
+            <span class="timestamp">${formatTime(msg.created_at)}</span>
           </div>
-          <div class="content"></div>
+          <div class="content">${marked.parse(text)}</div>
+          ${toolBlocksHtml}
         `
-        const contentEl = assistantDiv.querySelector('.content')
-        messagesEl.appendChild(assistantDiv)
+        messagesEl.appendChild(div)
+      },
 
-        // Stream response
-        const reader = response.body.getReader()
-        const decoder = new TextDecoder()
-        let buffer = ''
-        let fullText = ''
+      async send() {
+        const inputEl = $('#input')
+        const text = inputEl.value.trim()
+        if (!text) return
 
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
+        const sendBtn = $('#send-btn')
+        sendBtn.disabled = true
+        inputEl.value = ''
+        inputEl.style.height = 'auto'
 
-          buffer += decoder.decode(value, { stream: true })
-          const lines = buffer.split('\n\n')
-          buffer = lines.pop() // Keep incomplete line in buffer
+        const messagesEl = $('#messages')
 
-          for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              const data = JSON.parse(line.slice(6))
-              if (data.type === 'chunk') {
-                fullText += data.text
-                contentEl.innerHTML = marked.parse(fullText)
-                messagesEl.scrollTop = messagesEl.scrollHeight
-              } else if (data.type === 'error') {
-                contentEl.textContent = `Error: ${data.error}`
-              }
-            }
-          }
+        // Remove empty state
+        const empty = messagesEl.querySelector('.empty-state')
+        if (empty) empty.remove()
+        const userDiv = document.createElement('div')
+        userDiv.className = 'message user'
+        userDiv.innerHTML = `
+          <div class="meta">
+            <span class="role">You</span>
+            <span class="timestamp">${formatTime(new Date())}</span>
+          </div>
+          <div class="content">${escapeHtml(text)}</div>
+        `
+        messagesEl.appendChild(userDiv)
+        messagesEl.scrollTop = messagesEl.scrollHeight
+
+        // Fire-and-forget via SSE endpoint
+        try {
+          await fetch('/api/chat/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              message: text,
+              conversationId: State.activeConvId || undefined
+            })
+          })
+        } catch (err) {
+          console.error('Send failed:', err)
         }
-      } catch (err) {
-        typingDiv.remove()
-        const errorDiv = addMessage('assistant', `Error: ${err.message}`)
+
+        sendBtn.disabled = false
+        inputEl.focus()
+
+        // Refresh sidebar to pick up new conversation if needed
+        setTimeout(() => Sidebar.refresh(), 500)
+      },
+
+      showTyping() {
+        if (Chat.typingEl) return
+        const messagesEl = $('#messages')
+        Chat.typingEl = document.createElement('div')
+        Chat.typingEl.className = 'message assistant'
+        Chat.typingEl.id = 'typing-indicator'
+        Chat.typingEl.innerHTML = `
+          <div class="meta">
+            <span class="role">Gigi</span>
+          </div>
+          <div class="content">
+            <div class="typing-indicator">
+              <span></span><span></span><span></span>
+            </div>
+          </div>
+        `
+        messagesEl.appendChild(Chat.typingEl)
+        messagesEl.scrollTop = messagesEl.scrollHeight
+      },
+
+      hideTyping() {
+        if (Chat.typingEl) {
+          Chat.typingEl.remove()
+          Chat.typingEl = null
+        }
+      },
+
+      appendText(chunk) {
+        const messagesEl = $('#messages')
+
+        if (!State.currentAssistantEl) {
+          // Create new assistant message element
+          State.currentAssistantEl = document.createElement('div')
+          State.currentAssistantEl.className = 'message assistant'
+          State.currentAssistantEl.innerHTML = `
+            <div class="meta">
+              <span class="role">Gigi</span>
+              <span class="timestamp">${formatTime(new Date())}</span>
+            </div>
+            <div class="content"></div>
+          `
+          messagesEl.appendChild(State.currentAssistantEl)
+          State.currentAssistantText = ''
+        }
+
+        State.currentAssistantText += chunk
+        const contentEl = State.currentAssistantEl.querySelector('.content')
+        contentEl.innerHTML = marked.parse(State.currentAssistantText)
+        messagesEl.scrollTop = messagesEl.scrollHeight
+      },
+
+      addToolBlock(toolUseId, name, input) {
+        const messagesEl = $('#messages')
+        const summary = toolSummary(name, input)
+        const inputStr = input ? JSON.stringify(input, null, 2) : ''
+
+        const block = document.createElement('div')
+        block.className = 'tool-block'
+        block.dataset.toolUseId = toolUseId
+        block.innerHTML = `
+          <div class="tool-header" onclick="toggleTool(this)">
+            <span class="tool-arrow">▶</span>
+            <span class="tool-name">${escapeHtml(name)}</span>
+            <span class="tool-summary">${escapeHtml(summary)}</span>
+            <span class="tool-elapsed" data-elapsed="${toolUseId}"></span>
+            <span class="tool-status running" data-tool-status="${toolUseId}">running</span>
+          </div>
+          <div class="tool-body">
+            <div class="tool-label">Input</div>
+            <pre>${escapeHtml(inputStr)}</pre>
+            <div class="tool-label">Output</div>
+            <pre data-tool-output="${toolUseId}">...</pre>
+          </div>
+        `
+
+        // Insert after current assistant message or at end
+        if (State.currentAssistantEl) {
+          State.currentAssistantEl.after(block)
+        } else {
+          messagesEl.appendChild(block)
+        }
+
+        // Start elapsed timer
+        const startTime = Date.now()
+        block._elapsedTimer = setInterval(() => {
+          const elapsed = ((Date.now() - startTime) / 1000).toFixed(0)
+          const el = document.querySelector(`[data-elapsed="${toolUseId}"]`)
+          if (el) el.textContent = `${elapsed}s`
+        }, 1000)
+
+        messagesEl.scrollTop = messagesEl.scrollHeight
+
+        // Reset current assistant element so next text_chunk creates a new one below this tool block
+        State.currentAssistantEl = null
+        State.currentAssistantText = ''
+      },
+
+      updateToolResult(toolUseId, result) {
+        const outputEl = document.querySelector(`[data-tool-output="${toolUseId}"]`)
+        if (outputEl) {
+          outputEl.textContent = result || '(no output)'
+        }
+        const statusEl = document.querySelector(`[data-tool-status="${toolUseId}"]`)
+        if (statusEl) {
+          statusEl.textContent = 'done'
+          statusEl.className = 'tool-status done'
+        }
+        // Stop elapsed timer
+        const block = document.querySelector(`[data-tool-use-id="${toolUseId}"]`)
+        if (block && block._elapsedTimer) {
+          clearInterval(block._elapsedTimer)
+        }
+      },
+
+      updateToolProgress(toolUseId, elapsed) {
+        const el = document.querySelector(`[data-elapsed="${toolUseId}"]`)
+        if (el) el.textContent = `${elapsed}s`
+      },
+
+      finalizeAssistantMessage() {
+        State.currentAssistantEl = null
+        State.currentAssistantText = ''
+      },
+
+      editTitle() {
+        const titleEl = $('#chat-title')
+        const inputEl = $('#chat-title-input')
+        inputEl.value = titleEl.textContent
+        titleEl.style.display = 'none'
+        inputEl.style.display = ''
+        inputEl.focus()
+        inputEl.select()
+        $('#chat-title-edit').style.display = 'none'
+      },
+
+      async saveTitle() {
+        const inputEl = $('#chat-title-input')
+        const titleEl = $('#chat-title')
+        const title = inputEl.value.trim()
+        if (!title || !State.activeConvId) {
+          Chat.cancelTitleEdit()
+          return
+        }
+
+        try {
+          await fetch(`/api/conversations/${State.activeConvId}/title`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title })
+          })
+        } catch {}
+
+        titleEl.textContent = title
+        Chat.cancelTitleEdit()
+        Sidebar.refresh()
+      },
+
+      cancelTitleEdit() {
+        $('#chat-title').style.display = ''
+        $('#chat-title-input').style.display = 'none'
+        $('#chat-title-edit').style.display = ''
       }
-
-      sending = false
-      sendBtn.disabled = false
-      inputEl.focus()
-      loadConversations()
     }
 
-    const newChat = async () => {
-      await fetch('/api/conversations/new', { method: 'POST' })
-      messagesEl.innerHTML = ''
-      chatTitle.textContent = 'New conversation'
-      messageCount = 0
-      loadConversations()
-      closeSidebar()
+    // ── Tool toggle ────────────────────────────────────────────
+    function toggleTool(headerEl) {
+      const arrow = headerEl.querySelector('.tool-arrow')
+      const body = headerEl.nextElementSibling
+      arrow.classList.toggle('open')
+      body.classList.toggle('open')
     }
 
-    const loadConversations = async () => {
-      try {
-        const res = await fetch('/api/conversations')
-        const convs = await res.json()
-        const list = document.getElementById('conv-list')
-        list.innerHTML = convs.map(c =>
-          `<div class="conv-item" onclick="loadChat('${c.id}')">${c.topic || c.channel} — ${new Date(c.created_at).toLocaleDateString()}</div>`
-        ).join('')
-      } catch {}
+    // ── Sidebar toggle (mobile) ────────────────────────────────
+    function toggleSidebar() {
+      $('.sidebar').classList.toggle('open')
+      $('.overlay').classList.toggle('show')
     }
 
-    const loadChat = async (id) => {
-      try {
-        const res = await fetch(`/api/conversations/${id}/messages`)
-        const msgs = await res.json()
-        messagesEl.innerHTML = ''
-        messageCount = msgs.length
-        msgs.forEach((m, idx) => {
-          const text = Array.isArray(m.content)
-            ? m.content.filter(b => b.type === 'text').map(b => b.text).join('')
-            : (typeof m.content === 'string' ? m.content : JSON.stringify(m.content))
-          addMessage(m.role, text, m.created_at || new Date())
+    function closeSidebar() {
+      $('.sidebar').classList.remove('open')
+      $('.overlay').classList.remove('show')
+    }
 
-          // Update title from first user message
-          if (idx === 0 && m.role === 'user') {
-            updateChatTitle(text)
-          }
-        })
+    function newChat() {
+      fetch('/api/conversations/new', { method: 'POST' }).then(() => {
+        State.activeConvId = null
+        State.activeConv = null
+        State.currentAssistantEl = null
+        State.currentAssistantText = ''
+        $('#messages').innerHTML = '<div class="empty-state">Send a message to start a conversation</div>'
+        $('#chat-title').textContent = 'New conversation'
+        $('#chat-title-edit').style.display = 'none'
+        $('#chat-header-tags').innerHTML = ''
+        Sidebar.refresh()
         closeSidebar()
-      } catch {}
+      })
     }
 
+    // ── Health check ───────────────────────────────────────────
     const checkStatus = async () => {
       try {
         const res = await fetch('/health')
         const status = await res.json()
-        const dot = document.getElementById('status-dot')
-        const text = document.getElementById('status-text')
+        const dot = $('#status-dot')
+        const text = $('#status-text')
         dot.className = `status-dot ${status.phase === 'ready' ? 'ok' : status.phase === 'partial' ? 'warn' : 'err'}`
         text.textContent = status.phase === 'ready' ? 'All systems go' : `Phase: ${status.phase}`
       } catch {
-        document.getElementById('status-dot').className = 'status-dot err'
-        document.getElementById('status-text').textContent = 'Disconnected'
+        $('#status-dot').className = 'status-dot err'
+        $('#status-text').textContent = 'Disconnected'
       }
     }
 
-    const toggleSidebar = () => {
-      const sidebar = document.querySelector('.sidebar')
-      const overlay = document.querySelector('.overlay')
-      sidebar.classList.toggle('open')
-      overlay.classList.toggle('show')
-    }
-
-    const closeSidebar = () => {
-      const sidebar = document.querySelector('.sidebar')
-      const overlay = document.querySelector('.overlay')
-      sidebar.classList.remove('open')
-      overlay.classList.remove('show')
-    }
-
-    // Auto-resize textarea
-    inputEl.addEventListener('input', () => {
-      inputEl.style.height = 'auto'
-      inputEl.style.height = Math.min(inputEl.scrollHeight, 200) + 'px'
+    // ── Auto-resize textarea ───────────────────────────────────
+    $('#input').addEventListener('input', function() {
+      this.style.height = 'auto'
+      this.style.height = Math.min(this.scrollHeight, 200) + 'px'
     })
 
-    loadConversations()
+    // ── Init ───────────────────────────────────────────────────
+    SSE.connect()
+    Sidebar.refresh()
     checkStatus()
     setInterval(checkStatus, 30000)
-    inputEl.focus()
+    $('#input').focus()
   </script>
 </body>
 </html>
