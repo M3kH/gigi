@@ -75,7 +75,7 @@ Gigi can create PRs on her own repo:
 - **Gitea**: http://192.168.1.80:3000 (repos, CI, registry)
 - **Caddy**: Reverse proxy, `*.cluster.local` internal domains
 - **Storage**: `/mnt/cluster-storage/`
-- **Docker service**: `ideabile-biancifiore-gigi_gigi`
+- **Docker service**: `idea-biancifiore-gigi_gigi`
 
 ## The Team
 
@@ -83,7 +83,7 @@ Gigi can create PRs on her own repo:
 - **Guglielmo** — org-press core developer (meticulous, pragmatic)
 - **Rugero** — Website maintainer (creative, design-focused)
 
-## Repositories (all on Gitea under ideabile/)
+## Repositories (all on Gitea under idea/)
 
 - `gigi` — This service
 - `org-press` — Static site generator (Guglielmo)

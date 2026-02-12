@@ -24,14 +24,14 @@ Git credentials are PRE-CONFIGURED. Just run git commands directly.
 
 ## How to create a PR
 
-1. \`git clone http://192.168.1.80:3000/ideabile/{repo}.git /workspace/{repo}\`
+1. \`git clone http://192.168.1.80:3000/idea/{repo}.git /workspace/{repo}\`
 2. \`cd /workspace/{repo} && git checkout -b feat/my-feature\`
 3. Use Write/Edit to create/modify files
 4. \`cd /workspace/{repo} && git add -A && git commit -m "..." && git push -u origin feat/my-feature\`
 5. Create PR via MCP gitea tool:
    \`\`\`
    Use the gitea tool with action: "create_pr"
-   owner: "ideabile", repo: "{repo}"
+   owner: "idea", repo: "{repo}"
    title: "...", body: "...", head: "feat/my-feature", base: "main"
    \`\`\`
 6. Notify Mauro via MCP telegram_send tool:
@@ -69,12 +69,12 @@ If you realize you haven't completed the checklist, continue immediately.
 ## Infrastructure
 
 - TuringPi v2: 3 ARM64 nodes (worker-0: .110, worker-1: .111, worker-2: .112)
-- Gitea: http://192.168.1.80:3000 (all repos under ideabile/)
+- Gitea: http://192.168.1.80:3000 (all repos under idea/)
 - Domains: *.cluster.local (internal), *.ideable.dev (external)
 - Your source: /app, your workspace: /workspace
-- Docker service: ideabile-biancifiore-gigi_gigi
+- Docker service: idea-biancifiore-gigi_gigi
 
-## Repos (all ideabile/ on Gitea)
+## Repos (all idea/ on Gitea)
 
 gigi (this service), org-press, website, biancifiore, deploy-docker-compose, deploy-site
 

@@ -5,7 +5,7 @@ on:
 
 env:
   REGISTRY: 192.168.1.80:3000
-  IMAGE: ideabile/gigi
+  IMAGE: idea/gigi
   SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
   SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
   DEPLOY_HOST: 192.168.1.110
@@ -48,7 +48,7 @@ jobs:
         run: |
           IMAGE_TAG="${{ env.REGISTRY }}/${{ env.IMAGE }}:${{ github.sha }}"
           ssh root@${{ env.DEPLOY_HOST }} "
-            docker stack rm ideabile-biancifiore-gigi 2>/dev/null; sleep 5
+            docker stack rm idea-biancifiore-gigi 2>/dev/null; sleep 5
             printf '%s\n' \
               'version: \"3.9\"' \
               'services:' \
@@ -86,11 +86,11 @@ jobs:
               '  http-entry_default:' \
               '    external: true' \
               > /tmp/gigi-compose.yml
-            docker stack deploy -c /tmp/gigi-compose.yml --with-registry-auth ideabile-biancifiore-gigi
+            docker stack deploy -c /tmp/gigi-compose.yml --with-registry-auth idea-biancifiore-gigi
             rm /tmp/gigi-compose.yml"
 
       - name: Deploy Caddy config
-        uses: http://192.168.1.80:3000/ideabile/deploy-site@main
+        uses: http://192.168.1.80:3000/idea/deploy-site@main
         with:
           caddy_file: Caddyfile
           ssh_user: root

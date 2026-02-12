@@ -1,6 +1,6 @@
 # Gigi 🤖
 
-Gigi is a persistent AI coordinator running 24/7 on a TuringPi cluster. She helps Mauro build, deploy, and maintain projects across the ideabile infrastructure.
+Gigi is a persistent AI coordinator running 24/7 on a TuringPi cluster. She helps Mauro build, deploy, and maintain projects across the idea infrastructure.
 
 ## What She Does
 
@@ -92,7 +92,7 @@ Gigi can create PRs on her own codebase:
 - **Gitea**: http://192.168.1.80:3000 (repos, CI, registry)
 - **Caddy**: Reverse proxy for `*.cluster.local` domains
 - **Storage**: `/mnt/cluster-storage/`
-- **Docker service**: `ideabile-biancifiore-gigi_gigi`
+- **Docker service**: `idea-biancifiore-gigi_gigi`
 
 ## The Team
 
@@ -102,7 +102,7 @@ Gigi can create PRs on her own codebase:
 
 ## Repositories
 
-All repositories are hosted on Gitea under the `ideabile/` organization:
+All repositories are hosted on Gitea under the `idea/` organization:
 
 - `gigi` — This service
 - `org-press` — Static site generator (Guglielmo)
