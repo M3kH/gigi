@@ -17,7 +17,13 @@ jobs:
 
       - name: Set up Docker Buildx
         run: |
-          docker buildx create --name multiarch --driver docker-container --use
+          docker buildx create --name multiarch --driver docker-container \
+            --driver-opt network=host \
+            --config /dev/stdin --use <<'EOF'
+          [registry."192.168.1.80:3000"]
+            http = true
+            insecure = true
+          EOF
           docker buildx inspect --bootstrap
 
       - name: Build and push image
