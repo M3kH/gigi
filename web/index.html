@@ -75,6 +75,9 @@
     .chat-title-input { font-size: 1rem; font-weight: 500; background: var(--bg-elevated); border: 1px solid #444; border-radius: 4px; color: var(--text-primary); padding: 0.15rem 0.5rem; width: 100%; display: none; }
     .chat-title-edit { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 0.75rem; padding: 0.2rem 0.4rem; border-radius: 3px; flex-shrink: 0; }
     .chat-title-edit:hover { color: var(--text-secondary); background: var(--bg-elevated); }
+    .stop-btn { background: #a44; color: #fff; border: none; border-radius: 4px; padding: 0.3rem 0.75rem; cursor: pointer; font-size: 0.8rem; display: none; flex-shrink: 0; }
+    .stop-btn:hover { background: #c55; }
+    .stop-btn.visible { display: block; }
     .chat-header-tags { display: flex; gap: 0.3rem; flex-shrink: 0; }
     .chat-header-tag { font-size: 0.7rem; color: var(--text-muted); background: var(--bg-elevated); padding: 0.15rem 0.4rem; border-radius: 3px; }
 
@@ -185,6 +188,7 @@
         <input class="chat-title-input" id="chat-title-input" type="text" onkeydown="if(event.key==='Enter')Chat.saveTitle();if(event.key==='Escape')Chat.cancelTitleEdit()">
         <button class="chat-title-edit" id="chat-title-edit" onclick="Chat.editTitle()" style="display:none">edit</button>
       </div>
+      <button class="stop-btn" id="stop-btn" onclick="Chat.stop()">⏹ Stop</button>
       <div class="chat-header-tags" id="chat-header-tags"></div>
     </div>
     <div class="messages" id="messages">
@@ -285,6 +289,7 @@
             Sidebar.updateSpinner(convId, true)
             if (convId === State.activeConvId) {
               Chat.showTyping()
+              Chat.showStopButton()
             }
             break
 
@@ -313,6 +318,18 @@
             Sidebar.updateSpinner(convId, false)
             if (convId === State.activeConvId) {
               Chat.hideTyping()
+              Chat.hideStopButton()
+              Chat.finalizeAssistantMessage()
+            }
+            Sidebar.refresh()
+            break
+
+          case 'agent_stopped':
+            State.agentRunning.delete(convId)
+            Sidebar.updateSpinner(convId, false)
+            if (convId === State.activeConvId) {
+              Chat.hideTyping()
+              Chat.hideStopButton()
               Chat.finalizeAssistantMessage()
             }
             Sidebar.refresh()
@@ -697,6 +714,27 @@
         $('#chat-title').style.display = ''
         $('#chat-title-input').style.display = 'none'
         $('#chat-title-edit').style.display = ''
+      },
+
+      showStopButton() {
+        $('#stop-btn').classList.add('visible')
+      },
+
+      hideStopButton() {
+        $('#stop-btn').classList.remove('visible')
+      },
+
+      async stop() {
+        if (!State.activeConvId) return
+
+        try {
+          await fetch(`/api/conversations/${State.activeConvId}/stop`, {
+            method: 'POST'
+          })
+          // UI will update via SSE agent_stopped event
+        } catch (err) {
+          console.error('Stop failed:', err)
+        }
       }
     }
 

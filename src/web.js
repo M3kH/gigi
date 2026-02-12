@@ -3,7 +3,7 @@ import { serveStatic } from '@hono/node-server/serve-static'
 import { readFile } from 'node:fs/promises'
 import { healthCheck } from './health.js'
 import { getSetupStatus, setupStep } from './setup.js'
-import { handleMessage, newConversation, resumeConversation } from './router.js'
+import { handleMessage, newConversation, resumeConversation, stopAgent } from './router.js'
 import { subscribe } from './events.js'
 import { handleWebhook } from './webhooks.js'
 import * as store from './store.js'
@@ -86,6 +86,13 @@ export const createApp = () => {
   app.post('/api/conversations/new', async (c) => {
     newConversation('web', 'default')
     return c.json({ ok: true })
+  })
+
+  // Stop a running agent
+  app.post('/api/conversations/:id/stop', async (c) => {
+    const convId = c.req.param('id')
+    const stopped = stopAgent(convId)
+    return c.json({ ok: true, stopped })
   })
 
   // SSE event stream — persistent connection, receives all agent events

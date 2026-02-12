@@ -6,6 +6,9 @@ import { enforceCompletion, startTask, markNotified } from './task_enforcer.js'
 // Active conversations per channel key (e.g. "telegram:12345", "web:uuid")
 const active = new Map()
 
+// Track running agent processes by conversation ID
+const runningAgents = new Map() // convId -> AbortController
+
 export const handleMessage = async (channel, channelId, text, onEvent) => {
   const key = `${channel}:${channelId}`
 
@@ -64,8 +67,27 @@ export const handleMessage = async (channel, channelId, text, onEvent) => {
   // Emit agent_start
   wrappedOnEvent({ type: 'agent_start', conversationId: convId })
 
-  // Run agent loop
-  const response = await runAgent(messages, wrappedOnEvent, { sessionId })
+  // Create abort controller for this agent
+  const abortController = new AbortController()
+  runningAgents.set(convId, abortController)
+
+  let response
+  try {
+    // Run agent loop
+    response = await runAgent(messages, wrappedOnEvent, { sessionId, signal: abortController.signal })
+  } catch (err) {
+    runningAgents.delete(convId)
+    if (err.name === 'AbortError') {
+      console.log(`[router] Agent stopped by user for conversation ${convId}`)
+      wrappedOnEvent({ type: 'agent_stopped', conversationId: convId })
+      // Store a message indicating the stop
+      await store.addMessage(convId, 'assistant', [{ type: 'text', text: '⏹️ Stopped by user' }])
+      throw new Error('Agent stopped by user')
+    }
+    throw err
+  } finally {
+    runningAgents.delete(convId)
+  }
 
   // Store session ID from response
   if (response.sessionId) {
@@ -193,4 +215,13 @@ export const clearConversation = async (channel, channelId) => {
     }
   }
   active.delete(key)
+}
+
+export const stopAgent = (convId) => {
+  const controller = runningAgents.get(convId)
+  if (controller) {
+    controller.abort()
+    return true
+  }
+  return false
 }
