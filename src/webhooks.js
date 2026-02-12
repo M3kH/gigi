@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from 'node:crypto'
 import { getConfig, checkRecentAction } from './store.js'
 import { handleMessage } from './router.js'
+import { routeWebhook } from './lib/webhookRouter.js'
 
 const verifySignature = (payload, signature, secret) => {
   if (!signature || !secret) return false
@@ -36,16 +37,29 @@ export const handleWebhook = async (c) => {
     return c.json({ ok: true, skipped: 'self-generated' })
   }
 
-  const summary = summarizeEvent(event, payload)
-  if (!summary) return c.json({ ok: true, skipped: true })
-
-  // Process through the agent loop as a webhook message
+  // Route webhook to chat context
   try {
+    const result = await routeWebhook(event, payload)
+
+    if (result) {
+      console.log(`[webhook] Routed ${event} to conversation ${result.conversationId}`)
+      return c.json({
+        ok: true,
+        processed: event,
+        conversationId: result.conversationId,
+        tags: result.tags
+      })
+    }
+
+    // Fallback: if no chat routing, process through agent as before
+    const summary = summarizeEvent(event, payload)
+    if (!summary) return c.json({ ok: true, skipped: true })
+
     const apiKey = await getConfig('anthropic_api_key')
     if (!apiKey) return c.json({ ok: true, note: 'Claude not configured' })
 
     await handleMessage('webhook', event, summary)
-    return c.json({ ok: true, processed: event })
+    return c.json({ ok: true, processed: event, fallback: true })
   } catch (err) {
     console.error('Webhook processing error:', err.message)
     return c.json({ error: err.message }, 500)
