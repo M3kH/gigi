@@ -36,10 +36,18 @@ jobs:
           echo "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 644 ~/.ssh/known_hosts
 
-      - name: Update service
+      - name: Deploy service
         run: |
-          ssh root@192.168.1.110 \
-            "docker service update \
-              --image ${{ env.REGISTRY }}/${{ env.IMAGE }}:latest \
-              --with-registry-auth \
-              ideabile-biancifiore-gigi_gigi"
+          IMAGE_TAG="${{ env.REGISTRY }}/${{ env.IMAGE }}:latest"
+          COMPOSE="version: \"3.9\"\nservices:\n  gigi:\n    image: ${IMAGE_TAG}\n    environment:\n      - DATABASE_URL=postgresql://gigi:gigi@postgres:5432/gigi\n    networks:\n      - databases_default\n      - http-entry_default\n    deploy:\n      mode: replicated\n      replicas: 1\n      update_config:\n        order: start-first\n        failure_action: rollback\n      restart_policy:\n        condition: on-failure\n        delay: 5s\n        max_attempts: 3\n    healthcheck:\n      test: [\"CMD-SHELL\", \"curl -f http://localhost:3000/health || exit 1\"]\n      interval: 30s\n      timeout: 10s\n      retries: 3\n      start_period: 40s\nnetworks:\n  databases_default:\n    external: true\n  http-entry_default:\n    external: true"
+          ssh root@192.168.1.110 "
+            if docker service inspect ideabile-biancifiore-gigi_gigi >/dev/null 2>&1; then
+              docker service update \
+                --image ${IMAGE_TAG} \
+                --with-registry-auth \
+                ideabile-biancifiore-gigi_gigi
+            else
+              printf '${COMPOSE}' > /tmp/gigi-compose.yml
+              docker stack deploy -c /tmp/gigi-compose.yml --with-registry-auth ideabile-biancifiore-gigi
+              rm /tmp/gigi-compose.yml
+            fi"
