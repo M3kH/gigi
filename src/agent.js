@@ -198,6 +198,9 @@ export const runAgent = async (messages, onEvent, { sessionId = null } = {}) => 
   const startTime = Date.now()
   let turns = 0
 
+  // Track tool failures for retry limit (max 3 retries per tool+input combination)
+  const toolFailures = new Map() // key: `${toolName}:${JSON.stringify(input)}`, value: retry count
+
   const processResponse = async (response) => {
     for await (const message of response) {
       if (!capturedSessionId && message.session_id) {
@@ -257,10 +260,38 @@ export const runAgent = async (messages, onEvent, { sessionId = null } = {}) => 
     hooks: {
       PostToolUseFailure: [{
         hooks: [async (input) => {
-          console.log(`[agent] Tool ${input.tool_name} failed: ${input.error}`)
-          // Return a system message to help Claude recover from the error
+          const failureKey = `${input.tool_name}:${JSON.stringify(input.tool_input)}`
+          const retryCount = (toolFailures.get(failureKey) || 0) + 1
+          toolFailures.set(failureKey, retryCount)
+
+          console.log(`[agent] Tool ${input.tool_name} failed (attempt ${retryCount}/3): ${input.error}`)
+
+          // After 3 failures, ask for help instead of continuing blindly
+          if (retryCount >= 3) {
+            return {
+              systemMessage: `The ${input.tool_name} tool has failed ${retryCount} times with the same input: "${input.error}"
+
+This suggests a deeper issue that automatic retry cannot fix. You should:
+1. Explain to Mauro what you were trying to do
+2. Explain why it's failing repeatedly (based on error analysis)
+3. Suggest alternative approaches or ask for guidance
+4. Do NOT retry the exact same command again
+
+Be honest about the blocker and ask for help.`
+            }
+          }
+
+          // For first 2 failures, provide recovery guidance
           return {
-            systemMessage: `The ${input.tool_name} tool failed with error: "${input.error}". Analyze the error, understand why it failed, fix the specific issue, and continue. Do NOT stop or give up. Common fixes:\n- Bash "cd failed": You're already in the right directory, just run the command without cd\n- File not found: Check the path, use Read/Glob to verify\n- Syntax error: Fix the syntax and retry\n- Permission denied: Use correct permissions or alternative approach\n\nNow continue with your task.`
+            systemMessage: `The ${input.tool_name} tool failed (attempt ${retryCount}/3): "${input.error}"
+
+Analyze the error, understand why it failed, fix the specific issue, and continue. Common fixes:
+- Bash "cd failed": You're already in the right directory, just run the command without cd
+- File not found: Check the path, use Read/Glob to verify
+- Syntax error: Fix the syntax and retry
+- Permission denied: Use correct permissions or alternative approach
+
+${retryCount === 2 ? '⚠️ This is your 2nd attempt. If it fails again, you will need to ask Mauro for help.' : 'Now continue with your task.'}`
           }
         }]
       }]
