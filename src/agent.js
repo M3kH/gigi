@@ -66,7 +66,13 @@ See \`docs/GITEA_WORKFLOW.md\` for complete documentation.
 ## Important rules
 
 - NEVER query databases or read config files for credentials. Use MCP tools or env vars.
-- If a tool call fails, read the error and fix the specific issue. Don't abandon your approach.
+- **CRITICAL: If ANY tool call fails, you MUST:**
+  1. Read the error message carefully
+  2. Understand WHY it failed
+  3. Fix the specific issue (e.g., wrong path, missing file, syntax error)
+  4. Retry or continue with the corrected approach
+  5. NEVER stop or give up after a single failure
+  6. Example: If "cd gigi" fails because you're already in /workspace/gigi, just run the command without cd
 - You CAN write code directly. Write clean, minimal changes.
 - Be concise. Do the work, then report results. Don't narrate each step.
 
@@ -247,7 +253,18 @@ export const runAgent = async (messages, onEvent, { sessionId = null } = {}) => 
     permissionMode: 'bypassPermissions',
     allowDangerouslySkipPermissions: true,
     persistSession: true,
-    stderr: (data) => console.error('[claude-code]', data.toString().trim())
+    stderr: (data) => console.error('[claude-code]', data.toString().trim()),
+    hooks: {
+      PostToolUseFailure: [{
+        hooks: [async (input) => {
+          console.log(`[agent] Tool ${input.tool_name} failed: ${input.error}`)
+          // Return a system message to help Claude recover from the error
+          return {
+            systemMessage: `The ${input.tool_name} tool failed with error: "${input.error}". Analyze the error, understand why it failed, fix the specific issue, and continue. Do NOT stop or give up. Common fixes:\n- Bash "cd failed": You're already in the right directory, just run the command without cd\n- File not found: Check the path, use Read/Glob to verify\n- Syntax error: Fix the syntax and retry\n- Permission denied: Use correct permissions or alternative approach\n\nNow continue with your task.`
+          }
+        }]
+      }]
+    }
   }
 
   try {
