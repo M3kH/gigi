@@ -4,32 +4,24 @@ import { resetClient } from './agent.js'
 export const getSetupStatus = async () => {
   const config = await getAllConfig()
   return {
-    claude: !!config.anthropic_api_key,
+    claude: !!config.claude_oauth_token,
     telegram: !!config.telegram_token && !!config.telegram_chat_id,
     gitea: !!config.gitea_url && !!config.gitea_token,
-    complete: !!config.anthropic_api_key && !!config.telegram_token && !!config.gitea_token
+    complete: !!config.claude_oauth_token && !!config.telegram_token && !!config.gitea_token
   }
 }
 
 export const setupStep = async (step, data) => {
   switch (step) {
     case 'claude': {
-      if (!data.apiKey) return { ok: false, error: 'API key required' }
-      // Validate by making a test call
-      const { default: Anthropic } = await import('@anthropic-ai/sdk')
-      try {
-        const client = new Anthropic({ apiKey: data.apiKey })
-        await client.messages.create({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 10,
-          messages: [{ role: 'user', content: 'ping' }]
-        })
-      } catch (err) {
-        return { ok: false, error: `Claude API error: ${err.message}` }
+      if (!data.token) return { ok: false, error: 'OAuth token required' }
+      // Basic format check
+      if (!data.token.startsWith('sk-ant-')) {
+        return { ok: false, error: 'Token should start with sk-ant-. Run "claude setup-token" to get yours.' }
       }
-      await setConfig('anthropic_api_key', data.apiKey)
+      await setConfig('claude_oauth_token', data.token)
       resetClient()
-      return { ok: true, message: 'Claude connected! I can think now.' }
+      return { ok: true, message: 'OAuth token saved! I can think now.' }
     }
 
     case 'telegram': {
@@ -43,7 +35,6 @@ export const setupStep = async (step, data) => {
 
     case 'gitea': {
       if (!data.url || !data.token) return { ok: false, error: 'URL and token required' }
-      // Validate
       try {
         const res = await fetch(`${data.url}/api/v1/user`, {
           headers: { 'Authorization': `token ${data.token}` }

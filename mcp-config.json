@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "gigi-tools": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["src/mcp-server.js"],
+      "env": {
+        "DATABASE_URL": "${DATABASE_URL}"
+      }
+    }
+  }
+}

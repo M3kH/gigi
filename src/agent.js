@@ -1,8 +1,6 @@
-import Anthropic from '@anthropic-ai/sdk'
+import { query } from '@anthropic-ai/claude-agent-sdk'
 import { getConfig } from './store.js'
-import { tools, executeTool } from './tools/index.js'
-
-let client = null
+import { resolve } from 'node:path'
 
 const SYSTEM_PROMPT = `You are Gigi, a persistent AI coordinator running on a TuringPi cluster.
 You coordinate a team of agents and manage infrastructure for Mauro.
@@ -27,60 +25,65 @@ Infrastructure:
 
 Be concise, upbeat, and proactive. Call Mauro by name.`
 
-const getClient = async () => {
-  if (client) return client
-  const apiKey = await getConfig('anthropic_api_key')
-  if (!apiKey) throw new Error('Claude not configured — complete setup first')
-  client = new Anthropic({ apiKey })
-  return client
+const ensureAuth = async () => {
+  const token = await getConfig('claude_oauth_token')
+  if (!token) throw new Error('Claude not configured — complete setup first')
+  process.env.CLAUDE_CODE_OAUTH_TOKEN = token
 }
 
-export const resetClient = () => { client = null }
+export const resetClient = () => {
+  delete process.env.CLAUDE_CODE_OAUTH_TOKEN
+}
 
 export const runAgent = async (messages, onChunk) => {
-  const anthropic = await getClient()
-  let currentMessages = [...messages]
-  const maxIterations = 20
+  await ensureAuth()
 
-  for (let i = 0; i < maxIterations; i++) {
-    const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 4096,
-      system: SYSTEM_PROMPT,
-      tools,
-      messages: currentMessages,
-      stream: false
+  // Format conversation history into a single prompt
+  const prompt = messages
+    .map(m => {
+      const text = Array.isArray(m.content)
+        ? m.content.filter(b => b.type === 'text').map(b => b.text).join('')
+        : (typeof m.content === 'string' ? m.content : JSON.stringify(m.content))
+      return `${m.role === 'user' ? 'Mauro' : 'Gigi'}: ${text}`
+    })
+    .join('\n\n')
+
+  const mcpConfig = resolve(import.meta.dirname, '..', 'mcp-config.json')
+
+  let fullText = ''
+
+  try {
+    const response = query({
+      prompt,
+      options: {
+        systemPrompt: SYSTEM_PROMPT,
+        mcpConfig,
+        maxTurns: 20,
+        model: 'sonnet',
+        dangerouslySkipPermissions: true,
+        noSessionPersistence: true
+      }
     })
 
-    // Check for tool use
-    const toolUses = response.content.filter(b => b.type === 'tool_use')
-
-    if (toolUses.length === 0) {
-      // Final response — extract text
-      const text = response.content
-        .filter(b => b.type === 'text')
-        .map(b => b.text)
-        .join('')
-      if (onChunk) onChunk(text)
-      return { content: response.content, text }
+    for await (const message of response) {
+      if (message.type === 'assistant' && message.message?.content) {
+        for (const block of message.message.content) {
+          if (block.type === 'text' && block.text) {
+            fullText += block.text
+            if (onChunk) onChunk(block.text)
+          }
+        }
+      }
+      if (message.type === 'result') {
+        fullText = message.result || fullText
+      }
     }
-
-    // Execute tools and continue
-    currentMessages.push({ role: 'assistant', content: response.content })
-
-    const toolResults = []
-    for (const toolUse of toolUses) {
-      if (onChunk) onChunk(`[tool: ${toolUse.name}]\n`)
-      const result = await executeTool(toolUse.name, toolUse.input)
-      toolResults.push({
-        type: 'tool_result',
-        tool_use_id: toolUse.id,
-        content: typeof result === 'string' ? result : JSON.stringify(result)
-      })
-    }
-
-    currentMessages.push({ role: 'user', content: toolResults })
+  } catch (err) {
+    fullText = `Error: ${err.message}`
   }
 
-  return { content: [{ type: 'text', text: 'Reached maximum iterations.' }], text: 'Reached maximum iterations.' }
+  return {
+    content: [{ type: 'text', text: fullText }],
+    text: fullText
+  }
 }

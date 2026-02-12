@@ -12,9 +12,9 @@ export const healthCheck = async () => {
     status.ok = false
   }
 
-  // Claude API
-  const apiKey = await getConfig('anthropic_api_key').catch(() => null)
-  status.checks.claude = apiKey ? 'configured' : 'not_configured'
+  // Claude OAuth
+  const oauthToken = await getConfig('claude_oauth_token').catch(() => null)
+  status.checks.claude = oauthToken ? 'configured' : 'not_configured'
 
   // Telegram
   const tgToken = await getConfig('telegram_token').catch(() => null)
@@ -25,7 +25,7 @@ export const healthCheck = async () => {
   status.checks.gitea = giteaToken ? 'configured' : 'not_configured'
 
   // Phase
-  if (!apiKey) status.phase = 'setup'
+  if (!oauthToken) status.phase = 'setup'
   else if (!tgToken || !giteaToken) status.phase = 'partial'
   else status.phase = 'ready'
 

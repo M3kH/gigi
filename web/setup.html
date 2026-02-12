@@ -33,10 +33,10 @@
     <p class="subtitle">Let's get me running. One step at a time.</p>
 
     <div class="step" id="step-claude">
-      <h2><span class="check" id="check-claude">○</span> Claude API</h2>
-      <p>I need an Anthropic API key to think.</p>
-      <input type="password" id="api-key" placeholder="sk-ant-..." />
-      <button onclick="setup('claude', { apiKey: document.getElementById('api-key').value })">Connect</button>
+      <h2><span class="check" id="check-claude">○</span> Claude (Max/Pro)</h2>
+      <p>Run <code>claude setup-token</code> on your machine, then paste the OAuth token here.</p>
+      <input type="password" id="oauth-token" placeholder="sk-ant-oat01-..." />
+      <button onclick="setup('claude', { token: document.getElementById('oauth-token').value })">Connect</button>
       <div class="msg" id="msg-claude" hidden></div>
     </div>
 
