@@ -1,7 +1,7 @@
 import { bashTool, runBash } from './bash.js'
 import { gitTool, runGit } from './git.js'
 import { giteaTool, runGitea } from './gitea.js'
-import { fileTool, runFile } from './file.js'
+import { fileTool, runFile, writeFileTool, runWriteFile } from './file.js'
 import { dockerTool, runDocker } from './docker.js'
 import { telegramTool, runTelegram } from './telegram.js'
 
@@ -10,6 +10,7 @@ export const tools = [
   gitTool,
   giteaTool,
   fileTool,
+  writeFileTool,
   dockerTool,
   telegramTool
 ]
@@ -19,6 +20,7 @@ const runners = {
   git: runGit,
   gitea: runGitea,
   read_file: runFile,
+  write_file: runWriteFile,
   docker: runDocker,
   telegram_send: runTelegram
 }

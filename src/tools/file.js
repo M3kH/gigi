@@ -1,7 +1,8 @@
-import { readFile, readdir, stat } from 'node:fs/promises'
-import { join, resolve } from 'node:path'
+import { readFile, writeFile, readdir, stat, mkdir } from 'node:fs/promises'
+import { join, resolve, dirname } from 'node:path'
 
 const ALLOWED_ROOTS = ['/projects', '/workspace', '/app']
+const WRITABLE_ROOTS = ['/workspace']
 const MAX_SIZE = 100_000
 
 const isAllowed = (path) => {
@@ -9,9 +10,14 @@ const isAllowed = (path) => {
   return ALLOWED_ROOTS.some(root => resolved.startsWith(root))
 }
 
+const isWritable = (path) => {
+  const resolved = resolve(path)
+  return WRITABLE_ROOTS.some(root => resolved.startsWith(root))
+}
+
 export const fileTool = {
   name: 'read_file',
-  description: 'Read a file or list a directory. Access limited to /projects (read-only project sources), /workspace (working directory), and /app (Gigi source).',
+  description: 'Read a file or list a directory. Access limited to /projects (read-only), /workspace (read-write), and /app (read-only).',
   input_schema: {
     type: 'object',
     properties: {
@@ -23,6 +29,19 @@ export const fileTool = {
       }
     },
     required: ['path']
+  }
+}
+
+export const writeFileTool = {
+  name: 'write_file',
+  description: 'Write content to a file. Only /workspace is writable. Creates parent directories if needed.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      path: { type: 'string', description: 'Absolute path to write (must be under /workspace)' },
+      content: { type: 'string', description: 'File content to write' }
+    },
+    required: ['path', 'content']
   }
 }
 
@@ -43,4 +62,14 @@ export const runFile = async ({ path, action = 'read' }) => {
     return `File too large (${info.size} bytes). Max: ${MAX_SIZE}`
   }
   return readFile(path, 'utf-8')
+}
+
+export const runWriteFile = async ({ path, content }) => {
+  if (!isWritable(path)) {
+    return `Access denied: can only write to ${WRITABLE_ROOTS.join(', ')}`
+  }
+
+  await mkdir(dirname(path), { recursive: true })
+  await writeFile(path, content, 'utf-8')
+  return `Written ${content.length} bytes to ${path}`
 }

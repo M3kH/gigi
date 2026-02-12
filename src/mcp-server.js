@@ -4,7 +4,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { runBash } from './tools/bash.js'
 import { runGit } from './tools/git.js'
 import { runGitea } from './tools/gitea.js'
-import { runFile } from './tools/file.js'
+import { runFile, runWriteFile } from './tools/file.js'
 import { runDocker } from './tools/docker.js'
 import { runTelegram } from './tools/telegram.js'
 
@@ -74,6 +74,18 @@ const TOOLS = [
     }
   },
   {
+    name: 'write_file',
+    description: 'Write content to a file. Only /workspace is writable. Creates parent directories if needed.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'Absolute path to write (must be under /workspace)' },
+        content: { type: 'string', description: 'File content to write' }
+      },
+      required: ['path', 'content']
+    }
+  },
+  {
     name: 'docker',
     description: 'Inspect Docker services, containers, and logs. Read-only operations only.',
     inputSchema: {
@@ -104,6 +116,7 @@ const runners = {
   git: runGit,
   gitea: runGitea,
   read_file: runFile,
+  write_file: runWriteFile,
   docker: runDocker,
   telegram_send: runTelegram
 }
