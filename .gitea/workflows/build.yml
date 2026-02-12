@@ -15,23 +15,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        run: |
-          printf '[registry."%s"]\n  http = true\n  insecure = true\n' "${{ env.REGISTRY }}" > /tmp/buildkitd.toml
-          docker buildx create --name multiarch \
-            --driver docker-container \
-            --driver-opt network=host \
-            --driver-opt env.BUILDKIT_UNSAFE_HTTP=1 \
-            --config /tmp/buildkitd.toml --use
-          docker buildx inspect multiarch --bootstrap
-
       - name: Build and push image
         run: |
-          docker buildx build \
-            --platform linux/amd64,linux/arm64 \
+          docker build \
             -t ${{ env.REGISTRY }}/${{ env.IMAGE }}:${{ github.sha }} \
             -t ${{ env.REGISTRY }}/${{ env.IMAGE }}:latest \
-            --push .
+            .
+          docker push ${{ env.REGISTRY }}/${{ env.IMAGE }}:${{ github.sha }}
+          docker push ${{ env.REGISTRY }}/${{ env.IMAGE }}:latest
 
       - name: Setup SSH
         run: |
