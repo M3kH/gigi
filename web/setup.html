@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gigi — Setup</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: system-ui, sans-serif; background: #0a0a0a; color: #e0e0e0; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+    .setup { max-width: 480px; width: 100%; padding: 2rem; }
+    h1 { font-size: 1.5rem; margin-bottom: 0.5rem; }
+    .subtitle { color: #888; margin-bottom: 2rem; }
+    .step { background: #141414; border: 1px solid #222; border-radius: 8px; padding: 1.5rem; margin-bottom: 1rem; }
+    .step.done { border-color: #2a5a2a; }
+    .step h2 { font-size: 1rem; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem; }
+    .step p { color: #888; font-size: 0.85rem; margin-bottom: 1rem; }
+    .check { color: #4a4; }
+    input { width: 100%; padding: 0.5rem 0.75rem; background: #0a0a0a; border: 1px solid #333; border-radius: 4px; color: #e0e0e0; font-family: monospace; font-size: 0.85rem; margin-bottom: 0.5rem; }
+    input:focus { outline: none; border-color: #555; }
+    button { padding: 0.5rem 1rem; background: #1a6; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 0.85rem; }
+    button:hover { background: #1b7; }
+    button:disabled { background: #333; color: #666; cursor: default; }
+    .msg { font-size: 0.85rem; margin-top: 0.5rem; padding: 0.5rem; border-radius: 4px; }
+    .msg.ok { background: #1a3a1a; color: #4a4; }
+    .msg.err { background: #3a1a1a; color: #a44; }
+    .done-banner { text-align: center; padding: 2rem; }
+    .done-banner a { color: #1a6; }
+  </style>
+</head>
+<body>
+  <div class="setup">
+    <h1>Gigi Setup</h1>
+    <p class="subtitle">Let's get me running. One step at a time.</p>
+
+    <div class="step" id="step-claude">
+      <h2><span class="check" id="check-claude">○</span> Claude API</h2>
+      <p>I need an Anthropic API key to think.</p>
+      <input type="password" id="api-key" placeholder="sk-ant-..." />
+      <button onclick="setup('claude', { apiKey: document.getElementById('api-key').value })">Connect</button>
+      <div class="msg" id="msg-claude" hidden></div>
+    </div>
+
+    <div class="step" id="step-telegram">
+      <h2><span class="check" id="check-telegram">○</span> Telegram</h2>
+      <p>Create a bot with @BotFather and paste the token.</p>
+      <input type="text" id="tg-token" placeholder="123456:ABC-DEF..." />
+      <button onclick="setup('telegram', { token: document.getElementById('tg-token').value })">Save Token</button>
+      <p style="margin-top: 0.5rem;">Then send <code>/start</code> to your bot on Telegram.</p>
+      <div class="msg" id="msg-telegram" hidden></div>
+    </div>
+
+    <div class="step" id="step-gitea">
+      <h2><span class="check" id="check-gitea">○</span> Gitea</h2>
+      <p>Create a user for Gigi on Gitea and generate an API token.</p>
+      <input type="text" id="gitea-url" placeholder="http://192.168.1.80:3000" value="http://192.168.1.80:3000" />
+      <input type="text" id="gitea-token" placeholder="Gitea API token" />
+      <button onclick="setup('gitea', { url: document.getElementById('gitea-url').value, token: document.getElementById('gitea-token').value })">Connect</button>
+      <div class="msg" id="msg-gitea" hidden></div>
+    </div>
+
+    <div class="done-banner" id="done" hidden>
+      <h2>All set!</h2>
+      <p>Gigi is fully configured. <a href="/">Go to chat</a></p>
+    </div>
+  </div>
+
+  <script>
+    const setup = async (step, data) => {
+      const msg = document.getElementById(`msg-${step}`)
+      msg.hidden = false
+      msg.className = 'msg'
+      msg.textContent = 'Working...'
+
+      try {
+        const res = await fetch(`/api/setup/${step}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        })
+        const result = await res.json()
+        msg.className = `msg ${result.ok ? 'ok' : 'err'}`
+        msg.textContent = result.message || result.error
+        if (result.ok) {
+          document.getElementById(`check-${step}`).textContent = '●'
+          document.getElementById(`step-${step}`).classList.add('done')
+        }
+        checkDone()
+      } catch (err) {
+        msg.className = 'msg err'
+        msg.textContent = err.message
+      }
+    }
+
+    const checkDone = async () => {
+      const res = await fetch('/api/setup/status')
+      const status = await res.json()
+      if (status.claude) { document.getElementById('check-claude').textContent = '●'; document.getElementById('step-claude').classList.add('done') }
+      if (status.telegram) { document.getElementById('check-telegram').textContent = '●'; document.getElementById('step-telegram').classList.add('done') }
+      if (status.gitea) { document.getElementById('check-gitea').textContent = '●'; document.getElementById('step-gitea').classList.add('done') }
+      if (status.complete) document.getElementById('done').hidden = false
+    }
+
+    checkDone()
+  </script>
+</body>
+</html>

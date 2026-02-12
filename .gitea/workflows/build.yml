@@ -1,0 +1,26 @@
+name: Build and Deploy Gigi
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest-utils
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and push image
+        run: |
+          docker buildx build \
+            --platform linux/amd64,linux/arm64 \
+            -t 192.168.1.80:3000/ideabile/gigi:${{ github.sha }} \
+            -t 192.168.1.80:3000/ideabile/gigi:latest \
+            --push .
+
+      - name: Update service
+        run: |
+          ssh root@192.168.1.110 \
+            "docker service update \
+              --image 192.168.1.80:3000/ideabile/gigi:latest \
+              --with-registry-auth \
+              ideabile-biancifiore-gigi_gigi"
