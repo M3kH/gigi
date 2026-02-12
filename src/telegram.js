@@ -71,6 +71,9 @@ export const startTelegram = async () => {
       return
     }
 
+    // Send immediate acknowledgment
+    await ctx.reply('👀 On it...')
+
     // Keep sending typing indicator every 5 seconds while processing
     let keepTyping = true
     const typingInterval = setInterval(() => {
