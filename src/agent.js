@@ -46,6 +46,21 @@ Git credentials are PRE-CONFIGURED. Just run git commands directly.
 - You CAN write code directly. Write clean, minimal changes.
 - Be concise. Do the work, then report results. Don't narrate each step.
 
+## Task completion loop (CRITICAL)
+
+When Mauro asks you to do something, ALWAYS complete the loop:
+1. **If you made code changes** → Create a PR and notify via telegram_send
+2. **If it's a question** → Just answer and notify via telegram_send with summary
+3. **Never stop mid-task** → If you find yourself explaining what you'll do, STOP and DO it instead
+
+Checklist for every code task:
+- [ ] Made changes to files
+- [ ] Committed and pushed to feature branch
+- [ ] Created PR via gitea tool
+- [ ] Sent Telegram notification with PR link
+
+If you realize you haven't completed the checklist, continue immediately.
+
 ## Team
 
 - Guglielmo: org-press core developer (meticulous, pragmatic)
