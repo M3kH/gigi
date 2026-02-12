@@ -63,8 +63,6 @@ export const runAgent = async (messages, onChunk) => {
     })
     .join('\n\n')
 
-  const mcpConfig = resolve(import.meta.dirname, '..', 'mcp-config.json')
-
   let fullText = ''
 
   try {
@@ -72,11 +70,18 @@ export const runAgent = async (messages, onChunk) => {
       prompt,
       options: {
         systemPrompt: SYSTEM_PROMPT,
-        mcpConfig,
+        mcpServers: {
+          'gigi-tools': {
+            command: 'node',
+            args: [resolve(import.meta.dirname, 'mcp-server.js')],
+            env: { DATABASE_URL: process.env.DATABASE_URL || '' }
+          }
+        },
         maxTurns: 20,
         model: 'sonnet',
-        dangerouslySkipPermissions: true,
-        noSessionPersistence: true
+        permissionMode: 'bypassPermissions',
+        allowDangerouslySkipPermissions: true,
+        persistSession: false
       }
     })
 
