@@ -50,7 +50,7 @@ jobs:
               '  gigi:' \
               '    image: ${IMAGE_TAG}' \
               '    environment:' \
-              '      - DATABASE_URL=postgresql://gigi:gigi@postgres:5432/gigi' \
+              '      - DATABASE_URL=postgresql://gigi:${{ secrets.DB_PASSWORD }}@postgres:5432/gigi' \
               '    networks:' \
               '      - databases_default' \
               '      - http-entry_default' \
