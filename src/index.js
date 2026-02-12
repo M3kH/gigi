@@ -1,5 +1,5 @@
 import { serve } from '@hono/node-server'
-import { connect, disconnect } from './store.js'
+import { connect, disconnect, cleanupOldActions } from './store.js'
 import { createApp } from './web.js'
 import { startTelegram, stopTelegram } from './telegram.js'
 
@@ -30,6 +30,12 @@ const main = async () => {
   } catch (err) {
     console.log('Telegram not started:', err.message)
   }
+
+  // Cleanup old action logs every 30 minutes
+  setInterval(async () => {
+    const count = await cleanupOldActions(1) // Delete logs older than 1 hour
+    if (count > 0) console.log(`Cleaned up ${count} old action logs`)
+  }, 30 * 60 * 1000)
 
   console.log('Gigi is alive!')
 }

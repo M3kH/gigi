@@ -38,10 +38,23 @@ const migrate = async () => {
       created_at TIMESTAMPTZ DEFAULT now()
     );
 
+    CREATE TABLE IF NOT EXISTS action_log (
+      id SERIAL PRIMARY KEY,
+      action_type VARCHAR(50) NOT NULL,
+      repo VARCHAR(100) NOT NULL,
+      ref_id VARCHAR(100),
+      metadata JSONB,
+      created_at TIMESTAMPTZ DEFAULT now()
+    );
+
     CREATE INDEX IF NOT EXISTS idx_messages_conversation
       ON messages(conversation_id, created_at);
     CREATE INDEX IF NOT EXISTS idx_conversations_channel
       ON conversations(channel, updated_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_action_log_timestamp
+      ON action_log(created_at);
+    CREATE INDEX IF NOT EXISTS idx_action_log_lookup
+      ON action_log(action_type, repo, ref_id, created_at);
   `)
 }
 
@@ -117,4 +130,33 @@ export const getMessages = async (conversationId, limit = 100) => {
     [conversationId, limit]
   )
   return rows.map(r => ({ ...r, content: r.content }))
+}
+
+// Action Log - Track self-generated actions to filter webhooks
+
+export const logAction = async (actionType, repo, refId = null, metadata = null) => {
+  await pool.query(
+    'INSERT INTO action_log (action_type, repo, ref_id, metadata) VALUES ($1, $2, $3, $4)',
+    [actionType, repo, refId, metadata ? JSON.stringify(metadata) : null]
+  )
+}
+
+export const checkRecentAction = async (actionType, repo, refId, minutesAgo = 5) => {
+  const { rows } = await pool.query(
+    `SELECT * FROM action_log
+     WHERE action_type = $1
+       AND repo = $2
+       AND ref_id = $3
+       AND created_at > now() - interval '${minutesAgo} minutes'
+     LIMIT 1`,
+    [actionType, repo, refId]
+  )
+  return rows.length > 0
+}
+
+export const cleanupOldActions = async (hoursAgo = 1) => {
+  const { rowCount } = await pool.query(
+    `DELETE FROM action_log WHERE created_at < now() - interval '${hoursAgo} hours'`
+  )
+  return rowCount
 }

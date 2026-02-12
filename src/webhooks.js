@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from 'node:crypto'
-import { getConfig } from './store.js'
+import { getConfig, checkRecentAction } from './store.js'
 import { handleMessage } from './router.js'
 
 const verifySignature = (payload, signature, secret) => {
@@ -28,6 +28,13 @@ export const handleWebhook = async (c) => {
   const payload = JSON.parse(body)
   console.log(`Webhook: ${event}`, payload.action || '')
 
+  // Filter self-generated events
+  const isSelfGenerated = await isSelfEvent(event, payload)
+  if (isSelfGenerated) {
+    console.log(`Skipping self-generated ${event}`)
+    return c.json({ ok: true, skipped: 'self-generated' })
+  }
+
   const summary = summarizeEvent(event, payload)
   if (!summary) return c.json({ ok: true, skipped: true })
 
@@ -41,6 +48,44 @@ export const handleWebhook = async (c) => {
   } catch (err) {
     console.error('Webhook processing error:', err.message)
     return c.json({ error: err.message }, 500)
+  }
+}
+
+const isSelfEvent = async (event, payload) => {
+  const repo = payload.repository?.name
+  if (!repo) return false
+
+  switch (event) {
+    case 'issues':
+      if (payload.action === 'opened') {
+        return await checkRecentAction('create_issue', repo, `${payload.issue?.number}`)
+      }
+      return false
+
+    case 'issue_comment':
+      if (payload.action === 'created') {
+        return await checkRecentAction('comment_issue', repo, `${payload.issue?.number}`)
+      }
+      return false
+
+    case 'pull_request':
+      if (payload.action === 'opened') {
+        return await checkRecentAction('create_pr', repo, `${payload.number}`)
+      }
+      return false
+
+    case 'push':
+      // Check if push matches recent commit
+      const commits = payload.commits || []
+      for (const commit of commits) {
+        if (await checkRecentAction('git_push', repo, commit.id?.slice(0, 8))) {
+          return true
+        }
+      }
+      return false
+
+    default:
+      return false
   }
 }
 

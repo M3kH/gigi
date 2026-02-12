@@ -1,4 +1,4 @@
-import { getConfig } from '../store.js'
+import { getConfig, logAction } from '../store.js'
 
 const request = async (method, path, body = null) => {
   const url = await getConfig('gitea_url')
@@ -49,6 +49,7 @@ export const giteaTool = {
 export const runGitea = async (input) => {
   const { action, owner, repo, number, title, body, head, base } = input
 
+  let result
   switch (action) {
     case 'list_repos':
       return request('GET', `/user/repos?limit=50`)
@@ -67,10 +68,18 @@ export const runGitea = async (input) => {
       return request('GET', `/repos/${owner}/${repo}/issues/${number}`)
 
     case 'create_issue':
-      return request('POST', `/repos/${owner}/${repo}/issues`, { title, body })
+      result = await request('POST', `/repos/${owner}/${repo}/issues`, { title, body })
+      if (result && !result.startsWith('Gitea API error')) {
+        await logAction('create_issue', repo, `${result.number}`, { title })
+      }
+      return result
 
     case 'comment_issue':
-      return request('POST', `/repos/${owner}/${repo}/issues/${number}/comments`, { body })
+      result = await request('POST', `/repos/${owner}/${repo}/issues/${number}/comments`, { body })
+      if (result && !result.startsWith('Gitea API error')) {
+        await logAction('comment_issue', repo, `${number}`, { preview: body.slice(0, 100) })
+      }
+      return result
 
     case 'list_prs':
       return request('GET', `/repos/${owner}/${repo}/pulls?state=open&limit=20`)
@@ -82,7 +91,11 @@ export const runGitea = async (input) => {
       return request('GET', `/repos/${owner}/${repo}/pulls/${number}.diff`)
 
     case 'create_pr':
-      return request('POST', `/repos/${owner}/${repo}/pulls`, { title, body, head, base })
+      result = await request('POST', `/repos/${owner}/${repo}/pulls`, { title, body, head, base })
+      if (result && !result.startsWith('Gitea API error')) {
+        await logAction('create_pr', repo, `${result.number}`, { title, head, base })
+      }
+      return result
 
     default:
       return `Unknown action: ${action}`
