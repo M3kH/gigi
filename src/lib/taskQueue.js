@@ -1,17 +1,19 @@
 /**
- * Self-perpetuating task queue with progress reporting
- * Ensures Gigi completes all work before going idle
+ * Self-perpetuating task queue with supervisor-based completion
+ *
+ * Design: Agent declares tasks, but SUPERVISOR verifies completion.
+ * This prevents incomplete outputs from stalling the queue.
  */
 
 class TaskQueue {
   constructor() {
     this.tasks = [];
-    this.isRunning = false;
     this.currentTaskId = null;
+    this.listeners = {};
   }
 
   /**
-   * Add a new task to the queue
+   * Agent declares a new task
    * @param {Object} task - Task object
    * @param {string} task.id - Unique task identifier
    * @param {string} task.description - Human-readable task description
@@ -32,14 +34,33 @@ class TaskQueue {
     console.log(`[TaskQueue] Added task ${task.id}: ${task.description}`);
     this.emit('task_added', task);
 
-    // Start processing if idle
-    if (!this.isRunning) {
-      this.processNext();
+    // Start processing if this is the first task
+    if (this.tasks.length === 1 && !this.currentTaskId) {
+      this.startTask(task.id);
     }
   }
 
   /**
-   * Mark current task as complete and process next
+   * Supervisor starts a task (called by supervisor loop)
+   * @param {string} taskId - Task ID to start
+   */
+  startTask(taskId) {
+    const task = this.tasks.find(t => t.id === taskId);
+    if (!task) {
+      console.warn(`[TaskQueue] Task ${taskId} not found`);
+      return;
+    }
+
+    this.currentTaskId = taskId;
+    task.status = 'in_progress';
+    task.startedAt = new Date().toISOString();
+
+    console.log(`[TaskQueue] Starting task ${taskId}: ${task.description}`);
+    this.emit('task_started', task);
+  }
+
+  /**
+   * Supervisor marks task as complete (NOT called by agent)
    * @param {string} taskId - Task ID to complete
    */
   completeTask(taskId) {
@@ -55,38 +76,36 @@ class TaskQueue {
     console.log(`[TaskQueue] Completed task ${taskId}: ${task.description}`);
     this.emit('task_completed', task);
 
-    // Remove completed task from queue
+    // Remove completed task
     this.tasks = this.tasks.filter(t => t.id !== taskId);
-
-    // Continue with next task
-    this.isRunning = false;
     this.currentTaskId = null;
-    this.processNext();
+
+    // Supervisor will start next task
+    if (this.tasks.length === 0) {
+      console.log('[TaskQueue] Queue empty, going idle');
+      this.emit('queue_empty');
+    }
   }
 
   /**
-   * Process the next pending task
+   * Get current task (for supervisor to verify)
    */
-  async processNext() {
-    if (this.isRunning || this.tasks.length === 0) {
-      if (this.tasks.length === 0) {
-        console.log('[TaskQueue] Queue empty, going idle');
-        this.emit('queue_empty');
-      }
-      return;
-    }
+  getCurrentTask() {
+    return this.tasks.find(t => t.id === this.currentTaskId);
+  }
 
-    const task = this.tasks[0];
-    this.isRunning = true;
-    this.currentTaskId = task.id;
-    task.status = 'in_progress';
-    task.startedAt = new Date().toISOString();
+  /**
+   * Get next pending task (for supervisor to start)
+   */
+  getNextTask() {
+    return this.tasks.find(t => t.status === 'pending');
+  }
 
-    console.log(`[TaskQueue] Starting task ${task.id}: ${task.description}`);
-    this.emit('task_started', task);
-
-    // The agent runtime will handle actual execution
-    // This just manages the queue state
+  /**
+   * Check if queue is empty
+   */
+  isEmpty() {
+    return this.tasks.length === 0;
   }
 
   /**
@@ -94,9 +113,9 @@ class TaskQueue {
    */
   getStatus() {
     return {
-      isRunning: this.isRunning,
       currentTaskId: this.currentTaskId,
       pendingTasks: this.tasks.filter(t => t.status === 'pending').length,
+      inProgressTasks: this.tasks.filter(t => t.status === 'in_progress').length,
       totalTasks: this.tasks.length,
       tasks: this.tasks
     };
