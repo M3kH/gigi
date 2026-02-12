@@ -22,6 +22,16 @@ export const runTelegram = async ({ text }) => {
   const chatId = await getConfig('telegram_chat_id')
   if (!chatId) return 'Telegram chat ID not configured — send /start to the bot first'
 
-  await bot.api.sendMessage(chatId, text, { parse_mode: 'Markdown' })
-  return 'Message sent'
+  try {
+    await bot.api.sendMessage(chatId, text, { parse_mode: 'Markdown' })
+    return 'Message sent to Mauro on Telegram'
+  } catch (err) {
+    // Fallback without markdown if it fails
+    try {
+      await bot.api.sendMessage(chatId, text)
+      return 'Message sent (without markdown formatting)'
+    } catch (retryErr) {
+      throw new Error(`Failed to send Telegram message: ${retryErr.message}`)
+    }
+  }
 }

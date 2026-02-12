@@ -71,11 +71,18 @@ export const startTelegram = async () => {
       return
     }
 
-    // Send typing indicator
+    // Keep sending typing indicator every 5 seconds while processing
+    let keepTyping = true
+    const typingInterval = setInterval(() => {
+      if (keepTyping) ctx.replyWithChatAction('typing').catch(() => {})
+    }, 5000)
     await ctx.replyWithChatAction('typing')
 
     try {
       const response = await handleMessage('telegram', chatId, text)
+      keepTyping = false
+      clearInterval(typingInterval)
+
       // Telegram has a 4096 char limit
       const reply = response.text || '(no response)'
       if (reply.length <= 4096) {
@@ -89,6 +96,8 @@ export const startTelegram = async () => {
         }
       }
     } catch (err) {
+      keepTyping = false
+      clearInterval(typingInterval)
       await ctx.reply(`Error: ${err.message}`)
     }
   })
