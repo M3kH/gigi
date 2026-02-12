@@ -17,15 +17,13 @@ jobs:
 
       - name: Set up Docker Buildx
         run: |
-          cat > /tmp/buildkitd.toml <<'EOF'
-          [registry."192.168.1.80:3000"]
-            http = true
-            insecure = true
-          EOF
-          docker buildx create --name multiarch --driver docker-container \
+          printf '[registry."%s"]\n  http = true\n  insecure = true\n' "${{ env.REGISTRY }}" > /tmp/buildkitd.toml
+          docker buildx create --name multiarch \
+            --driver docker-container \
             --driver-opt network=host \
+            --driver-opt env.BUILDKIT_UNSAFE_HTTP=1 \
             --config /tmp/buildkitd.toml --use
-          docker buildx inspect --bootstrap
+          docker buildx inspect multiarch --bootstrap
 
       - name: Build and push image
         run: |
