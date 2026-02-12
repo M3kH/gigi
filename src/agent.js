@@ -10,28 +10,40 @@ You help Mauro build, deploy, and maintain projects.
 
 ## Your tools
 
-You have your standard Claude Code tools (Bash, Read, Write, Edit, Glob, Grep) plus two MCP tools:
-- **mcp__gigi-tools__gitea** — Gitea API: create PRs, list issues, comment, etc. Auth is handled for you.
-  Actions: list_repos, create_repo, get_issue, list_issues, create_issue, comment_issue, create_pr, list_prs, get_pr, get_pr_diff
-  Params: action (required), owner, repo, number, title, body, head, base
-- **mcp__gigi-tools__telegram_send** — Send a message to Mauro on Telegram. Param: text (markdown)
+You have your standard Claude Code tools: Bash, Read, Write, Edit, Glob, Grep.
+Git credentials and API tokens are PRE-CONFIGURED as environment variables. Just use them.
 
-For everything else, use your built-in tools:
-- **Bash** for shell commands, git operations, docker inspect, etc. Git credentials are PRE-CONFIGURED — just run git clone/push/etc directly.
-- **Read** / **Write** / **Edit** for file operations.
+## Environment variables available
 
-## How to make a PR
+- \`GITEA_TOKEN\` — Gitea API token (for curl to Gitea API)
+- \`GITEA_URL\` — Gitea base URL (e.g. http://192.168.1.80:3000)
+- \`TELEGRAM_BOT_TOKEN\` — Telegram bot token
+- \`TELEGRAM_CHAT_ID\` — Mauro's Telegram chat ID
+- Git is pre-configured with identity and auth. Just run git commands directly.
 
-1. Run \`git clone git@192.168.1.80:ideabile/{repo}.git /workspace/{repo}\` via Bash — SSH key is pre-configured. HTTP fallback: \`git clone http://192.168.1.80:3000/ideabile/{repo}.git /workspace/{repo}\`
+## How to create a PR
+
+1. \`git clone http://192.168.1.80:3000/ideabile/{repo}.git /workspace/{repo}\`
 2. \`cd /workspace/{repo} && git checkout -b feat/my-feature\`
 3. Use Write/Edit to create/modify files
 4. \`cd /workspace/{repo} && git add -A && git commit -m "..." && git push -u origin feat/my-feature\`
-5. Use mcp__gigi-tools__gitea with action=create_pr, owner=ideabile, repo={repo}, head=feat/my-feature, base=main, title="...", body="..."
-6. Use mcp__gigi-tools__telegram_send to notify Mauro with the PR link
+5. Create PR via Gitea API:
+   \`\`\`
+   curl -s -X POST "$GITEA_URL/api/v1/repos/ideabile/{repo}/pulls" \\
+     -H "Authorization: token $GITEA_TOKEN" \\
+     -H "Content-Type: application/json" \\
+     -d '{"title":"...","body":"...","head":"feat/my-feature","base":"main"}'
+   \`\`\`
+6. Notify Mauro on Telegram:
+   \`\`\`
+   curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \\
+     -H "Content-Type: application/json" \\
+     -d '{"chat_id":"'"$TELEGRAM_CHAT_ID"'","text":"...","parse_mode":"Markdown"}'
+   \`\`\`
 
 ## Important rules
 
-- Git credentials are PRE-CONFIGURED. NEVER look for tokens, query databases, or check environment variables for credentials.
+- NEVER look for tokens, query databases, or read config files for credentials. They are in your environment variables.
 - If a tool call fails, read the error and fix the specific issue. Don't abandon your approach.
 - You CAN write code directly. Write clean, minimal changes.
 - Be concise. Do the work, then report results. Don't narrate each step.
@@ -70,12 +82,11 @@ const configureGit = async () => {
       const keyDest = resolve(sshDir, 'id_ed25519')
       writeFileSync(keyDest, readFileSync(sshKeyPath, 'utf8'))
       chmodSync(keyDest, 0o600)
-      // Disable strict host checking for Gitea
       writeFileSync(resolve(sshDir, 'config'), 'Host 192.168.1.80\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n')
       console.log('[agent] SSH key configured from Docker secret')
     }
 
-    // HTTP token fallback — from database config
+    // HTTP token — from database config
     const giteaUrl = await getConfig('gitea_url')
     const giteaToken = await getConfig('gitea_token')
     if (giteaUrl && giteaToken) {
@@ -87,25 +98,42 @@ const configureGit = async () => {
   }
 }
 
-let gitConfigured = false
+let configured = false
 
-const ensureAuth = async () => {
+const ensureReady = async () => {
   const token = await getConfig('claude_oauth_token')
   if (!token) throw new Error('Claude not configured — complete setup first')
   process.env.CLAUDE_CODE_OAUTH_TOKEN = token
-  if (!gitConfigured) {
+
+  if (!configured) {
     await configureGit()
-    gitConfigured = true
+    configured = true
+  }
+}
+
+// Collect env vars for Claude Code subprocess
+const getAgentEnv = async () => {
+  const giteaUrl = await getConfig('gitea_url') || ''
+  const giteaToken = await getConfig('gitea_token') || ''
+  const telegramToken = await getConfig('telegram_bot_token') || ''
+  const chatId = await getConfig('telegram_chat_id') || ''
+
+  return {
+    ...process.env,
+    GITEA_URL: giteaUrl,
+    GITEA_TOKEN: giteaToken,
+    TELEGRAM_BOT_TOKEN: telegramToken,
+    TELEGRAM_CHAT_ID: chatId
   }
 }
 
 export const resetClient = () => {
   delete process.env.CLAUDE_CODE_OAUTH_TOKEN
-  gitConfigured = false
+  configured = false
 }
 
 export const runAgent = async (messages, onChunk) => {
-  await ensureAuth()
+  await ensureReady()
 
   // Format conversation history into a single prompt
   const prompt = messages
@@ -117,6 +145,7 @@ export const runAgent = async (messages, onChunk) => {
     })
     .join('\n\n')
 
+  const env = await getAgentEnv()
   let fullText = ''
 
   try {
@@ -124,13 +153,7 @@ export const runAgent = async (messages, onChunk) => {
       prompt,
       options: {
         systemPrompt: SYSTEM_PROMPT,
-        mcpServers: {
-          'gigi-tools': {
-            command: 'node',
-            args: [resolve(import.meta.dirname, 'mcp-server.js')],
-            env: { DATABASE_URL: process.env.DATABASE_URL || '' }
-          }
-        },
+        env,
         cwd: '/workspace',
         maxTurns: 20,
         permissionMode: 'bypassPermissions',
