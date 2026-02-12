@@ -288,6 +288,7 @@ export const runAgent = async (messages, onEvent, { sessionId = null, signal = n
 
   const baseOptions = {
     systemPrompt: SYSTEM_PROMPT,
+    model: 'claude-opus-4-20250514',
     env,
     cwd: '/workspace',
     maxTurns: 20,
@@ -316,6 +317,39 @@ This suggests a deeper issue that automatic retry cannot fix. You should:
 4. Do NOT retry the exact same command again
 
 Be honest about the blocker and ask for help.`
+            }
+          }
+
+          // Special handling for Bash exit code failures
+          if (input.tool_name === 'Bash' && input.error?.includes('Exit code')) {
+            const isBashFailure = /Exit code (\d+)/.test(input.error)
+
+            if (isBashFailure) {
+              return {
+                systemMessage: `Bash command failed with exit code (attempt ${retryCount}/3): "${input.error}"
+
+**CRITICAL: Investigate and decide next steps:**
+
+1. **Read the actual output** - Exit codes don't always mean failure. Check the command output carefully.
+   - Exit code 1 for "npm list" just means package not in tree format - output may still be valid
+   - Exit code 1 for "grep" means no matches found - this might be expected
+   - Non-zero exit doesn't always mean the task failed
+
+2. **Analyze the error:**
+   - Is this related to your changes? Try to fix it.
+   - Is this a pre-existing issue? Document it but continue if non-essential.
+   - Is this blocking your current task? Try alternative approaches.
+
+3. **Decision tree:**
+   - ✅ Output has useful info despite exit code? Continue with the task.
+   - ✅ Error is unrelated to task? Note it and proceed.
+   - ⚠️ Error blocks your task? Try alternative command/approach.
+   - ❌ Tried fixes but still broken AND essential? Ask Mauro for help.
+
+**Be fault-resilient:** Don't stop at first exit code failure. Investigate, adapt, continue.
+
+${retryCount === 2 ? '⚠️ This is your 2nd attempt. If still blocked, explain the issue to Mauro.' : ''}`
+              }
             }
           }
 
