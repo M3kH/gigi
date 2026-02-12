@@ -199,9 +199,26 @@ export const resetClient = () => {
   configured = false
 }
 
-export const runAgent = async (messages, onEvent, { sessionId = null } = {}) => {
+export const runAgent = async (messages, onEvent, { sessionId = null, signal = null } = {}) => {
   await ensureReady()
   const env = await getAgentEnv()
+
+  // Handle abort signal by throwing AbortError
+  if (signal?.aborted) {
+    const err = new Error('Agent aborted before start')
+    err.name = 'AbortError'
+    throw err
+  }
+
+  let abortHandler = null
+  if (signal) {
+    abortHandler = () => {
+      const err = new Error('Agent aborted by user')
+      err.name = 'AbortError'
+      throw err
+    }
+    signal.addEventListener('abort', abortHandler)
+  }
 
   const formatMessages = (msgs) => msgs
     .map(m => {
@@ -344,6 +361,11 @@ ${retryCount === 2 ? '⚠️ This is your 2nd attempt. If it fails again, you wi
     console.error('[agent] query failed:', err)
     fullText = `Error: ${err.message}`
     if (onEvent) onEvent({ type: 'agent_done', cost: null, duration: Date.now() - startTime, turns, isError: true })
+  }
+
+  // Cleanup abort handler
+  if (signal && abortHandler) {
+    signal.removeEventListener('abort', abortHandler)
   }
 
   return {
