@@ -9,10 +9,19 @@ export const startTelegram = async () => {
   const token = await getConfig('telegram_token')
   if (!token) return null
 
+  console.log('Telegram bot starting...')
+
   bot = new Bot(token)
   setBotInstance(bot)
 
-  const allowedChatId = await getConfig('telegram_chat_id')
+  // Verify token works before setting up handlers
+  try {
+    const me = await bot.api.getMe()
+    console.log(`Telegram bot authenticated as @${me.username}`)
+  } catch (err) {
+    console.error('Telegram bot auth failed:', err.message)
+    throw err
+  }
 
   // Lock to Mauro's chat ID
   bot.use(async (ctx, next) => {
@@ -56,8 +65,8 @@ export const startTelegram = async () => {
     const text = ctx.message.text
 
     // Check if Claude is configured
-    const apiKey = await getConfig('anthropic_api_key')
-    if (!apiKey) {
+    const oauthToken = await getConfig('claude_oauth_token')
+    if (!oauthToken) {
       await ctx.reply('Claude is not configured yet. Open claude.cluster.local to complete setup.')
       return
     }
@@ -88,9 +97,13 @@ export const startTelegram = async () => {
     console.error('Telegram bot error:', err.message)
   })
 
-  // Use polling (simpler for initial setup; can switch to webhooks later)
-  bot.start()
-  console.log('Telegram bot started')
+  // Start polling — don't await (it blocks forever), but catch errors
+  bot.start({
+    onStart: () => console.log('Telegram bot polling started'),
+  }).catch((err) => {
+    console.error('Telegram bot polling crashed:', err.message)
+  })
+
   return bot
 }
 
