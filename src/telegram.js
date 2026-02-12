@@ -88,14 +88,31 @@ export const startTelegram = async () => {
 
       // Telegram has a 4096 char limit
       const reply = response.text || '(no response)'
-      if (reply.length <= 4096) {
-        await ctx.reply(reply, { parse_mode: 'Markdown' }).catch(() =>
-          ctx.reply(reply) // fallback without markdown
-        )
+
+      // Check if the response indicates incomplete work
+      const hasUnfinishedWork = reply.includes('Let me') ||
+                                reply.includes('I will') ||
+                                reply.includes('I should') ||
+                                (reply.includes('PR') && !reply.includes('http://'))
+
+      if (hasUnfinishedWork) {
+        // Send a warning that I got stuck
+        await ctx.reply('⚠️ Looks like I got stuck mid-task. Let me complete it now...')
+        // Re-trigger with continuation prompt
+        const continuation = await handleMessage('telegram', chatId, 'Continue and complete the task: create PR and send notification.', null)
+        const finalReply = continuation.text || '(completed)'
+        await ctx.reply(finalReply, { parse_mode: 'Markdown' }).catch(() => ctx.reply(finalReply))
       } else {
-        // Split into chunks
-        for (let i = 0; i < reply.length; i += 4096) {
-          await ctx.reply(reply.slice(i, i + 4096))
+        // Send normal response
+        if (reply.length <= 4096) {
+          await ctx.reply(reply, { parse_mode: 'Markdown' }).catch(() =>
+            ctx.reply(reply) // fallback without markdown
+          )
+        } else {
+          // Split into chunks
+          for (let i = 0; i < reply.length; i += 4096) {
+            await ctx.reply(reply.slice(i, i + 4096))
+          }
         }
       }
     } catch (err) {
