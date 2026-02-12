@@ -3,24 +3,44 @@ on:
   push:
     branches: [main]
 
+env:
+  REGISTRY: 192.168.1.80:3000
+  IMAGE: ideabile/gigi
+  SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+  SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+
 jobs:
   build:
     runs-on: ubuntu-latest-utils
     steps:
       - uses: actions/checkout@v4
 
+      - name: Set up Docker Buildx
+        run: |
+          docker buildx create --name multiarch --driver docker-container --use
+          docker buildx inspect --bootstrap
+
       - name: Build and push image
         run: |
           docker buildx build \
             --platform linux/amd64,linux/arm64 \
-            -t 192.168.1.80:3000/ideabile/gigi:${{ github.sha }} \
-            -t 192.168.1.80:3000/ideabile/gigi:latest \
+            -t ${{ env.REGISTRY }}/${{ env.IMAGE }}:${{ github.sha }} \
+            -t ${{ env.REGISTRY }}/${{ env.IMAGE }}:latest \
             --push .
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          echo "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
 
       - name: Update service
         run: |
           ssh root@192.168.1.110 \
             "docker service update \
-              --image 192.168.1.80:3000/ideabile/gigi:latest \
+              --image ${{ env.REGISTRY }}/${{ env.IMAGE }}:latest \
               --with-registry-auth \
               ideabile-biancifiore-gigi_gigi"
