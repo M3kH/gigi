@@ -39,6 +39,11 @@ jobs:
             docker push ${{ env.REGISTRY }}/${{ env.IMAGE }}:latest
             rm -rf /tmp/gigi-build"
 
+      - name: Create Docker secrets
+        run: |
+          ssh root@${{ env.DEPLOY_HOST }} "
+            echo '${{ secrets.SSH_PRIVATE_KEY_GIGI }}' | docker secret create gigi_ssh_key - 2>/dev/null || true"
+
       - name: Deploy service
         run: |
           IMAGE_TAG="${{ env.REGISTRY }}/${{ env.IMAGE }}:${{ github.sha }}"
@@ -51,6 +56,8 @@ jobs:
               '    image: ${IMAGE_TAG}' \
               '    environment:' \
               '      - DATABASE_URL=postgresql://gigi:${{ secrets.DB_PASSWORD }}@postgres:5432/gigi' \
+              '    secrets:' \
+              '      - gigi_ssh_key' \
               '    networks:' \
               '      - databases_default' \
               '      - http-entry_default' \
@@ -70,6 +77,9 @@ jobs:
               '      timeout: 10s' \
               '      retries: 3' \
               '      start_period: 40s' \
+              'secrets:' \
+              '  gigi_ssh_key:' \
+              '    external: true' \
               'networks:' \
               '  databases_default:' \
               '    external: true' \
