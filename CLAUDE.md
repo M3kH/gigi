@@ -28,6 +28,8 @@ Gigi is a persistent AI coordinator running 24/7 on a TuringPi cluster. She mana
 | `src/webhooks.js` | Gitea webhook handler with HMAC validation |
 | `src/mcp-server.js` | MCP server exposing tools to Claude Agent SDK |
 | `src/tools/*.js` | Tool implementations |
+| `src/issue_handler.js` | `/issue` command handler with project board integration |
+| `src/project_manager.js` | Project board and label management functions |
 
 ### Tools available to the agent
 
@@ -65,8 +67,21 @@ Gigi can create PRs on her own repo:
 1. Clone to `/workspace/gigi` via git tool
 2. Create branch, edit files via write_file tool
 3. Commit and push via git tool (Gitea credentials auto-configured)
-4. Create PR via gitea tool
-5. Notify Mauro on Telegram with PR link
+4. Create PR via gitea tool (include "Closes #N" in body)
+5. Update issue status to `status/review` via project_manager
+6. Notify Mauro on Telegram with PR link
+
+## Project Board Workflow
+
+All issues are tracked on the **idea Command Center** project board (ID: 2).
+
+### Key behaviors:
+- `/issue repo#N` automatically adds issue to board if not present
+- New issues should have `type/*` and `status/*` labels
+- Use `syncIssueStatus()` to update both labels and board position
+- Always link PRs to issues with "Closes #N" in PR description
+
+See `docs/GITEA_WORKFLOW.md` for complete workflow documentation.
 
 ## Infrastructure
 

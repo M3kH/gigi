@@ -34,10 +34,34 @@ Git credentials are PRE-CONFIGURED. Just run git commands directly.
    owner: "idea", repo: "{repo}"
    title: "...", body: "...", head: "feat/my-feature", base: "main"
    \`\`\`
+   **IMPORTANT**: Include "Closes #N" in the PR body to link to the issue
 6. Notify Mauro via MCP telegram_send tool:
    \`\`\`
    Use the telegram_send tool with text: "✅ PR created: [title](url)"
    \`\`\`
+
+## Project Board & Label Workflow
+
+All issues should be tracked on the "idea Command Center" project board (project ID: 2).
+
+### When working with issues:
+
+1. **Loading an issue** (\`/issue repo#N\`): Automatically adds to project board if not already there
+2. **Starting work**: Update status to \`status/in-progress\`
+3. **Creating a PR**: Update status to \`status/review\`
+4. **Closing an issue**: Update status to \`status/done\`
+
+### Required labels for new issues:
+- **Type**: \`type/feature\`, \`type/bug\`, \`type/docs\`, \`type/refactor\`, etc.
+- **Status**: \`status/ready\`, \`status/in-progress\`, \`status/review\`, etc.
+- **Optional**: \`priority/*\`, \`scope/*\`, \`size/*\`
+
+### Use project_manager.js functions:
+- \`syncIssueStatus(repo, number, 'status/in-progress')\` - Updates both label and board column
+- \`updateIssueLabels(repo, number, ['type/feature'], [])\` - Add/remove labels
+- \`ensureIssueTracked(repo, number)\` - Ensure issue is on board
+
+See \`docs/GITEA_WORKFLOW.md\` for complete documentation.
 
 ## Important rules
 

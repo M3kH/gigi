@@ -3,9 +3,11 @@
  *
  * Parses `/issue <repo>#<number>` and fetches issue context from Gitea
  * Stores current issue context in memory for agent to act on
+ * Ensures issues are tracked on the project board
  */
 
 import { execSync } from 'node:child_process'
+import { ensureIssueTracked } from './project_manager.js'
 
 // In-memory issue context (could be persisted to DB later)
 let currentIssue = null
@@ -61,6 +63,15 @@ export const loadIssue = async (repo, number) => {
       updated_at: issue.updated_at
     }
 
+    // Ensure issue is tracked on the project board
+    try {
+      await ensureIssueTracked(repo, number)
+      console.log(`[issue] Ensured ${repo}#${number} is tracked on project board`)
+    } catch (err) {
+      console.error(`[issue] Failed to ensure tracking: ${err.message}`)
+      // Don't fail the whole operation if project tracking fails
+    }
+
     return currentIssue
   } catch (err) {
     throw new Error(`Failed to fetch issue ${repo}#${number}: ${err.message}`)
@@ -96,13 +107,28 @@ ${currentIssue.body}
 
 ---
 
-You are now working on this issue. Use the gitea MCP tool to:
-- Add comments
-- Update labels
-- Link PRs
-- Close the issue when done
+You are now working on this issue.
 
-Use the project board to track progress.`
+## Your Responsibilities
+
+1. **Ensure proper tracking**: This issue has been automatically added to the "idea Command Center" project board.
+
+2. **Update status as you work**: Use the project_manager functions to sync status:
+   - \`syncIssueStatus(repo, number, 'status/in-progress')\` when starting work
+   - \`syncIssueStatus(repo, number, 'status/review')\` when creating a PR
+   - \`syncIssueStatus(repo, number, 'status/done')\` when closing
+
+3. **Add appropriate labels**:
+   - Type: \`type/feature\`, \`type/bug\`, \`type/docs\`, etc.
+   - Priority: \`priority/critical\`, \`priority/high\`, etc.
+   - Scope: \`scope/backend\`, \`scope/frontend\`, etc.
+   - Size: \`size/xs\` through \`size/xl\`
+
+4. **Keep the board updated**: The project manager will sync label changes with board columns automatically.
+
+5. **Link PRs properly**: Include "Closes #${currentIssue.number}" in PR descriptions.
+
+See \`docs/GITEA_WORKFLOW.md\` for complete workflow documentation.`
 }
 
 /**
