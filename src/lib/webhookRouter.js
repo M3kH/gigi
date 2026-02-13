@@ -1,8 +1,11 @@
 import * as store from '../store.js'
+import { runAgent } from '../agent.js'
+import { emit } from '../events.js'
 
 /**
  * Routes webhook events to appropriate chat conversations based on tags.
  * Creates new conversations for new issues/PRs, appends system messages to existing chats.
+ * Invokes agent when @gigi is mentioned in comments.
  */
 
 export const routeWebhook = async (event, payload) => {
@@ -28,13 +31,16 @@ export const routeWebhook = async (event, payload) => {
     message_type: 'webhook'
   })
 
+  // Check if @gigi is mentioned and invoke agent if needed
+  const shouldInvokeAgent = await checkAndInvokeAgent(event, payload, conversation.id, systemMessage)
+
   // Auto-close conversation if issue/PR closed
   if (shouldAutoClose(event, payload, conversation)) {
     await store.closeConversation(conversation.id)
     console.log(`[webhookRouter] Auto-closed conversation ${conversation.id}`)
   }
 
-  return { conversationId: conversation.id, tags, systemMessage }
+  return { conversationId: conversation.id, tags, systemMessage, agentInvoked: shouldInvokeAgent }
 }
 
 const extractTags = (event, payload) => {
@@ -61,6 +67,12 @@ const extractTags = (event, payload) => {
         const prNum = payload.number || payload.pull_request.number
         tags.push(`${repo}#${prNum}`)
         tags.push(`pr#${prNum}`)
+      }
+      break
+    case 'pull_request_review_comment':
+      if (payload.pull_request?.number) {
+        tags.push(`${repo}#${payload.pull_request.number}`)
+        tags.push(`pr#${payload.pull_request.number}`)
       }
       break
   }
@@ -136,6 +148,8 @@ const formatWebhookEvent = (event, payload) => {
       return formatIssueCommentEvent(payload, repo)
     case 'pull_request':
       return formatPREvent(payload, repo)
+    case 'pull_request_review_comment':
+      return formatPRReviewCommentEvent(payload, repo)
     case 'push':
       return formatPushEvent(payload, repo)
     default:
@@ -185,4 +199,104 @@ const formatPushEvent = (payload, repo) => {
   const moreText = commits.length > 3 ? `\n  ... and ${commits.length - 3} more` : ''
 
   return `📤 @${payload.pusher?.login} pushed ${commits.length} commit(s) to ${payload.ref}:\n${commitSummary}${moreText}`
+}
+
+const formatPRReviewCommentEvent = (payload, repo) => {
+  const { action, comment, pull_request } = payload
+  const commentPreview = comment?.body?.slice(0, 200) || ''
+
+  return `💬 @${comment?.user?.login} commented on PR #${pull_request.number}:\n"${commentPreview}${commentPreview.length >= 200 ? '...' : ''}"\n${comment?.html_url || ''}`
+}
+
+/**
+ * Check if @gigi is mentioned in the webhook event and invoke agent if needed
+ */
+const checkAndInvokeAgent = async (event, payload, conversationId, systemMessage) => {
+  // Check both issue comments and PR comments
+  const isComment = (
+    (event === 'issue_comment' && payload.action === 'created') ||
+    (event === 'pull_request_review_comment' && payload.action === 'created') ||
+    (event === 'pull_request' && payload.action === 'commented')
+  )
+
+  if (!isComment) {
+    return false
+  }
+
+  const comment = payload.comment?.body || ''
+  const author = payload.comment?.user?.login || ''
+
+  // Check if @gigi is mentioned in the comment
+  const gigiMentioned = /@gigi\b/i.test(comment)
+
+  // Skip if no mention or if it's from gigi itself (bot actions)
+  if (!gigiMentioned || author === 'gigi') {
+    return false
+  }
+
+  console.log(`[webhookRouter] @gigi mentioned by @${author} in conversation ${conversationId}`)
+
+  try {
+    // Extract context from the comment - remove @gigi mention to get the actual request
+    const userMessage = comment.replace(/@gigi\b/gi, '').trim()
+
+    // Add context about the issue/PR
+    const contextMessage = `[GitHub Comment from @${author}]\n${userMessage}\n\nContext: ${systemMessage}`
+
+    // Store the user's message from GitHub
+    await store.addMessage(conversationId, 'user', [{ type: 'text', text: contextMessage }], {
+      message_type: 'github_mention',
+      github_user: author
+    })
+
+    // Get conversation history for agent context
+    const history = await store.getMessages(conversationId)
+    const messages = history.map(m => ({
+      role: m.role === 'user' ? 'user' : 'assistant',
+      content: m.content
+    }))
+
+    // Create event emitter wrapper
+    const onEvent = (event) => {
+      emit({ ...event, conversationId })
+    }
+
+    // Emit agent start
+    onEvent({ type: 'agent_start', conversationId })
+
+    // Run the agent
+    const response = await runAgent(messages, onEvent)
+
+    // Store agent response
+    await store.addMessage(conversationId, 'assistant', [{ type: 'text', text: response.text }], {
+      tool_calls: response.toolCalls.length ? response.toolCalls : null,
+      tool_outputs: Object.keys(response.toolResults).length ? response.toolResults : null,
+      triggered_by: 'github_mention'
+    })
+
+    // Store session ID if provided
+    if (response.sessionId) {
+      try {
+        await store.setSessionId(conversationId, response.sessionId)
+      } catch (err) {
+        console.warn('[webhookRouter] Failed to store session ID:', err.message)
+      }
+    }
+
+    console.log(`[webhookRouter] Agent completed response for @gigi mention in conversation ${conversationId}`)
+    return true
+
+  } catch (err) {
+    console.error(`[webhookRouter] Failed to invoke agent for conversation ${conversationId}:`, err)
+
+    // Store error message in conversation
+    await store.addMessage(conversationId, 'system', [{
+      type: 'text',
+      text: `❌ Failed to process @gigi mention: ${err.message}`
+    }], {
+      message_type: 'error'
+    })
+
+    return false
+  }
 }
