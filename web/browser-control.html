@@ -206,7 +206,8 @@
         this.currentMode = 'headless';
         // Use secure WebSocket if page is served over HTTPS
         const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        this.wsUrl = `${wsProtocol}//${window.location.hostname}:3001`;
+        // Use /ws path through the main domain to avoid port issues
+        this.wsUrl = `${wsProtocol}//${window.location.host}/ws`;
         // Note: Neko URL might need manual HTTPS setup on port 8080
         this.nekoUrl = `${window.location.protocol}//${window.location.hostname}:8080`;
 

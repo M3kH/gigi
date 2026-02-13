@@ -1,3 +1,31 @@
 claude.cluster.local {
-	reverse_proxy idea-biancifiore-gigi_gigi:3000
+	# Handle WebSocket connections for browser control on /ws path
+	@browserws {
+		path /ws
+		header Connection *Upgrade*
+		header Upgrade websocket
+	}
+	reverse_proxy @browserws idea-biancifiore-gigi_gigi:3001
+
+	# Ensure SSE/EventSource works properly
+	@sse {
+		path /api/events
+	}
+	handle @sse {
+		reverse_proxy idea-biancifiore-gigi_gigi:3000 {
+			# Disable buffering for SSE
+			flush_interval -1
+			# Long timeout for persistent connections
+			transport http {
+				read_timeout 0
+				write_timeout 0
+			}
+		}
+	}
+
+	# Main application (all other requests)
+	reverse_proxy idea-biancifiore-gigi_gigi:3000 {
+		# Flush immediately for potential streaming responses
+		flush_interval -1
+	}
 }
