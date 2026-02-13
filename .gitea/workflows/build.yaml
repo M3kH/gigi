@@ -37,18 +37,11 @@ jobs:
             export IMAGE=${{ env.IMAGE }}
             export TAG=${{ github.sha }}
 
-            # Build both services
-            docker compose build
-
-            # Tag and push gigi service
+            # Build and push gigi service (neko uses upstream GHCR image directly)
+            docker compose build gigi
             docker tag \${REGISTRY}/\${IMAGE}:\${TAG} \${REGISTRY}/\${IMAGE}:latest
             docker push \${REGISTRY}/\${IMAGE}:\${TAG}
             docker push \${REGISTRY}/\${IMAGE}:latest
-
-            # Tag and push neko service
-            docker tag \${REGISTRY}/\${IMAGE}-neko:\${TAG} \${REGISTRY}/\${IMAGE}-neko:latest
-            docker push \${REGISTRY}/\${IMAGE}-neko:\${TAG}
-            docker push \${REGISTRY}/\${IMAGE}-neko:latest
 
             rm -rf /tmp/gigi-build"
 

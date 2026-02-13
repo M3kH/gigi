@@ -2,12 +2,7 @@ version: '3.9'
 
 services:
   gigi-neko:
-    build:
-      context: .
-      dockerfile: Dockerfile.neko
-    image: ${REGISTRY}/${IMAGE}-neko:${TAG:-latest}
-    container_name: gigi-neko
-    restart: unless-stopped
+    image: ghcr.io/m1k1o/neko/chromium
     shm_size: "2gb"
     ports:
       - "8080:8080"
@@ -22,11 +17,6 @@ services:
       NEKO_VIDEO_CODEC: h264
       NEKO_VIDEO_BITRATE: 5000
       NEKO_AUDIO_CODEC: opus
-      NEKO_BROADCAST_PIPELINE: |
-        ximagesrc display=%s show-pointer=true use-damage=false
-        ! video/x-raw,framerate=30/1
-        ! videoconvert
-        ! queue
     networks:
       - gigi-network
     volumes:
@@ -36,7 +26,7 @@ services:
     security_opt:
       - seccomp:unconfined
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/api/health"]
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/ || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
