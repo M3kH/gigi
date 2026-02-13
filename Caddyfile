@@ -1,4 +1,13 @@
 claude.cluster.local {
+	# Neko browser UI at /browser (strips prefix, proxies to neko)
+	handle_path /browser/* {
+		reverse_proxy idea-biancifiore-gigi_gigi-neko:8080
+	}
+	handle /browser {
+		rewrite * /
+		reverse_proxy idea-biancifiore-gigi_gigi-neko:8080
+	}
+
 	# Handle WebSocket connections for browser control on /ws path
 	@browserws {
 		path /ws

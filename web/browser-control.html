@@ -208,8 +208,8 @@
         const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         // Use /ws path through the main domain to avoid port issues
         this.wsUrl = `${wsProtocol}//${window.location.host}/ws`;
-        // Note: Neko URL might need manual HTTPS setup on port 8080
-        this.nekoUrl = `${window.location.protocol}//${window.location.hostname}:8080`;
+        // Neko is proxied through Caddy at /browser
+        this.nekoUrl = '/browser';
 
         this.initializeElements();
         this.connectWebSocket();

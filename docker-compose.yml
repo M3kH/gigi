@@ -5,7 +5,6 @@ services:
     image: ghcr.io/m1k1o/neko/chromium
     shm_size: "2gb"
     ports:
-      - "8080:8080"
       - "52000-52100:52000-52100/udp"
     environment:
       NEKO_SCREEN: ${NEKO_SCREEN:-1920x1080@30}
@@ -19,6 +18,7 @@ services:
       NEKO_AUDIO_CODEC: opus
     networks:
       - gigi-network
+      - http-entry_default
     volumes:
       - browser-profiles:/home/neko/.config/chromium
     cap_add:
