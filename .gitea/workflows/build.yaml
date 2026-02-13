@@ -29,26 +29,29 @@ jobs:
         run: |
           rsync -az --exclude=.git --exclude=node_modules . root@${{ env.DEPLOY_HOST }}:/tmp/gigi-build/
           ssh root@${{ env.DEPLOY_HOST }} "
+            set -e
             cd /tmp/gigi-build
             echo '${{ secrets.REGISTRY_TOKEN }}' | docker login ${{ env.REGISTRY }} -u ${{ github.repository_owner }} --password-stdin
 
-            # Build and push images using docker-compose
             export REGISTRY=${{ env.REGISTRY }}
             export IMAGE=${{ env.IMAGE }}
             export TAG=${{ github.sha }}
 
-            # Build both services
-            docker-compose build
-
-            # Tag and push gigi service
+            # Build and push gigi service (must succeed)
+            docker-compose build gigi
             docker tag \${REGISTRY}/\${IMAGE}:\${TAG} \${REGISTRY}/\${IMAGE}:latest
             docker push \${REGISTRY}/\${IMAGE}:\${TAG}
             docker push \${REGISTRY}/\${IMAGE}:latest
 
-            # Tag and push neko service
-            docker tag \${REGISTRY}/\${IMAGE}-neko:\${TAG} \${REGISTRY}/\${IMAGE}-neko:latest
-            docker push \${REGISTRY}/\${IMAGE}-neko:\${TAG}
-            docker push \${REGISTRY}/\${IMAGE}-neko:latest
+            # Build and push neko service (best-effort — may fail on arm64)
+            if docker-compose build gigi-neko; then
+              docker tag \${REGISTRY}/\${IMAGE}-neko:\${TAG} \${REGISTRY}/\${IMAGE}-neko:latest
+              docker push \${REGISTRY}/\${IMAGE}-neko:\${TAG}
+              docker push \${REGISTRY}/\${IMAGE}-neko:latest
+              echo 'Neko image built and pushed'
+            else
+              echo 'WARNING: Neko build failed (likely arm64 incompatibility), skipping'
+            fi
 
             rm -rf /tmp/gigi-build"
 
