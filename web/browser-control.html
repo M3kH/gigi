@@ -204,8 +204,11 @@
       constructor() {
         this.ws = null;
         this.currentMode = 'headless';
-        this.wsUrl = `ws://${window.location.hostname}:3001`;
-        this.nekoUrl = `http://${window.location.hostname}:8080`;
+        // Use secure WebSocket if page is served over HTTPS
+        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        this.wsUrl = `${wsProtocol}//${window.location.hostname}:3001`;
+        // Note: Neko URL might need manual HTTPS setup on port 8080
+        this.nekoUrl = `${window.location.protocol}//${window.location.hostname}:8080`;
 
         this.initializeElements();
         this.connectWebSocket();
@@ -232,7 +235,12 @@
       }
 
       connectWebSocket() {
-        this.ws = new WebSocket(this.wsUrl);
+        try {
+          this.ws = new WebSocket(this.wsUrl);
+        } catch (error) {
+          this.log(`WebSocket connection error: ${error.message}. If using HTTPS, ensure WSS is available on port 3001.`, 'error');
+          return;
+        }
 
         this.ws.onopen = () => {
           this.statusDot.classList.add('connected');

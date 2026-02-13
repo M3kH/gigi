@@ -4,15 +4,27 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Gigi</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github-dark.min.css">
-  <script src="https://cdn.jsdelivr.net/npm/marked@11.1.1/marked.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/core.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/javascript.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/python.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/bash.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/json.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/typescript.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/go.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@highlightjs/cdn-assets@11.9.0/styles/github-dark.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/marked@11.1.1/lib/marked.esm.js" type="module"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@highlightjs/cdn-assets@11.9.0/highlight.min.js"></script>
+  <script>
+    // Load additional languages after hljs is loaded
+    hljs.registerLanguage('typescript', function(hljs) {
+      return hljs.getLanguage('javascript');
+    });
+    hljs.registerLanguage('go', function(hljs) {
+      return {
+        keywords: 'break default func interface select case map struct chan else goto package switch const fallthrough if range type continue for import return var go defer',
+        contains: [
+          hljs.C_LINE_COMMENT_MODE,
+          hljs.C_BLOCK_COMMENT_MODE,
+          hljs.QUOTE_STRING_MODE,
+          hljs.APOS_STRING_MODE,
+          hljs.C_NUMBER_MODE
+        ]
+      };
+    });
+  </script>
   <style>
     :root {
       --bg-primary: #0a0a0a;
@@ -229,7 +241,10 @@
     </div>
   </div>
 
-  <script>
+  <script type="module">
+    // Import marked
+    import { marked } from 'https://cdn.jsdelivr.net/npm/marked@11.1.1/lib/marked.esm.js';
+
     // Configure marked
     marked.setOptions({
       highlight: (code, lang) => {
@@ -285,6 +300,7 @@
 
       connect() {
         if (SSE.source) SSE.source.close()
+        // Use relative path to handle both HTTP and HTTPS properly
         SSE.source = new EventSource('/api/events')
 
         SSE.source.onmessage = (e) => {
