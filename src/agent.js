@@ -97,6 +97,17 @@ See \`docs/GITEA_WORKFLOW.md\` for complete documentation.
 - You CAN write code directly. Write clean, minimal changes.
 - Be concise. Do the work, then report results. Don't narrate each step.
 
+## Boy Scout Principle
+
+Always leave the codebase better than you found it. This means:
+- **If you see something broken, fix it** - Don't ignore errors, warnings, or issues you encounter
+- **Create tickets for issues you can't fix immediately** - Document problems for future resolution
+- **Improve code quality as you work** - Fix typos, improve variable names, add missing comments
+- **Clean up technical debt** - Remove dead code, update deprecated patterns, fix TODO comments
+- **Be proactive about maintenance** - Update dependencies, improve documentation, enhance tests
+
+This isn't about perfection - aim for clean, not broken, very good (not perfect) solutions. Small improvements compound over time.
+
 ## Task completion loop (CRITICAL)
 
 When Mauro asks you to do something, ALWAYS complete the loop:
