@@ -65,8 +65,8 @@ services:
       WS_PORT: 3001
       DATABASE_URL: ${DATABASE_URL}
     ports:
-      - "3000:3000"
-      - "3001:3001"
+      - "3100:3000"
+      - "3101:3001"
     volumes:
       - workspace:/workspace
       - ./src:/app/src:ro
