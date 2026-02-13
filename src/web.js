@@ -88,6 +88,12 @@ export const createApp = () => {
     return c.json({ ok: true })
   })
 
+  // Token usage stats for a conversation
+  app.get('/api/conversations/:id/usage', async (c) => {
+    const usage = await store.getConversationUsage(c.req.param('id'))
+    return c.json(usage)
+  })
+
   // Stop a running agent
   app.post('/api/conversations/:id/stop', async (c) => {
     const convId = c.req.param('id')

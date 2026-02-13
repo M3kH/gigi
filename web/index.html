@@ -127,6 +127,23 @@
     .tool-body pre { margin: 0; padding: 0.5rem 0.75rem; background: #0d0d0d; font-size: 0.75rem; overflow-x: auto; max-height: 300px; overflow-y: auto; color: var(--text-secondary); }
     .tool-body .tool-label { font-size: 0.65rem; color: var(--text-muted); padding: 0.3rem 0.75rem 0; text-transform: uppercase; letter-spacing: 0.05em; }
 
+    /* Token usage badge */
+    .token-badge { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.7rem; color: var(--text-muted); cursor: pointer; padding: 0.15rem 0.45rem; border-radius: 3px; background: transparent; transition: background 0.15s; user-select: none; }
+    .token-badge:hover { background: var(--bg-elevated); color: var(--text-secondary); }
+    .token-badge .token-icon { font-size: 0.6rem; }
+    .token-details { display: none; margin-top: 0.4rem; padding: 0.5rem 0.75rem; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 6px; font-size: 0.75rem; color: var(--text-secondary); line-height: 1.6; }
+    .token-details.open { display: block; }
+    .token-details .token-row { display: flex; justify-content: space-between; gap: 1rem; }
+    .token-details .token-label { color: var(--text-muted); }
+    .token-details .token-value { font-family: 'Monaco', 'Courier New', monospace; }
+    .token-details .token-divider { border-top: 1px solid var(--border); margin: 0.25rem 0; }
+    .token-details .token-value.cost { color: #ca4; }
+
+    /* Chat header usage summary */
+    .chat-usage { font-size: 0.7rem; color: var(--text-muted); display: flex; align-items: center; gap: 0.4rem; flex-shrink: 0; cursor: default; }
+    .chat-usage .usage-tokens { color: var(--text-secondary); }
+    .chat-usage .usage-cost { color: #ca4; }
+
     /* Typing indicator */
     .typing-indicator { display: inline-flex; gap: 4px; padding: 0.75rem 1rem; }
     .typing-indicator span { width: 6px; height: 6px; background: var(--text-muted); border-radius: 50%; animation: typing 1.4s infinite; }
@@ -201,6 +218,10 @@
         <span class="chat-title" id="chat-title">New conversation</span>
         <input class="chat-title-input" id="chat-title-input" type="text" onkeydown="if(event.key==='Enter')Chat.saveTitle();if(event.key==='Escape')Chat.cancelTitleEdit()">
         <button class="chat-title-edit" id="chat-title-edit" onclick="Chat.editTitle()" style="display:none">edit</button>
+      </div>
+      <div class="chat-usage" id="chat-usage" style="display:none">
+        <span class="usage-tokens" id="chat-usage-tokens"></span>
+        <span class="usage-cost" id="chat-usage-cost"></span>
       </div>
       <button class="stop-btn" id="stop-btn" onclick="Chat.stop()">⏹ Stop</button>
       <button class="browser-btn" id="browser-btn" onclick="Browser.toggle()">🌐 Browser</button>
@@ -279,6 +300,49 @@
       return div.innerHTML
     }
 
+    // ── Token formatting helpers ─────────────────────────────
+    const formatTokens = (n) => {
+      if (n == null) return '0'
+      if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M'
+      if (n >= 1000) return (n / 1000).toFixed(1) + 'K'
+      return String(n)
+    }
+
+    const formatCost = (usd) => {
+      if (!usd) return null
+      if (usd < 0.01) return '<$0.01'
+      return '$' + usd.toFixed(2)
+    }
+
+    const buildTokenBadge = (usage) => {
+      if (!usage) return ''
+      const total = (usage.inputTokens || 0) + (usage.outputTokens || 0)
+      if (!total) return ''
+      const costStr = formatCost(usage.costUSD)
+      const costSpan = costStr ? ` · <span class="token-value cost">${costStr}</span>` : ''
+      return `
+        <span class="token-badge" onclick="toggleTokenDetails(this)">
+          <span class="token-icon">◆</span> ${formatTokens(total)} tk${costStr ? ' · ' + costStr : ''}
+        </span>
+        <div class="token-details">
+          <div class="token-row"><span class="token-label">Input</span><span class="token-value">${formatTokens(usage.inputTokens || 0)}</span></div>
+          <div class="token-row"><span class="token-label">Output</span><span class="token-value">${formatTokens(usage.outputTokens || 0)}</span></div>
+          ${usage.cacheReadInputTokens ? `<div class="token-row"><span class="token-label">Cache read</span><span class="token-value">${formatTokens(usage.cacheReadInputTokens)}</span></div>` : ''}
+          ${usage.cacheCreationInputTokens ? `<div class="token-row"><span class="token-label">Cache write</span><span class="token-value">${formatTokens(usage.cacheCreationInputTokens)}</span></div>` : ''}
+          <div class="token-divider"></div>
+          <div class="token-row"><span class="token-label">Total</span><span class="token-value">${formatTokens(total)}</span></div>
+          ${usage.costUSD ? `<div class="token-row"><span class="token-label">Cost</span><span class="token-value cost">${formatCost(usage.costUSD)}</span></div>` : ''}
+          ${usage.durationMs ? `<div class="token-row"><span class="token-label">Duration</span><span class="token-value">${(usage.durationMs / 1000).toFixed(1)}s</span></div>` : ''}
+          ${usage.numTurns ? `<div class="token-row"><span class="token-label">Turns</span><span class="token-value">${usage.numTurns}</span></div>` : ''}
+        </div>
+      `
+    }
+
+    function toggleTokenDetails(badgeEl) {
+      const details = badgeEl.nextElementSibling
+      if (details) details.classList.toggle('open')
+    }
+
     // ── SSE ────────────────────────────────────────────────────
     const SSE = {
       source: null,
@@ -346,7 +410,8 @@
             if (convId === State.activeConvId) {
               Chat.hideTyping()
               Chat.hideStopButton()
-              Chat.finalizeAssistantMessage()
+              Chat.finalizeAssistantMessage(event.usage)
+              Chat.refreshUsage()
             }
             Sidebar.refresh()
             break
@@ -487,6 +552,9 @@
           messagesEl.scrollTop = messagesEl.scrollHeight
         } catch {}
 
+        // Load usage stats for header
+        Chat.refreshUsage()
+
         // If agent is running for this conv, show typing
         if (State.agentRunning.has(convId)) {
           Chat.showTyping()
@@ -556,10 +624,13 @@
           }).join('')
         }
 
+        const tokenHtml = buildTokenBadge(msg.usage)
+
         div.innerHTML = `
           <div class="meta">
             <span class="role">Gigi</span>
             <span class="timestamp">${formatTime(msg.created_at)}</span>
+            ${tokenHtml}
           </div>
           <div class="content">${marked.parse(text)}</div>
           ${toolBlocksHtml}
@@ -734,9 +805,35 @@
         if (el) el.textContent = `${elapsed}s`
       },
 
-      finalizeAssistantMessage() {
+      finalizeAssistantMessage(usage) {
+        // Inject token badge into the current assistant message's meta row
+        if (State.currentAssistantEl && usage) {
+          const meta = State.currentAssistantEl.querySelector('.meta')
+          if (meta) {
+            const badgeHtml = buildTokenBadge(usage)
+            if (badgeHtml) meta.insertAdjacentHTML('beforeend', badgeHtml)
+          }
+        }
         State.currentAssistantEl = null
         State.currentAssistantText = ''
+      },
+
+      async refreshUsage() {
+        if (!State.activeConvId) return
+        try {
+          const res = await fetch(`/api/conversations/${State.activeConvId}/usage`)
+          const usage = await res.json()
+          const totalTokens = (parseInt(usage.input_tokens) || 0) + (parseInt(usage.output_tokens) || 0)
+          const usageEl = $('#chat-usage')
+          if (totalTokens > 0) {
+            $('#chat-usage-tokens').textContent = '◆ ' + formatTokens(totalTokens) + ' tk'
+            const cost = parseFloat(usage.total_cost)
+            $('#chat-usage-cost').textContent = cost > 0 ? formatCost(cost) : ''
+            usageEl.style.display = ''
+          } else {
+            usageEl.style.display = 'none'
+          }
+        } catch {}
       },
 
       editTitle() {
@@ -829,6 +926,7 @@
         $('#chat-title').textContent = 'New conversation'
         $('#chat-title-edit').style.display = 'none'
         $('#chat-header-tags').innerHTML = ''
+        $('#chat-usage').style.display = 'none'
         Sidebar.refresh()
         closeSidebar()
       })

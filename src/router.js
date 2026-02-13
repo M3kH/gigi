@@ -112,11 +112,12 @@ export const handleMessage = async (channel, channelId, text, onEvent) => {
     }
   }
 
-  // Store assistant response with structured tool data
+  // Store assistant response with structured tool data and usage
   const storedContent = [{ type: 'text', text: storedText }]
   await store.addMessage(convId, 'assistant', storedContent, {
     tool_calls: response.toolCalls.length ? response.toolCalls : null,
-    tool_outputs: Object.keys(response.toolResults).length ? response.toolResults : null
+    tool_outputs: Object.keys(response.toolResults).length ? response.toolResults : null,
+    usage: response.usage || null
   })
 
   // ENFORCE TASK COMPLETION
@@ -153,7 +154,8 @@ export const handleMessage = async (channel, channelId, text, onEvent) => {
       }
       await store.addMessage(convId, 'assistant', response2.content, {
         tool_calls: response2.toolCalls.length ? response2.toolCalls : null,
-        tool_outputs: Object.keys(response2.toolResults).length ? response2.toolResults : null
+        tool_outputs: Object.keys(response2.toolResults).length ? response2.toolResults : null,
+        usage: response2.usage || null
       })
 
       const enforcement2 = await enforceCompletion(convId)
@@ -183,7 +185,8 @@ export const handleMessage = async (channel, channelId, text, onEvent) => {
       }
       await store.addMessage(convId, 'assistant', response2.content, {
         tool_calls: response2.toolCalls.length ? response2.toolCalls : null,
-        tool_outputs: Object.keys(response2.toolResults).length ? response2.toolResults : null
+        tool_outputs: Object.keys(response2.toolResults).length ? response2.toolResults : null,
+        usage: response2.usage || null
       })
 
       await markNotified(convId, enforcement.repo, enforcement.issueNumber)

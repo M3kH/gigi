@@ -276,6 +276,7 @@ export const runAgent = async (messages, onEvent, { sessionId = null, signal = n
   const toolResults = {}
   const startTime = Date.now()
   let turns = 0
+  let lastUsage = null
 
   // Track tool failures for retry limit (max 3 retries per tool+input combination)
   const toolFailures = new Map() // key: `${toolName}:${JSON.stringify(input)}`, value: retry count
@@ -316,12 +317,36 @@ export const runAgent = async (messages, onEvent, { sessionId = null, signal = n
       if (message.type === 'result') {
         if (message.result) fullText = message.result
         const duration = Date.now() - startTime
+
+        // Extract full usage data from SDK result
+        const usageData = {}
+        if (message.usage) {
+          usageData.inputTokens = message.usage.input_tokens ?? 0
+          usageData.outputTokens = message.usage.output_tokens ?? 0
+          usageData.cacheReadInputTokens = message.usage.cache_read_input_tokens ?? 0
+          usageData.cacheCreationInputTokens = message.usage.cache_creation_input_tokens ?? 0
+        }
+        if (message.modelUsage) {
+          // Per-model breakdown (e.g. { 'claude-opus-4-6': { inputTokens, outputTokens, ... } })
+          usageData.modelUsage = message.modelUsage
+          // Sum costUSD from all models
+          usageData.costUSD = Object.values(message.modelUsage).reduce((sum, m) => sum + (m.costUSD || 0), 0)
+        }
+        usageData.costUSD = usageData.costUSD || message.total_cost_usd || 0
+        usageData.durationMs = message.duration_ms ?? duration
+        usageData.durationApiMs = message.duration_api_ms ?? 0
+        usageData.numTurns = message.num_turns ?? turns
+
+        // Store usage on the shared object so router can persist it
+        lastUsage = usageData
+
         if (onEvent) onEvent({
           type: 'agent_done',
-          cost: message.cost_usd ?? null,
+          cost: usageData.costUSD || null,
           duration,
           turns,
-          isError: !!message.is_error
+          isError: !!message.is_error,
+          usage: usageData
         })
       }
     }
@@ -419,11 +444,12 @@ ${retryCount === 2 ? '⚠️ This is your 2nd attempt. If it fails again, you wi
         console.log('[agent] Resuming session:', sessionId)
         const response = query({ prompt, options: { ...baseOptions, resume: sessionId } })
         await processResponse(response)
-        return { content: [{ type: 'text', text: fullText }], text: fullText, toolCalls, toolResults, sessionId: capturedSessionId }
+        return { content: [{ type: 'text', text: fullText }], text: fullText, toolCalls, toolResults, sessionId: capturedSessionId, usage: lastUsage }
       } catch (err) {
         console.warn('[agent] Session resume failed, falling back to fresh:', err.message)
         fullText = ''
         capturedSessionId = null
+        lastUsage = null
         toolCalls.length = 0
         Object.keys(toolResults).forEach(k => delete toolResults[k])
       }
@@ -448,6 +474,7 @@ ${retryCount === 2 ? '⚠️ This is your 2nd attempt. If it fails again, you wi
     text: fullText,
     toolCalls,
     toolResults,
-    sessionId: capturedSessionId
+    sessionId: capturedSessionId,
+    usage: lastUsage
   }
 }

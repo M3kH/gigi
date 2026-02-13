@@ -66,6 +66,7 @@ const migrate = async () => {
     ALTER TABLE messages ADD COLUMN IF NOT EXISTS tool_calls JSONB;
     ALTER TABLE messages ADD COLUMN IF NOT EXISTS tool_outputs JSONB;
     ALTER TABLE messages ADD COLUMN IF NOT EXISTS message_type TEXT DEFAULT 'text';
+    ALTER TABLE messages ADD COLUMN IF NOT EXISTS usage JSONB;
 
     CREATE INDEX IF NOT EXISTS idx_conversations_session ON conversations(session_id) WHERE session_id IS NOT NULL;
     CREATE INDEX IF NOT EXISTS idx_conversations_status ON conversations(status);
@@ -154,8 +155,8 @@ export const addMessage = async (conversationId, role, content, extras = {}) => 
     [conversationId]
   )
   const { rows } = await pool.query(
-    'INSERT INTO messages (conversation_id, role, content, tool_calls, tool_outputs, message_type) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
-    [conversationId, role, JSON.stringify(content), extras.tool_calls ? JSON.stringify(extras.tool_calls) : null, extras.tool_outputs ? JSON.stringify(extras.tool_outputs) : null, extras.message_type || 'text']
+    'INSERT INTO messages (conversation_id, role, content, tool_calls, tool_outputs, message_type, usage) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
+    [conversationId, role, JSON.stringify(content), extras.tool_calls ? JSON.stringify(extras.tool_calls) : null, extras.tool_outputs ? JSON.stringify(extras.tool_outputs) : null, extras.message_type || 'text', extras.usage ? JSON.stringify(extras.usage) : null]
   )
   return rows[0]
 }
@@ -271,4 +272,21 @@ export const findLatest = async (channel) => {
     [channel]
   )
   return rows[0] ?? null
+}
+
+// Token usage aggregation
+
+export const getConversationUsage = async (conversationId) => {
+  const { rows } = await pool.query(`
+    SELECT
+      COALESCE(SUM((usage->>'inputTokens')::int), 0) AS input_tokens,
+      COALESCE(SUM((usage->>'outputTokens')::int), 0) AS output_tokens,
+      COALESCE(SUM((usage->>'cacheReadInputTokens')::int), 0) AS cache_read_tokens,
+      COALESCE(SUM((usage->>'cacheCreationInputTokens')::int), 0) AS cache_creation_tokens,
+      COALESCE(SUM((usage->>'costUSD')::numeric), 0) AS total_cost,
+      COUNT(*) FILTER (WHERE usage IS NOT NULL) AS messages_with_usage
+    FROM messages
+    WHERE conversation_id = $1 AND usage IS NOT NULL
+  `, [conversationId])
+  return rows[0]
 }
