@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gigi Browser Control</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      background: #1e1e1e;
+      color: #e0e0e0;
+    }
+
+    .container {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+
+    .header {
+      background: #2d2d2d;
+      padding: 10px;
+      border-bottom: 1px solid #444;
+    }
+
+    .controls {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .url-input {
+      flex: 1;
+      min-width: 300px;
+      padding: 8px 12px;
+      border: 1px solid #444;
+      background: #1e1e1e;
+      color: #e0e0e0;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+
+    button {
+      padding: 8px 16px;
+      background: #007acc;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: background 0.2s;
+    }
+
+    button:hover {
+      background: #005a9e;
+    }
+
+    button:disabled {
+      background: #444;
+      cursor: not-allowed;
+    }
+
+    .mode-toggle {
+      display: flex;
+      gap: 5px;
+      background: #1e1e1e;
+      padding: 4px;
+      border-radius: 4px;
+    }
+
+    .mode-toggle button {
+      padding: 6px 12px;
+      font-size: 12px;
+    }
+
+    .mode-toggle button.active {
+      background: #28a745;
+    }
+
+    .viewport {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+      background: #000;
+    }
+
+    #browser-display {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+
+    .status-bar {
+      background: #2d2d2d;
+      padding: 5px 10px;
+      font-size: 12px;
+      border-top: 1px solid #444;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .status-indicator {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #dc3545;
+    }
+
+    .status-dot.connected {
+      background: #28a745;
+    }
+
+    .console {
+      position: fixed;
+      bottom: 30px;
+      right: 20px;
+      width: 400px;
+      max-height: 200px;
+      background: rgba(45, 45, 45, 0.95);
+      border: 1px solid #444;
+      border-radius: 4px;
+      padding: 10px;
+      overflow-y: auto;
+      font-family: monospace;
+      font-size: 12px;
+      display: none;
+    }
+
+    .console.visible {
+      display: block;
+    }
+
+    .console-entry {
+      margin-bottom: 5px;
+      padding: 2px 5px;
+    }
+
+    .console-entry.error {
+      color: #ff6b6b;
+    }
+
+    .console-entry.info {
+      color: #4dabf7;
+    }
+
+    .neko-frame {
+      width: 100%;
+      height: 100%;
+      border: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="controls">
+        <button id="back-btn" title="Go Back">←</button>
+        <button id="forward-btn" title="Go Forward">→</button>
+        <button id="refresh-btn" title="Refresh">⟲</button>
+
+        <input type="text" class="url-input" id="url-input" placeholder="Enter URL...">
+        <button id="go-btn">Go</button>
+
+        <div class="mode-toggle">
+          <button id="headless-mode" class="active">Headless</button>
+          <button id="interactive-mode">Interactive</button>
+        </div>
+
+        <button id="screenshot-btn">📷 Screenshot</button>
+        <button id="console-btn">Console</button>
+      </div>
+    </div>
+
+    <div class="viewport">
+      <img id="browser-display" style="display: none;">
+      <iframe id="neko-frame" class="neko-frame" style="display: none;"></iframe>
+    </div>
+
+    <div class="status-bar">
+      <div class="status-indicator">
+        <span class="status-dot" id="connection-status"></span>
+        <span id="status-text">Disconnected</span>
+      </div>
+      <div id="mode-indicator">Mode: Headless</div>
+    </div>
+  </div>
+
+  <div class="console" id="console">
+    <h4 style="margin-top: 0;">Console Output</h4>
+    <div id="console-output"></div>
+  </div>
+
+  <script>
+    class BrowserControl {
+      constructor() {
+        this.ws = null;
+        this.currentMode = 'headless';
+        this.wsUrl = `ws://${window.location.hostname}:3001`;
+        this.nekoUrl = `http://${window.location.hostname}:8080`;
+
+        this.initializeElements();
+        this.connectWebSocket();
+        this.setupEventListeners();
+      }
+
+      initializeElements() {
+        this.urlInput = document.getElementById('url-input');
+        this.goBtn = document.getElementById('go-btn');
+        this.backBtn = document.getElementById('back-btn');
+        this.forwardBtn = document.getElementById('forward-btn');
+        this.refreshBtn = document.getElementById('refresh-btn');
+        this.screenshotBtn = document.getElementById('screenshot-btn');
+        this.consoleBtn = document.getElementById('console-btn');
+        this.headlessModeBtn = document.getElementById('headless-mode');
+        this.interactiveModeBtn = document.getElementById('interactive-mode');
+        this.browserDisplay = document.getElementById('browser-display');
+        this.nekoFrame = document.getElementById('neko-frame');
+        this.statusDot = document.getElementById('connection-status');
+        this.statusText = document.getElementById('status-text');
+        this.modeIndicator = document.getElementById('mode-indicator');
+        this.console = document.getElementById('console');
+        this.consoleOutput = document.getElementById('console-output');
+      }
+
+      connectWebSocket() {
+        this.ws = new WebSocket(this.wsUrl);
+
+        this.ws.onopen = () => {
+          this.statusDot.classList.add('connected');
+          this.statusText.textContent = 'Connected';
+          this.log('Connected to browser control server', 'info');
+        };
+
+        this.ws.onclose = () => {
+          this.statusDot.classList.remove('connected');
+          this.statusText.textContent = 'Disconnected';
+          this.log('Disconnected from server', 'error');
+
+          // Attempt reconnect after 3 seconds
+          setTimeout(() => this.connectWebSocket(), 3000);
+        };
+
+        this.ws.onmessage = (event) => {
+          const msg = JSON.parse(event.data);
+          this.handleServerMessage(msg);
+        };
+
+        this.ws.onerror = (error) => {
+          this.log(`WebSocket error: ${error}`, 'error');
+        };
+      }
+
+      handleServerMessage(msg) {
+        switch (msg.type) {
+          case 'init':
+            this.currentMode = msg.mode;
+            this.updateModeDisplay();
+            if (msg.url) {
+              this.urlInput.value = msg.url;
+            }
+            if (msg.screenshot) {
+              this.displayScreenshot(msg.screenshot);
+            }
+            break;
+
+          case 'screenshot':
+            this.displayScreenshot(msg.data);
+            break;
+
+          case 'state-update':
+            if (msg.url) {
+              this.urlInput.value = msg.url;
+            }
+            break;
+
+          case 'error':
+            this.log(msg.error, 'error');
+            break;
+
+          default:
+            console.log('Unknown message type:', msg.type);
+        }
+      }
+
+      setupEventListeners() {
+        this.goBtn.onclick = () => this.navigate();
+        this.urlInput.onkeypress = (e) => {
+          if (e.key === 'Enter') this.navigate();
+        };
+
+        this.backBtn.onclick = () => this.sendCommand('navigate', { url: 'javascript:history.back()' });
+        this.forwardBtn.onclick = () => this.sendCommand('navigate', { url: 'javascript:history.forward()' });
+        this.refreshBtn.onclick = () => this.sendCommand('navigate', { url: 'javascript:location.reload()' });
+
+        this.screenshotBtn.onclick = () => this.requestScreenshot();
+        this.consoleBtn.onclick = () => this.toggleConsole();
+
+        this.headlessModeBtn.onclick = () => this.switchMode('headless');
+        this.interactiveModeBtn.onclick = () => this.switchMode('interactive');
+      }
+
+      navigate() {
+        const url = this.urlInput.value.trim();
+        if (!url) return;
+
+        // Ensure URL has protocol
+        const fullUrl = url.match(/^https?:\/\//) ? url : `https://${url}`;
+        this.sendCommand('navigate', { url: fullUrl });
+      }
+
+      requestScreenshot() {
+        this.sendCommand('screenshot', { fullPage: false });
+      }
+
+      toggleConsole() {
+        this.console.classList.toggle('visible');
+      }
+
+      switchMode(mode) {
+        if (mode === this.currentMode) return;
+
+        this.sendCommand('switch-mode', { mode });
+        this.currentMode = mode;
+        this.updateModeDisplay();
+      }
+
+      updateModeDisplay() {
+        this.modeIndicator.textContent = `Mode: ${this.currentMode}`;
+
+        if (this.currentMode === 'headless') {
+          this.headlessModeBtn.classList.add('active');
+          this.interactiveModeBtn.classList.remove('active');
+          this.browserDisplay.style.display = 'block';
+          this.nekoFrame.style.display = 'none';
+        } else {
+          this.headlessModeBtn.classList.remove('active');
+          this.interactiveModeBtn.classList.add('active');
+          this.browserDisplay.style.display = 'none';
+          this.nekoFrame.style.display = 'block';
+          this.nekoFrame.src = this.nekoUrl;
+        }
+      }
+
+      displayScreenshot(data) {
+        this.browserDisplay.src = `data:image/jpeg;base64,${data}`;
+      }
+
+      sendCommand(type, data = {}) {
+        if (this.ws.readyState !== WebSocket.OPEN) {
+          this.log('Not connected to server', 'error');
+          return;
+        }
+
+        this.ws.send(JSON.stringify({ type, ...data }));
+      }
+
+      log(message, level = 'info') {
+        const entry = document.createElement('div');
+        entry.className = `console-entry ${level}`;
+        entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+        this.consoleOutput.appendChild(entry);
+        this.consoleOutput.scrollTop = this.consoleOutput.scrollHeight;
+      }
+    }
+
+    // Initialize when page loads
+    window.onload = () => {
+      new BrowserControl();
+    };
+  </script>
+</body>
+</html>

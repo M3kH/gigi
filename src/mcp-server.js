@@ -6,6 +6,7 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { runGitea } from './tools/gitea.js'
 import { runTelegram } from './tools/telegram.js'
+import browserTool from './tools/browser.js'
 
 const server = new Server(
   { name: 'gigi-tools', version: '0.2.0' },
@@ -47,12 +48,22 @@ const TOOLS = [
       },
       required: ['text']
     }
+  },
+  {
+    name: 'browser',
+    description: browserTool.description,
+    inputSchema: {
+      type: 'object',
+      properties: browserTool.parameters,
+      required: ['action']
+    }
   }
 ]
 
 const runners = {
   gitea: runGitea,
-  telegram_send: runTelegram
+  telegram_send: runTelegram,
+  browser: browserTool.handler
 }
 
 server.setRequestHandler('tools/list', async () => ({ tools: TOOLS }))

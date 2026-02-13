@@ -223,5 +223,11 @@ export const createApp = () => {
 
   app.use('/static/*', serveStatic({ root: './' }))
 
+  // Browser control UI
+  app.get('/browser', async (c) => {
+    const html = await readFile('web/browser-control.html', 'utf-8')
+    return c.html(html)
+  })
+
   return app
 }
