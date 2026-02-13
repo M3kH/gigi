@@ -64,15 +64,20 @@ Features:
 
 ### 3. Docker Compose Setup
 
-For interactive mode with Neko:
+The deployment now uses a single docker-compose.yml that includes both services:
 ```bash
-docker-compose -f docker-compose.yml -f docker-compose.neko.yml up -d
+docker-compose up -d
 ```
 
 This starts:
-- Gigi with browser support
-- Neko container for interactive browser sessions
+- Gigi with browser support (configurable via BROWSER_MODE env var)
+- Neko container for interactive browser sessions (using custom Dockerfile.neko)
 - WebSocket server on port 3001
+
+For headless-only mode, you can disable the Neko service:
+```bash
+docker-compose up -d gigi
+```
 
 ## Architecture
 
