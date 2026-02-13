@@ -329,7 +329,7 @@ export const runAgent = async (messages, onEvent, { sessionId = null, signal = n
 
   const baseOptions = {
     systemPrompt: SYSTEM_PROMPT,
-    model: 'claude-opus-4-20250514',
+    model: 'claude-opus-4-6',
     env,
     cwd: '/workspace',
     maxTurns: 20,
