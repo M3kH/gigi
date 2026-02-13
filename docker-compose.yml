@@ -12,7 +12,8 @@ services:
       NEKO_PASSWORD_ADMIN: ${NEKO_ADMIN_PASSWORD:-admin}
       NEKO_EPR: 52000-52100
       NEKO_ICELITE: 1
-      NEKO_NAT1TO1: ${NEKO_NAT1TO1:-}
+      NEKO_NAT1TO1: ${NEKO_NAT1TO1:-192.168.1.80}
+      NEKO_ICESERVERS: '[{"urls":["stun:stun.l.google.com:19302"]},{"urls":["stun:stun1.l.google.com:19302"]}]'
       NEKO_VIDEO_CODEC: h264
       NEKO_VIDEO_BITRATE: 5000
       NEKO_AUDIO_CODEC: opus
