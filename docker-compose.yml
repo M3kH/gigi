@@ -69,8 +69,6 @@ services:
       - "3101:3001"
     volumes:
       - workspace:/workspace
-      - ./src:/app/src:ro
-      - ./web:/app/web:ro
     networks:
       - gigi-network
       - databases_default
