@@ -19,7 +19,7 @@ RUN useradd -m -s /bin/bash gigi \
 
 WORKDIR /app
 COPY package.json package-lock.json* ./
-RUN npm ci --production
+RUN npm ci --omit=dev
 COPY src/ src/
 COPY web/ web/
 COPY mcp-config.json ./
