@@ -38,13 +38,13 @@ jobs:
             export TAG=${{ github.sha }}
 
             # Build and push gigi service (must succeed)
-            docker-compose build gigi
+            docker compose build gigi
             docker tag \${REGISTRY}/\${IMAGE}:\${TAG} \${REGISTRY}/\${IMAGE}:latest
             docker push \${REGISTRY}/\${IMAGE}:\${TAG}
             docker push \${REGISTRY}/\${IMAGE}:latest
 
             # Build and push neko service (best-effort — may fail on arm64)
-            if docker-compose build gigi-neko; then
+            if docker compose build gigi-neko; then
               docker tag \${REGISTRY}/\${IMAGE}-neko:\${TAG} \${REGISTRY}/\${IMAGE}-neko:latest
               docker push \${REGISTRY}/\${IMAGE}-neko:\${TAG}
               docker push \${REGISTRY}/\${IMAGE}-neko:latest
