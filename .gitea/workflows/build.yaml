@@ -59,14 +59,12 @@ jobs:
 
       - name: Deploy service
         run: |
+          # Copy compose file to remote host
+          scp docker-compose.yml root@${{ env.DEPLOY_HOST }}:/tmp/gigi-compose.yml
+
           ssh root@${{ env.DEPLOY_HOST }} "
             # Remove old stack if exists
             docker stack rm idea-biancifiore-gigi 2>/dev/null; sleep 5
-
-            # Copy docker-compose.yml to deployment location
-            cat > /tmp/gigi-compose.yml << 'EOF'
-$(cat docker-compose.yml)
-EOF
 
             # Deploy using docker stack with environment variables
             export REGISTRY=${{ env.REGISTRY }}
