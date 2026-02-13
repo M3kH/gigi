@@ -33,3 +33,22 @@ claude.cluster.local {
 		flush_interval -1
 	}
 }
+
+neko.cluster.local {
+	# WebRTC signaling endpoint
+	@webrtc {
+		path /api/ws
+		header Connection *Upgrade*
+		header Upgrade websocket
+	}
+	reverse_proxy @webrtc idea-biancifiore-gigi_neko:8080
+
+	# ICE candidates and session management
+	@api {
+		path /api/*
+	}
+	reverse_proxy @api idea-biancifiore-gigi_neko:8080
+
+	# Static assets and main application
+	reverse_proxy idea-biancifiore-gigi_neko:8080
+}
