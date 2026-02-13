@@ -15,8 +15,7 @@ RUN mkdir -p /etc/neko
 COPY --chown=neko:neko docker/neko-entrypoint.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/neko-entrypoint.sh
 
-# Switch back to neko user
-USER neko
+# Must run as root — supervisord handles privilege drop to neko user
 
 # Set default environment variables
 ENV NEKO_SCREEN=1920x1080@30 \
