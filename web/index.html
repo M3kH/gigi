@@ -78,6 +78,8 @@
     .stop-btn { background: #a44; color: #fff; border: none; border-radius: 4px; padding: 0.3rem 0.75rem; cursor: pointer; font-size: 0.8rem; display: none; flex-shrink: 0; }
     .stop-btn:hover { background: #c55; }
     .stop-btn.visible { display: block; }
+    .browser-btn { background: #456; color: #fff; border: none; border-radius: 4px; padding: 0.3rem 0.75rem; cursor: pointer; font-size: 0.8rem; flex-shrink: 0; }
+    .browser-btn:hover { background: #567; }
     .chat-header-tags { display: flex; gap: 0.3rem; flex-shrink: 0; }
     .chat-header-tag { font-size: 0.7rem; color: var(--text-muted); background: var(--bg-elevated); padding: 0.15rem 0.4rem; border-radius: 3px; }
 
@@ -146,6 +148,16 @@
     /* Empty state */
     .empty-state { flex: 1; display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 0.9rem; }
 
+    /* Browser modal */
+    .browser-modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 1000; display: none; }
+    .browser-modal.visible { display: flex; align-items: center; justify-content: center; }
+    .browser-container { width: 90vw; height: 85vh; max-width: 1400px; background: var(--bg-primary); border: 1px solid var(--border); border-radius: 8px; display: flex; flex-direction: column; position: relative; }
+    .browser-header { display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1rem; border-bottom: 1px solid var(--border); }
+    .browser-header h3 { margin: 0; font-size: 1rem; color: var(--text-primary); }
+    .browser-close { background: none; border: none; color: var(--text-secondary); font-size: 1.5rem; cursor: pointer; padding: 0; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 4px; }
+    .browser-close:hover { background: var(--bg-elevated); color: var(--text-primary); }
+    .browser-frame { flex: 1; border: none; border-bottom-left-radius: 8px; border-bottom-right-radius: 8px; }
+
     /* Mobile */
     @media (max-width: 768px) {
       .sidebar { position: fixed; top: 0; left: -280px; height: 100vh; z-index: 999; transition: left 0.3s; }
@@ -156,6 +168,8 @@
       .input-area { padding: 0.75rem; }
       .overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 998; }
       .overlay.show { display: block; }
+      .browser-container { width: 95vw; height: 90vh; }
+      .browser-btn { font-size: 0.75rem; padding: 0.25rem 0.5rem; }
     }
   </style>
 </head>
@@ -189,6 +203,7 @@
         <button class="chat-title-edit" id="chat-title-edit" onclick="Chat.editTitle()" style="display:none">edit</button>
       </div>
       <button class="stop-btn" id="stop-btn" onclick="Chat.stop()">⏹ Stop</button>
+      <button class="browser-btn" id="browser-btn" onclick="Browser.toggle()">🌐 Browser</button>
       <div class="chat-header-tags" id="chat-header-tags"></div>
     </div>
     <div class="messages" id="messages">
@@ -200,6 +215,17 @@
           onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();Chat.send()}"></textarea>
         <button id="send-btn" onclick="Chat.send()">Send</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Browser Modal -->
+  <div class="browser-modal" id="browser-modal" onclick="Browser.handleBackdropClick(event)">
+    <div class="browser-container">
+      <div class="browser-header">
+        <h3>Browser Control</h3>
+        <button class="browser-close" onclick="Browser.close()">×</button>
+      </div>
+      <iframe class="browser-frame" id="browser-frame" src="/browser"></iframe>
     </div>
   </div>
 
@@ -389,6 +415,41 @@
       updateTitle(convId, title) {
         const item = document.querySelector(`[data-conv-id="${convId}"] .conv-item-title`)
         if (item) item.textContent = title
+      }
+    }
+
+    // ── Browser ────────────────────────────────────────────────
+    const Browser = {
+      modal: null,
+      frame: null,
+
+      init() {
+        Browser.modal = $('#browser-modal')
+        Browser.frame = $('#browser-frame')
+      },
+
+      toggle() {
+        if (Browser.modal.classList.contains('visible')) {
+          Browser.close()
+        } else {
+          Browser.open()
+        }
+      },
+
+      open() {
+        Browser.modal.classList.add('visible')
+        // Focus the iframe for keyboard shortcuts
+        setTimeout(() => Browser.frame.focus(), 100)
+      },
+
+      close() {
+        Browser.modal.classList.remove('visible')
+      },
+
+      handleBackdropClick(event) {
+        if (event.target === Browser.modal) {
+          Browser.close()
+        }
       }
     }
 
@@ -793,7 +854,15 @@
       this.style.height = Math.min(this.scrollHeight, 200) + 'px'
     })
 
+    // ── Keyboard shortcuts ─────────────────────────────────────
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && Browser.modal.classList.contains('visible')) {
+        Browser.close()
+      }
+    })
+
     // ── Init ───────────────────────────────────────────────────
+    Browser.init()
     SSE.connect()
     Sidebar.refresh()
     checkStatus()
