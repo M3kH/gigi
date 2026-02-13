@@ -240,8 +240,15 @@ const checkAndInvokeAgent = async (event, payload, conversationId, systemMessage
     // Extract context from the comment - remove @gigi mention to get the actual request
     const userMessage = comment.replace(/@gigi\b/gi, '').trim()
 
-    // Add context about the issue/PR
-    const contextMessage = `[GitHub Comment from @${author}]\n${userMessage}\n\nContext: ${systemMessage}`
+    // Check if this is a test failure notification
+    const isTestFailure = userMessage.includes('Tests failed') && userMessage.includes('Test output')
+
+    // Add context about the issue/PR with special handling for test failures
+    let contextMessage = `[GitHub Comment from @${author}]\n${userMessage}\n\nContext: ${systemMessage}`
+
+    if (isTestFailure) {
+      contextMessage += '\n\nNOTE: This is a test failure notification from the CI system. You should:\n1. Analyze the test output to understand what failed\n2. Look at the relevant test files and source code\n3. Create a fix and push it to the PR branch\n4. The tests will automatically re-run after your push'
+    }
 
     // Store the user's message from GitHub
     await store.addMessage(conversationId, 'user', [{ type: 'text', text: contextMessage }], {
