@@ -1,5 +1,5 @@
-# Based on m1k1o/neko:chromium with custom configurations
-FROM m1k1o/neko:chromium
+# GHCR image has multi-arch support (amd64 + arm64)
+FROM ghcr.io/m1k1o/neko/chromium
 
 # Install additional tools if needed
 USER root
