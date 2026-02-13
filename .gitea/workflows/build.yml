@@ -30,13 +30,26 @@ jobs:
           rsync -az --exclude=.git --exclude=node_modules . root@${{ env.DEPLOY_HOST }}:/tmp/gigi-build/
           ssh root@${{ env.DEPLOY_HOST }} "
             cd /tmp/gigi-build
-            docker build \
-              -t ${{ env.REGISTRY }}/${{ env.IMAGE }}:${{ github.sha }} \
-              -t ${{ env.REGISTRY }}/${{ env.IMAGE }}:latest \
-              .
             echo '${{ secrets.REGISTRY_TOKEN }}' | docker login ${{ env.REGISTRY }} -u ${{ github.repository_owner }} --password-stdin
-            docker push ${{ env.REGISTRY }}/${{ env.IMAGE }}:${{ github.sha }}
-            docker push ${{ env.REGISTRY }}/${{ env.IMAGE }}:latest
+
+            # Build and push images using docker-compose
+            export REGISTRY=${{ env.REGISTRY }}
+            export IMAGE=${{ env.IMAGE }}
+            export TAG=${{ github.sha }}
+
+            # Build both services
+            docker-compose build
+
+            # Tag and push gigi service
+            docker tag \${REGISTRY}/\${IMAGE}:\${TAG} \${REGISTRY}/\${IMAGE}:latest
+            docker push \${REGISTRY}/\${IMAGE}:\${TAG}
+            docker push \${REGISTRY}/\${IMAGE}:latest
+
+            # Tag and push neko service
+            docker tag \${REGISTRY}/\${IMAGE}-neko:\${TAG} \${REGISTRY}/\${IMAGE}-neko:latest
+            docker push \${REGISTRY}/\${IMAGE}-neko:\${TAG}
+            docker push \${REGISTRY}/\${IMAGE}-neko:latest
+
             rm -rf /tmp/gigi-build"
 
       - name: Create Docker secrets
@@ -46,46 +59,23 @@ jobs:
 
       - name: Deploy service
         run: |
-          IMAGE_TAG="${{ env.REGISTRY }}/${{ env.IMAGE }}:${{ github.sha }}"
           ssh root@${{ env.DEPLOY_HOST }} "
+            # Remove old stack if exists
             docker stack rm idea-biancifiore-gigi 2>/dev/null; sleep 5
-            printf '%s\n' \
-              'version: \"3.9\"' \
-              'services:' \
-              '  gigi:' \
-              '    image: ${IMAGE_TAG}' \
-              '    environment:' \
-              '      - DATABASE_URL=postgresql://gigi:${{ secrets.DB_PASSWORD }}@postgres:5432/gigi' \
-              '    secrets:' \
-              '      - gigi_ssh_key' \
-              '    networks:' \
-              '      - databases_default' \
-              '      - http-entry_default' \
-              '    deploy:' \
-              '      mode: replicated' \
-              '      replicas: 1' \
-              '      update_config:' \
-              '        order: start-first' \
-              '        failure_action: rollback' \
-              '      restart_policy:' \
-              '        condition: on-failure' \
-              '        delay: 5s' \
-              '        max_attempts: 3' \
-              '    healthcheck:' \
-              '      test: [\"CMD-SHELL\", \"curl -f http://localhost:3000/health || exit 1\"]' \
-              '      interval: 30s' \
-              '      timeout: 10s' \
-              '      retries: 3' \
-              '      start_period: 40s' \
-              'secrets:' \
-              '  gigi_ssh_key:' \
-              '    external: true' \
-              'networks:' \
-              '  databases_default:' \
-              '    external: true' \
-              '  http-entry_default:' \
-              '    external: true' \
-              > /tmp/gigi-compose.yml
+
+            # Copy docker-compose.yml to deployment location
+            cat > /tmp/gigi-compose.yml << 'EOF'
+$(cat docker-compose.yml)
+EOF
+
+            # Deploy using docker stack with environment variables
+            export REGISTRY=${{ env.REGISTRY }}
+            export IMAGE=${{ env.IMAGE }}
+            export TAG=${{ github.sha }}
+            export DATABASE_URL='postgresql://gigi:${{ secrets.DB_PASSWORD }}@postgres:5432/gigi'
+            export NEKO_PASSWORD='${{ secrets.NEKO_PASSWORD }}'
+            export NEKO_ADMIN_PASSWORD='${{ secrets.NEKO_ADMIN_PASSWORD }}'
+
             docker stack deploy -c /tmp/gigi-compose.yml --with-registry-auth idea-biancifiore-gigi
             rm /tmp/gigi-compose.yml"
 

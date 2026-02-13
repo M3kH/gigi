@@ -1,0 +1,32 @@
+# Based on m1k1o/neko:chromium with custom configurations
+FROM m1k1o/neko:chromium
+
+# Install additional tools if needed
+USER root
+RUN apt-get update && apt-get install -y \
+    curl \
+    jq \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create custom configuration directory
+RUN mkdir -p /etc/neko
+
+# Add custom startup script if needed
+COPY --chown=neko:neko docker/neko-entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/neko-entrypoint.sh
+
+# Switch back to neko user
+USER neko
+
+# Set default environment variables
+ENV NEKO_SCREEN=1920x1080@30 \
+    NEKO_PASSWORD=neko \
+    NEKO_PASSWORD_ADMIN=admin \
+    NEKO_EPR=52000-52100 \
+    NEKO_ICELITE=1 \
+    NEKO_VIDEO_CODEC=h264 \
+    NEKO_VIDEO_BITRATE=5000 \
+    NEKO_AUDIO_CODEC=opus
+
+# Keep the original entrypoint
+# ENTRYPOINT ["/usr/local/bin/neko-entrypoint.sh"]

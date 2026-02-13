@@ -41,7 +41,15 @@ src/
 npm install
 npm run dev
 
-# Production (Docker)
+# Production (Docker Compose)
+# Copy and configure environment variables
+cp .env.example .env
+# Edit .env with your configuration
+
+# Run with docker-compose (includes Neko browser service)
+docker-compose up -d
+
+# Or run without Neko (headless mode only)
 docker build -t gigi .
 docker run -p 3000:3000 \
   -e ANTHROPIC_API_KEY=... \
@@ -62,6 +70,20 @@ Environment variables:
 - `DATABASE_URL` — PostgreSQL connection string
 - `ANTHROPIC_API_KEY` — (optional) API key for Claude Agent SDK
 - `PORT` — HTTP server port (default: 3000)
+- `BROWSER_MODE` — Browser automation mode: `headless` (Playwright) or `neko` (remote browser)
+- `NEKO_HOST` — Neko service hostname (default: gigi-neko)
+- `NEKO_PASSWORD` — Password for Neko browser access
+
+## Browser Modes
+
+Gigi supports two browser automation modes:
+
+1. **Headless Mode** (`BROWSER_MODE=headless`): Uses Playwright for fast, headless browser automation
+2. **Neko Mode** (`BROWSER_MODE=neko`): Uses a remote browser service (Neko) for interactive debugging
+
+The docker-compose setup includes both services:
+- `gigi`: Main AI agent service
+- `gigi-neko`: Remote browser service (accessible on port 8080)
 
 ## Tools Available to Gigi
 
@@ -124,9 +146,11 @@ Returns JSON with service status, phase (booting/healthy/degraded), and componen
 Automated deployment via `.gitea/workflows/build.yml`:
 
 1. rsync source to cluster manager (192.168.1.110)
-2. `docker build` natively on ARM64
-3. Push to Gitea registry
-4. `docker service update` for zero-downtime deployment
+2. `docker-compose build` for both services (gigi and gigi-neko) on ARM64
+3. Push images to Gitea registry:
+   - `${REGISTRY}/idea/gigi:${TAG}` — Main service
+   - `${REGISTRY}/idea/gigi-neko:${TAG}` — Neko browser service
+4. Deploy stack using `docker stack deploy` with docker-compose.yml
 5. Deploy Caddyfile via `deploy-site` action
 
 ## License

@@ -1,0 +1,112 @@
+version: '3.9'
+
+services:
+  gigi-neko:
+    build:
+      context: .
+      dockerfile: Dockerfile.neko
+    image: ${REGISTRY}/${IMAGE}-neko:${TAG:-latest}
+    container_name: gigi-neko
+    restart: unless-stopped
+    shm_size: "2gb"
+    ports:
+      - "8080:8080"
+      - "52000-52100:52000-52100/udp"
+    environment:
+      NEKO_SCREEN: ${NEKO_SCREEN:-1920x1080@30}
+      NEKO_PASSWORD: ${NEKO_PASSWORD:-neko}
+      NEKO_PASSWORD_ADMIN: ${NEKO_ADMIN_PASSWORD:-admin}
+      NEKO_EPR: 52000-52100
+      NEKO_ICELITE: 1
+      NEKO_NAT1TO1: ${NEKO_NAT1TO1:-}
+      NEKO_VIDEO_CODEC: h264
+      NEKO_VIDEO_BITRATE: 5000
+      NEKO_AUDIO_CODEC: opus
+      NEKO_BROADCAST_PIPELINE: |
+        ximagesrc display=%s show-pointer=true use-damage=false
+        ! video/x-raw,framerate=30/1
+        ! videoconvert
+        ! queue
+    networks:
+      - gigi-network
+    volumes:
+      - browser-profiles:/home/neko/.config/chromium
+    cap_add:
+      - SYS_ADMIN
+    security_opt:
+      - seccomp:unconfined
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+
+  gigi:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ${REGISTRY}/${IMAGE}:${TAG:-latest}
+    container_name: gigi
+    restart: unless-stopped
+    depends_on:
+      - gigi-neko
+    environment:
+      BROWSER_MODE: ${BROWSER_MODE:-neko}
+      NEKO_HOST: gigi-neko
+      NEKO_PORT: 8080
+      NEKO_PASSWORD: ${NEKO_PASSWORD:-neko}
+      WS_PORT: 3001
+      DATABASE_URL: ${DATABASE_URL}
+    ports:
+      - "3000:3000"
+      - "3001:3001"
+    volumes:
+      - workspace:/workspace
+      - ./src:/app/src:ro
+      - ./web:/app/web:ro
+    networks:
+      - gigi-network
+      - databases_default
+      - http-entry_default
+    secrets:
+      - gigi_ssh_key
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      mode: replicated
+      replicas: 1
+      update_config:
+        order: start-first
+        failure_action: rollback
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+
+secrets:
+  gigi_ssh_key:
+    external: true
+
+networks:
+  gigi-network:
+    driver: overlay
+    attachable: true
+  databases_default:
+    external: true
+  http-entry_default:
+    external: true
+
+volumes:
+  browser-profiles:
+  workspace:
