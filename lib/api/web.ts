@@ -222,19 +222,13 @@ export const createApp = (): Hono => {
   // Webhook endpoint
   app.post('/webhook/gitea', handleWebhook)
 
-  // Serve web UI
-  app.get('/', async (c) => {
-    const status = await getSetupStatus()
-    const file = status.claude ? 'web/index.html' : 'web/setup.html'
-    const html = await readFile(file, 'utf-8')
-    return c.html(html)
-  })
-
+  // Setup page
   app.get('/setup', async (c) => {
     const html = await readFile('web/setup.html', 'utf-8')
     return c.html(html)
   })
 
+  // Legacy static assets
   app.use('/static/*', serveStatic({ root: './' }))
 
   // Browser control UI
@@ -243,18 +237,42 @@ export const createApp = (): Hono => {
     return c.html(html)
   })
 
-  // New Vite SPA at /app
-  app.get('/app', async (c) => {
-    const html = await readFile('dist/app/index.html', 'utf-8').catch(() => null)
-    if (!html) return c.text('App not built yet. Run: npm run build', 404)
+  // Legacy vanilla UI (deprecated — kept at /legacy for backward compat)
+  app.get('/legacy', async (c) => {
+    const html = await readFile('web/index.html', 'utf-8')
     return c.html(html)
   })
-  app.use('/app/assets/*', serveStatic({ root: './dist/app', rewriteRequestPath: (p: string) => p.replace('/app', '') }))
-  app.get('/app/*', async (c) => {
+
+  // ── Svelte SPA (primary UI) ─────────────────────────────────────────
+  // Vite builds to dist/app/ with assets at /assets/*
+  app.use('/assets/*', serveStatic({ root: './dist/app' }))
+  app.use('/shoelace/*', serveStatic({
+    root: './node_modules/@shoelace-style/shoelace/dist',
+    rewriteRequestPath: (p: string) => p.replace('/shoelace', ''),
+  }))
+
+  // Serve the Svelte SPA or redirect to setup if not configured
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const serveSPA = async (c: any) => {
+    const status = await getSetupStatus()
+    if (!status.claude) {
+      const html = await readFile('web/setup.html', 'utf-8')
+      return c.html(html)
+    }
     const html = await readFile('dist/app/index.html', 'utf-8').catch(() => null)
-    if (!html) return c.text('App not built yet. Run: npm run build', 404)
+    if (!html) {
+      // Fallback to legacy UI if SPA not built yet
+      const legacy = await readFile('web/index.html', 'utf-8')
+      return c.html(legacy)
+    }
     return c.html(html)
-  })
+  }
+
+  // Root route — now serves the Svelte app
+  app.get('/', async (c) => serveSPA(c))
+
+  // SPA catch-all — serves index.html for any unmatched GET route (client-side routing)
+  app.get('*', async (c) => serveSPA(c))
 
   return app
 }
