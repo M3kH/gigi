@@ -14,7 +14,7 @@ export type PanelId = 'kanban' | 'sidebar' | 'filters' | 'chatOverlay'
 type PanelStates = Record<PanelId, PanelState>
 
 const DEFAULT_STATES: PanelStates = {
-  kanban: 'hidden',
+  kanban: 'full',
   sidebar: 'full',
   filters: 'compact',
   chatOverlay: 'full',

@@ -152,5 +152,136 @@ export const createGiteaProxy = (): Hono => {
     }
   })
 
+  /**
+   * GET /api/gitea/board
+   *
+   * Kanban board data: all open issues across org repos, grouped by status/ label.
+   * Returns columns (derived from status/ labels) and issue cards.
+   */
+  api.get('/board', async (c) => {
+    try {
+      const gitea = getClient()
+      const org = 'idea'
+
+      // Define board columns from status labels (matches domain/projects.ts)
+      const columns = [
+        { id: 'backlog', title: 'Backlog', status: null },
+        { id: 'ready', title: 'Ready', status: 'status/ready' },
+        { id: 'in-progress', title: 'In Progress', status: 'status/in-progress' },
+        { id: 'review', title: 'Review', status: 'status/review' },
+        { id: 'blocked', title: 'Blocked', status: 'status/blocked' },
+        { id: 'done', title: 'Done', status: 'status/done' },
+      ]
+
+      // Fetch all repos, then all open issues in parallel
+      const repos = await gitea.orgs.listRepos(org, { limit: 50 })
+      const activeRepos = repos.filter(r => !r.archived && (r.open_issues_count ?? 0) > 0)
+
+      const allIssues = (
+        await Promise.all(
+          activeRepos.map(async (repo) => {
+            try {
+              const issues = await gitea.issues.list(org, repo.name, {
+                state: 'open',
+                limit: 50,
+                type: 'issues',
+              })
+              return issues.map((issue) => ({ ...issue, _repo: repo.name }))
+            } catch {
+              return []
+            }
+          })
+        )
+      ).flat()
+
+      // Group issues into columns by status/ label
+      type CardIssue = (typeof allIssues)[number]
+      const columnMap = new Map<string, CardIssue[]>()
+      for (const col of columns) columnMap.set(col.id, [])
+
+      for (const issue of allIssues) {
+        const statusLabel = issue.labels?.find((l) => l.name.startsWith('status/'))
+        const col = columns.find((c) => c.status === statusLabel?.name)
+        const columnId = col?.id ?? 'backlog'
+        columnMap.get(columnId)!.push(issue)
+      }
+
+      // Build response
+      const board = columns.map((col) => ({
+        id: col.id,
+        title: col.title,
+        status: col.status,
+        cards: (columnMap.get(col.id) ?? []).map((issue) => ({
+          id: issue.id,
+          number: issue.number,
+          title: issue.title,
+          repo: issue._repo,
+          labels: issue.labels ?? [],
+          assignee: issue.assignee
+            ? { login: issue.assignee.login, avatar_url: issue.assignee.avatar_url }
+            : null,
+          milestone: issue.milestone ? { title: issue.milestone.title } : null,
+          comments: issue.comments ?? 0,
+          created_at: issue.created_at,
+          updated_at: issue.updated_at,
+          html_url: issue.html_url,
+        })),
+      }))
+
+      return c.json({ columns: board, totalIssues: allIssues.length })
+    } catch (err) {
+      console.error('[gitea-proxy] board error:', (err as Error).message)
+      return c.json({ error: (err as Error).message }, 500)
+    }
+  })
+
+  /**
+   * PATCH /api/gitea/board/move
+   *
+   * Move an issue card to a different column by updating its status/ label.
+   */
+  api.patch('/board/move', async (c) => {
+    try {
+      const gitea = getClient()
+      const { owner, repo, issueNumber, targetColumn } = await c.req.json<{
+        owner: string
+        repo: string
+        issueNumber: number
+        targetColumn: string
+      }>()
+
+      // Define the column→status mapping
+      const columnStatuses: Record<string, string | null> = {
+        'backlog': null,
+        'ready': 'status/ready',
+        'in-progress': 'status/in-progress',
+        'review': 'status/review',
+        'blocked': 'status/blocked',
+        'done': 'status/done',
+      }
+
+      const newStatus = columnStatuses[targetColumn]
+      if (newStatus === undefined) {
+        return c.json({ error: `Invalid column: ${targetColumn}` }, 400)
+      }
+
+      // Fetch current labels
+      const issue = await gitea.issues.get(owner, repo, issueNumber)
+      const currentLabels = (issue.labels ?? []).map((l) => l.name)
+
+      // Remove old status labels, add new one
+      const allStatusLabels = Object.values(columnStatuses).filter(Boolean) as string[]
+      let newLabels = currentLabels.filter((l) => !allStatusLabels.includes(l))
+      if (newStatus) newLabels.push(newStatus)
+
+      await gitea.issues.setLabelsByName(owner, repo, issueNumber, newLabels)
+
+      return c.json({ ok: true, labels: newLabels })
+    } catch (err) {
+      console.error('[gitea-proxy] board/move error:', (err as Error).message)
+      return c.json({ error: (err as Error).message }, 500)
+    }
+  })
+
   return api
 }

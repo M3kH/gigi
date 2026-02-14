@@ -19,15 +19,17 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://localhost:3000',
+        // Proxy to the live Gigi app running on the cluster
+        // Falls back to localhost:3000 if GIGI_API_URL env var not set
+        target: process.env.GIGI_API_URL || 'http://localhost:3000',
         changeOrigin: true,
       },
       '/health': {
-        target: 'http://localhost:3000',
+        target: process.env.GIGI_API_URL || 'http://localhost:3000',
         changeOrigin: true,
       },
       '/ws': {
-        target: 'ws://localhost:3001',
+        target: process.env.GIGI_WS_URL || 'ws://localhost:3001',
         ws: true,
       },
     },
