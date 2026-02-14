@@ -1,0 +1,168 @@
+/* ─── Gigi Design Tokens ─────────────────────────────────────────────
+ * Single source of truth for all colors, spacing, typography.
+ * Shoelace tokens are overridden here for consistency.
+ * ──────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ── Typography ─────────────────────────────────────────────────── */
+  --gigi-font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --gigi-font-mono: 'SF Mono', 'Fira Code', 'Fira Mono', Menlo, Consolas, monospace;
+  --gigi-font-size-xs: 0.75rem;
+  --gigi-font-size-sm: 0.8125rem;
+  --gigi-font-size-base: 0.875rem;
+  --gigi-font-size-lg: 1rem;
+  --gigi-font-size-xl: 1.25rem;
+
+  /* ── Spacing ────────────────────────────────────────────────────── */
+  --gigi-space-xs: 0.25rem;
+  --gigi-space-sm: 0.5rem;
+  --gigi-space-md: 0.75rem;
+  --gigi-space-lg: 1rem;
+  --gigi-space-xl: 1.5rem;
+  --gigi-space-2xl: 2rem;
+
+  /* ── Borders ────────────────────────────────────────────────────── */
+  --gigi-radius-sm: 4px;
+  --gigi-radius-md: 8px;
+  --gigi-radius-lg: 12px;
+  --gigi-radius-full: 9999px;
+  --gigi-border-width: 1px;
+
+  /* ── Layout ─────────────────────────────────────────────────────── */
+  --gigi-sidebar-width: 260px;
+  --gigi-sidebar-compact: 48px;
+  --gigi-topbar-height: 42px;
+  --gigi-panel-min: 200px;
+  --gigi-divider-width: 4px;
+
+  /* ── Transitions ────────────────────────────────────────────────── */
+  --gigi-transition-fast: 150ms ease;
+  --gigi-transition-normal: 250ms ease;
+  --gigi-transition-slow: 400ms ease;
+
+  /* ── Z-index ────────────────────────────────────────────────────── */
+  --gigi-z-base: 0;
+  --gigi-z-panel: 10;
+  --gigi-z-overlay: 100;
+  --gigi-z-modal: 200;
+  --gigi-z-toast: 300;
+}
+
+/* ─── Dark Theme (default) ────────────────────────────────────────── */
+:root,
+[data-theme='dark'] {
+  color-scheme: dark;
+
+  --gigi-bg-primary: #0d1117;
+  --gigi-bg-secondary: #161b22;
+  --gigi-bg-tertiary: #1c2128;
+  --gigi-bg-elevated: #21262d;
+  --gigi-bg-hover: #292e36;
+  --gigi-bg-active: #323840;
+
+  --gigi-text-primary: #e6edf3;
+  --gigi-text-secondary: #8b949e;
+  --gigi-text-muted: #6e7681;
+  --gigi-text-link: #58a6ff;
+
+  --gigi-border-default: #30363d;
+  --gigi-border-muted: #21262d;
+
+  --gigi-accent-green: #3fb950;
+  --gigi-accent-blue: #58a6ff;
+  --gigi-accent-purple: #bc8cff;
+  --gigi-accent-orange: #d29922;
+  --gigi-accent-red: #f85149;
+
+  --gigi-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --gigi-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --gigi-shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
+
+  /* ── Shoelace overrides ─────────────────────────────────────────── */
+  --sl-color-primary-600: var(--gigi-accent-green);
+  --sl-color-neutral-0: var(--gigi-bg-primary);
+  --sl-color-neutral-100: var(--gigi-bg-secondary);
+  --sl-color-neutral-200: var(--gigi-bg-tertiary);
+  --sl-color-neutral-700: var(--gigi-text-secondary);
+  --sl-color-neutral-1000: var(--gigi-text-primary);
+  --sl-panel-background-color: var(--gigi-bg-secondary);
+  --sl-panel-border-color: var(--gigi-border-default);
+  --sl-font-sans: var(--gigi-font-sans);
+  --sl-font-mono: var(--gigi-font-mono);
+  --sl-font-size-medium: var(--gigi-font-size-base);
+}
+
+/* ─── Light Theme ─────────────────────────────────────────────────── */
+[data-theme='light'] {
+  color-scheme: light;
+
+  --gigi-bg-primary: #ffffff;
+  --gigi-bg-secondary: #f6f8fa;
+  --gigi-bg-tertiary: #eaeef2;
+  --gigi-bg-elevated: #ffffff;
+  --gigi-bg-hover: #eaeef2;
+  --gigi-bg-active: #dde2e8;
+
+  --gigi-text-primary: #1f2328;
+  --gigi-text-secondary: #656d76;
+  --gigi-text-muted: #8b949e;
+  --gigi-text-link: #0969da;
+
+  --gigi-border-default: #d0d7de;
+  --gigi-border-muted: #e6edf3;
+
+  --gigi-accent-green: #1a7f37;
+  --gigi-accent-blue: #0969da;
+  --gigi-accent-purple: #8250df;
+  --gigi-accent-orange: #bf8700;
+  --gigi-accent-red: #cf222e;
+
+  --gigi-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.08);
+  --gigi-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.1);
+  --gigi-shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+/* ─── Global Resets ───────────────────────────────────────────────── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+  font-family: var(--gigi-font-sans);
+  font-size: var(--gigi-font-size-base);
+  color: var(--gigi-text-primary);
+  background: var(--gigi-bg-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#app {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ─── Scrollbar styling ───────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--gigi-border-default);
+  border-radius: var(--gigi-radius-full);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--gigi-text-muted);
+}

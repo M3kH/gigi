@@ -1,0 +1,23 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "strict": true,
+    "noEmit": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "paths": {
+      "$lib/*": ["./lib/*"],
+      "$components/*": ["./components/*"]
+    }
+  },
+  "include": [
+    "**/*.ts",
+    "**/*.svelte",
+    "*.d.ts"
+  ],
+  "exclude": ["node_modules"]
+}

@@ -1,29 +1,24 @@
 /**
- * Vite SPA entry point.
- * This will be the new typed frontend for Gigi.
+ * Vite SPA entry point — Svelte 5 + Shoelace
+ *
+ * Boots the Gigi frontend app shell.
  */
 
-const app = document.getElementById('app')
+import './styles/theme.css'
 
-if (app) {
-  app.innerHTML = `
-    <h1>Gigi</h1>
-    <p>App shell loaded.</p>
-    <p id="health-status">Checking health...</p>
-  `
+// Shoelace: register light/dark themes + base styles
+import '@shoelace-style/shoelace/dist/themes/dark.css'
+import '@shoelace-style/shoelace/dist/themes/light.css'
 
-  fetch('/health')
-    .then(res => res.json())
-    .then(data => {
-      const el = document.getElementById('health-status')
-      if (el) {
-        el.textContent = data.ok ? 'Backend: healthy' : 'Backend: degraded'
-      }
-    })
-    .catch(() => {
-      const el = document.getElementById('health-status')
-      if (el) {
-        el.textContent = 'Backend: unreachable'
-      }
-    })
+// Set Shoelace asset base path for icons etc.
+import { setBasePath } from '@shoelace-style/shoelace/dist/utilities/base-path.js'
+setBasePath('/shoelace')
+
+import { mount } from 'svelte'
+import App from './App.svelte'
+
+const target = document.getElementById('app')
+
+if (target) {
+  mount(App, { target })
 }
