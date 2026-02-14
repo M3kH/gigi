@@ -242,5 +242,19 @@ export const createApp = () => {
     return c.html(html)
   })
 
+  // New Vite SPA at /app (serves build output from dist/app/)
+  app.get('/app', async (c) => {
+    const html = await readFile('dist/app/index.html', 'utf-8').catch(() => null)
+    if (!html) return c.text('App not built yet. Run: npm run build', 404)
+    return c.html(html)
+  })
+  app.use('/app/assets/*', serveStatic({ root: './dist/app', rewriteRequestPath: (p) => p.replace('/app', '') }))
+  app.get('/app/*', async (c) => {
+    // SPA fallback for client-side routing
+    const html = await readFile('dist/app/index.html', 'utf-8').catch(() => null)
+    if (!html) return c.text('App not built yet. Run: npm run build', 404)
+    return c.html(html)
+  })
+
   return app
 }

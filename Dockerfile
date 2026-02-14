@@ -18,11 +18,24 @@ RUN useradd -m -s /bin/bash gigi \
   && chown -R gigi:gigi /workspace
 
 WORKDIR /app
+
+# Install all dependencies (including devDependencies for build step)
 COPY package.json package-lock.json* ./
-RUN npm ci --omit=dev
+RUN npm ci
+
+# Copy source, lib, config, and frontend
+COPY tsconfig.json vite.config.ts ./
 COPY src/ src/
+COPY lib/ lib/
 COPY web/ web/
 COPY mcp-config.json ./
+
+# Build: type-check TypeScript and build Vite SPA
+RUN npx tsc --noEmit && npx vite build --config vite.config.ts
+
+# Prune dev dependencies for production
+RUN npm prune --omit=dev
+
 RUN chown -R gigi:gigi /app
 
 USER gigi
