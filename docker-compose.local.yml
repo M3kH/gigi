@@ -1,0 +1,98 @@
+services:
+  gitea:
+    image: gitea/gitea:latest
+    environment:
+      - GITEA__security__INSTALL_LOCK=true
+      - GITEA__database__DB_TYPE=sqlite3
+      - GITEA__server__ROOT_URL=http://localhost:3000
+      - GITEA__server__SSH_DOMAIN=localhost
+      - GITEA__server__SSH_PORT=2222
+      - GITEA__server__SSH_LISTEN_PORT=2222
+      - GITEA__server__START_SSH_SERVER=true
+      - GITEA__server__BUILTIN_SSH_SERVER_USER=git
+      - GITEA__service__DISABLE_REGISTRATION=true
+      - GITEA__webhook__ALLOWED_HOST_LIST=*
+    ports:
+      - "3000:3000"
+      - "2222:2222"
+    volumes:
+      - gitea-data:/data
+    networks:
+      - gigi-local
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:3000/api/v1/version"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 10s
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: gigi
+      POSTGRES_PASSWORD: gigi
+      POSTGRES_DB: gigi
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - gigi-local
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gigi"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  init:
+    image: gitea/gitea:latest
+    depends_on:
+      gitea:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      GITEA_URL: http://gitea:3000
+      ADMIN_USER: ${ADMIN_USER:-mauro}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-mauro@localhost}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
+      ORG_NAME: ${ORG_NAME:-idea}
+      TELEGRAM_TOKEN: ${TELEGRAM_TOKEN:-}
+      CLAUDE_TOKEN: ${CLAUDE_TOKEN:-}
+      PGHOST: postgres
+      PGUSER: gigi
+      PGPASSWORD: gigi
+      PGDATABASE: gigi
+    volumes:
+      - gitea-data:/data
+      - ./scripts/local-init.sh:/local-init.sh:ro
+      - ${REPOSITORIES_PATH:-/dev/null}:/repositories:ro
+    networks:
+      - gigi-local
+    entrypoint: ["sh", "-c", "apk add --no-cache postgresql-client curl && sh /local-init.sh"]
+    restart: "no"
+
+  gigi:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      init:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: postgresql://gigi:gigi@postgres:5432/gigi
+      BROWSER_MODE: headless
+      PORT: 3000
+    ports:
+      - "3100:3000"
+    volumes:
+      - workspace:/workspace
+    networks:
+      - gigi-local
+
+volumes:
+  gitea-data:
+  postgres-data:
+  workspace:
+
+networks:
+  gigi-local:
+    driver: bridge
