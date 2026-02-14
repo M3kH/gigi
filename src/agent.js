@@ -327,6 +327,7 @@ export const runAgent = async (messages, onEvent, { sessionId = null, signal = n
 
       if (message.type === 'result') {
         if (message.result) fullText = message.result
+        if (message.reason) console.log(`[agent] Result reason: ${message.reason} (turns: ${turns})`)
 
         // Extract full usage data from SDK result
         const usageData = {}
@@ -356,7 +357,7 @@ export const runAgent = async (messages, onEvent, { sessionId = null, signal = n
     model: 'claude-opus-4-6',
     env,
     cwd: '/workspace',
-    maxTurns: 20,
+    maxTurns: 50,
     permissionMode: 'bypassPermissions',
     allowDangerouslySkipPermissions: true,
     persistSession: true,
