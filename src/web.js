@@ -3,7 +3,7 @@ import { serveStatic } from '@hono/node-server/serve-static'
 import { readFile } from 'node:fs/promises'
 import { healthCheck } from './health.js'
 import { getSetupStatus, setupStep } from './setup.js'
-import { handleMessage, newConversation, resumeConversation, stopAgent } from './router.js'
+import { handleMessage, newConversation, resumeConversation, stopAgent, getRunningAgents } from './router.js'
 import { subscribe } from './events.js'
 import { handleWebhook } from './webhooks.js'
 import * as store from './store.js'
@@ -99,6 +99,11 @@ export const createApp = () => {
     const convId = c.req.param('id')
     const stopped = stopAgent(convId)
     return c.json({ ok: true, stopped })
+  })
+
+  // Running agents (for UI reconnect after SSE drop)
+  app.get('/api/agents/running', (c) => {
+    return c.json(getRunningAgents())
   })
 
   // SSE event stream — persistent connection, receives all agent events

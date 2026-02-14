@@ -58,10 +58,15 @@ export const handleMessage = async (channel, channelId, text, onEvent) => {
   }
 
   // Wrap onEvent to inject conversationId and broadcast to event bus
+  // Never throws — a failing listener must not kill the agent loop
   const wrappedOnEvent = (event) => {
     const enriched = { ...event, conversationId: convId }
-    emit(enriched)
-    if (onEvent) onEvent(enriched)
+    try { emit(enriched) } catch (err) {
+      console.error('[router] emit error:', err.message)
+    }
+    try { if (onEvent) onEvent(enriched) } catch (err) {
+      console.error('[router] onEvent error:', err.message)
+    }
   }
 
   // Emit agent_start
@@ -228,3 +233,6 @@ export const stopAgent = (convId) => {
   }
   return false
 }
+
+// Returns conversation IDs with running agents (for UI reconnect)
+export const getRunningAgents = () => [...runningAgents.keys()]

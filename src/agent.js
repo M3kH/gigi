@@ -244,21 +244,11 @@ export const runAgent = async (messages, onEvent, { sessionId = null, signal = n
   await ensureReady()
   const env = await getAgentEnv()
 
-  // Handle abort signal by throwing AbortError
+  // Handle abort signal
   if (signal?.aborted) {
     const err = new Error('Agent aborted before start')
     err.name = 'AbortError'
     throw err
-  }
-
-  let abortHandler = null
-  if (signal) {
-    abortHandler = () => {
-      const err = new Error('Agent aborted by user')
-      err.name = 'AbortError'
-      throw err
-    }
-    signal.addEventListener('abort', abortHandler)
   }
 
   const formatMessages = (msgs) => msgs
@@ -277,6 +267,27 @@ export const runAgent = async (messages, onEvent, { sessionId = null, signal = n
   const startTime = Date.now()
   let turns = 0
   let lastUsage = null
+  let agentDoneEmitted = false
+
+  // Safe event emitter — never throws, never kills the agent loop
+  const safeEmit = (event) => {
+    try { if (onEvent) onEvent(event) } catch (err) {
+      console.error('[agent] onEvent callback error:', err.message)
+    }
+  }
+
+  const emitDone = (opts = {}) => {
+    if (agentDoneEmitted) return
+    agentDoneEmitted = true
+    safeEmit({
+      type: 'agent_done',
+      cost: opts.cost ?? null,
+      duration: Date.now() - startTime,
+      turns,
+      isError: !!opts.isError,
+      usage: opts.usage ?? lastUsage ?? null
+    })
+  }
 
   // Track tool failures for retry limit (max 3 retries per tool+input combination)
   const toolFailures = new Map() // key: `${toolName}:${JSON.stringify(input)}`, value: retry count
@@ -292,12 +303,12 @@ export const runAgent = async (messages, onEvent, { sessionId = null, signal = n
         for (const block of message.message.content) {
           if (block.type === 'text' && block.text) {
             fullText += block.text
-            if (onEvent) onEvent({ type: 'text_chunk', text: block.text })
+            safeEmit({ type: 'text_chunk', text: block.text })
           }
           if (block.type === 'tool_use') {
             const tc = { toolUseId: block.id, name: block.name, input: block.input }
             toolCalls.push(tc)
-            if (onEvent) onEvent({ type: 'tool_use', ...tc })
+            safeEmit({ type: 'tool_use', ...tc })
           }
         }
       }
@@ -309,14 +320,13 @@ export const runAgent = async (messages, onEvent, { sessionId = null, signal = n
               ? block.content.map(b => b.type === 'text' ? b.text : JSON.stringify(b)).join('')
               : (typeof block.content === 'string' ? block.content : JSON.stringify(block.content))
             toolResults[block.tool_use_id] = resultContent
-            if (onEvent) onEvent({ type: 'tool_result', toolUseId: block.tool_use_id, result: resultContent })
+            safeEmit({ type: 'tool_result', toolUseId: block.tool_use_id, result: resultContent })
           }
         }
       }
 
       if (message.type === 'result') {
         if (message.result) fullText = message.result
-        const duration = Date.now() - startTime
 
         // Extract full usage data from SDK result
         const usageData = {}
@@ -327,27 +337,16 @@ export const runAgent = async (messages, onEvent, { sessionId = null, signal = n
           usageData.cacheCreationInputTokens = message.usage.cache_creation_input_tokens ?? 0
         }
         if (message.modelUsage) {
-          // Per-model breakdown (e.g. { 'claude-opus-4-6': { inputTokens, outputTokens, ... } })
           usageData.modelUsage = message.modelUsage
-          // Sum costUSD from all models
           usageData.costUSD = Object.values(message.modelUsage).reduce((sum, m) => sum + (m.costUSD || 0), 0)
         }
         usageData.costUSD = usageData.costUSD || message.total_cost_usd || 0
-        usageData.durationMs = message.duration_ms ?? duration
+        usageData.durationMs = message.duration_ms ?? (Date.now() - startTime)
         usageData.durationApiMs = message.duration_api_ms ?? 0
         usageData.numTurns = message.num_turns ?? turns
 
-        // Store usage on the shared object so router can persist it
         lastUsage = usageData
-
-        if (onEvent) onEvent({
-          type: 'agent_done',
-          cost: usageData.costUSD || null,
-          duration,
-          turns,
-          isError: !!message.is_error,
-          usage: usageData
-        })
+        emitDone({ cost: usageData.costUSD, isError: message.is_error, usage: usageData })
       }
     }
   }
@@ -444,6 +443,8 @@ ${retryCount === 2 ? '⚠️ This is your 2nd attempt. If it fails again, you wi
         console.log('[agent] Resuming session:', sessionId)
         const response = query({ prompt, options: { ...baseOptions, resume: sessionId } })
         await processResponse(response)
+        // Failsafe: always emit agent_done even if SDK didn't send a result message
+        emitDone()
         return { content: [{ type: 'text', text: fullText }], text: fullText, toolCalls, toolResults, sessionId: capturedSessionId, usage: lastUsage }
       } catch (err) {
         console.warn('[agent] Session resume failed, falling back to fresh:', err.message)
@@ -452,21 +453,19 @@ ${retryCount === 2 ? '⚠️ This is your 2nd attempt. If it fails again, you wi
         lastUsage = null
         toolCalls.length = 0
         Object.keys(toolResults).forEach(k => delete toolResults[k])
+        agentDoneEmitted = false
       }
     }
 
     const prompt = formatMessages(messages)
     const response = query({ prompt, options: baseOptions })
     await processResponse(response)
+    // Failsafe: always emit agent_done even if SDK didn't send a result message
+    emitDone()
   } catch (err) {
     console.error('[agent] query failed:', err)
-    fullText = `Error: ${err.message}`
-    if (onEvent) onEvent({ type: 'agent_done', cost: null, duration: Date.now() - startTime, turns, isError: true })
-  }
-
-  // Cleanup abort handler
-  if (signal && abortHandler) {
-    signal.removeEventListener('abort', abortHandler)
+    fullText = fullText || `Error: ${err.message}`
+    emitDone({ isError: true })
   }
 
   return {
