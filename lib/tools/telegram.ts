@@ -4,8 +4,10 @@
  * Sends messages to Mauro on Telegram via the bot instance.
  */
 
+import { z } from 'zod'
 import type { Bot } from 'grammy'
 import { getConfig } from '../core/store'
+import type { AgentTool } from '../core/registry'
 
 let bot: Bot | null = null
 
@@ -44,3 +46,20 @@ export const runTelegram = async ({ text }: { text: string }): Promise<string> =
     }
   }
 }
+
+// ─── Agent Tools (convention: agentTools export) ────────────────────
+
+const TelegramSendSchema = z.object({
+  text: z.string().describe('Message text (supports Markdown)'),
+})
+
+export const agentTools: AgentTool[] = [
+  {
+    name: 'telegram_send',
+    description: 'Send a message to Mauro on Telegram. Use for notifications, status updates, PR links.',
+    schema: TelegramSendSchema,
+    handler: runTelegram,
+    context: 'server',
+    permission: 'telegram.send',
+  },
+]

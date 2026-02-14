@@ -5,7 +5,9 @@
  * Logs self-generated actions to filter webhooks.
  */
 
+import { z } from 'zod'
 import { getConfig, logAction } from '../core/store'
+import type { AgentTool } from '../core/registry'
 
 const request = async (method: string, path: string, body: unknown = null): Promise<unknown> => {
   const url = await getConfig('gitea_url')
@@ -120,3 +122,31 @@ export const runGitea = async (input: GiteaInput): Promise<unknown> => {
       return `Unknown action: ${action}`
   }
 }
+
+// ─── Agent Tools (convention: agentTools export) ────────────────────
+
+const GiteaActionSchema = z.object({
+  action: z.enum([
+    'list_repos', 'create_repo', 'get_issue', 'list_issues', 'create_issue',
+    'comment_issue', 'create_pr', 'list_prs', 'get_pr', 'get_pr_diff',
+  ]).describe('The Gitea action to perform'),
+  owner: z.string().optional().describe('Repository owner'),
+  repo: z.string().optional().describe('Repository name'),
+  number: z.number().optional().describe('Issue or PR number'),
+  title: z.string().optional(),
+  body: z.string().optional(),
+  head: z.string().optional().describe('Source branch for PR'),
+  base: z.string().optional().describe('Target branch for PR'),
+  private: z.boolean().optional().describe('Whether repo is private'),
+})
+
+export const agentTools: AgentTool[] = [
+  {
+    name: 'gitea',
+    description: 'Interact with Gitea API. Create repos, PRs, issues, comments. Auth is automatic.',
+    schema: GiteaActionSchema,
+    handler: runGitea,
+    context: 'server',
+    permission: 'gitea.manage',
+  },
+]

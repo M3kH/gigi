@@ -6,7 +6,9 @@
  * element queries, and mode switching.
  */
 
+import { z } from 'zod'
 import { BrowserManager, browserManager } from './browser-manager'
+import type { AgentTool } from '../core/registry'
 
 interface BrowserInput {
   action: string
@@ -136,3 +138,29 @@ async function getStatus(): Promise<unknown> {
 
   return status
 }
+
+// ─── Agent Tools (convention: agentTools export) ────────────────────
+
+const BrowserActionSchema = z.object({
+  action: z.enum([
+    'navigate', 'click', 'type', 'screenshot', 'evaluate',
+    'get_elements', 'switch_mode', 'status',
+  ]).describe('Browser action to perform'),
+  url: z.string().optional().describe('URL to navigate to (for navigate action)'),
+  selector: z.string().optional().describe('CSS selector for element interaction'),
+  text: z.string().optional().describe('Text to type (for type action)'),
+  script: z.string().optional().describe('JavaScript to evaluate in page context'),
+  mode: z.enum(['headless', 'interactive']).optional().describe('Browser mode to switch to'),
+  options: z.record(z.unknown()).optional().describe('Additional options for the action'),
+})
+
+export const agentTools: AgentTool[] = [
+  {
+    name: 'browser',
+    description: 'Control a browser instance for web navigation and interaction',
+    schema: BrowserActionSchema,
+    handler: browserTool.handler,
+    context: 'server',
+    permission: 'browser.control',
+  },
+]
