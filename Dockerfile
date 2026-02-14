@@ -33,8 +33,8 @@ COPY mcp-config.json ./
 # Build: type-check TypeScript and build Vite SPA
 RUN npx tsc --noEmit && npx vite build --config vite.config.ts
 
-# Prune dev dependencies for production
-RUN npm prune --omit=dev
+# Keep tsx for TS runtime, prune everything else
+RUN npm prune --omit=dev 2>/dev/null; npm install tsx
 
 RUN chown -R gigi:gigi /app
 
@@ -44,4 +44,4 @@ HEALTHCHECK --interval=10s --timeout=5s --retries=3 \
   CMD curl -f http://localhost:3000/health || exit 1
 
 EXPOSE 3000
-CMD ["node", "src/index.js"]
+CMD ["node", "--import", "tsx", "src/index.ts"]

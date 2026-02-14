@@ -3,14 +3,14 @@
  *
  * Defines WebSocket upgrade handling using Hono.
  * Validates incoming messages against the Zod schemas defined
- * in lib/core-protocol/ and dispatches them accordingly.
+ * in lib/core/protocol and dispatches them accordingly.
  *
- * NOT yet wired into src/index.js — this is scaffolding for
+ * NOT yet wired into src/index.ts — this is scaffolding for
  * future integration. Currently only needs to pass tsc --noEmit.
  */
 import { Hono } from 'hono'
-import { ClientMessageSchema } from '../lib/core-protocol/client.js'
-import type { ServerMessage } from '../lib/core-protocol/server.js'
+import { ClientMessage } from '../lib/core/protocol'
+import type { ServerMessage } from '../lib/core/protocol'
 
 export const createWsApp = () => {
   const app = new Hono()
@@ -33,7 +33,7 @@ export const createWsApp = () => {
 export const parseClientMessage = (raw: string) => {
   try {
     const data: unknown = JSON.parse(raw)
-    return ClientMessageSchema.parse(data)
+    return ClientMessage.parse(data)
   } catch {
     return null
   }

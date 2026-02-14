@@ -3,7 +3,7 @@
     "gigi-tools": {
       "type": "stdio",
       "command": "node",
-      "args": ["src/mcp-server.js"],
+      "args": ["--import", "tsx", "lib/core/mcp.ts"],
       "env": {
         "DATABASE_URL": "${DATABASE_URL}"
       }
