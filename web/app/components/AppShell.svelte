@@ -22,6 +22,7 @@
   import GigiChatOverlay from '$components/GigiChatOverlay.svelte'
   import { getPanelState, togglePanel, setPanelState, type PanelState } from '$lib/stores/panels.svelte'
   import { initConnection, getConnectionState, type ConnectionState } from '$lib/stores/connection.svelte'
+  import { connectSSE, disconnectSSE, handleServerEvent } from '$lib/stores/chat.svelte'
   import { onMount } from 'svelte'
 
   const kanbanState: PanelState = $derived(getPanelState('kanban'))
@@ -34,8 +35,16 @@
   let isMobile = $state(false)
 
   onMount(() => {
-    // Initialize WebSocket
-    initConnection()
+    // Initialize WebSocket connection
+    const ws = initConnection()
+
+    // Wire WS messages into chat store (for when WS server is live)
+    const unsubMsg = ws.onMessage((msg) => {
+      handleServerEvent(msg)
+    })
+
+    // Also connect SSE as fallback (SSE is live now, WS server not yet)
+    connectSSE()
 
     // Check mobile on mount + resize
     const checkMobile = () => {
@@ -76,6 +85,8 @@
     return () => {
       window.removeEventListener('resize', checkMobile)
       window.removeEventListener('keydown', handleKeydown)
+      unsubMsg()
+      disconnectSSE()
     }
   })
 

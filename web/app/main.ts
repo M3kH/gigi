@@ -10,6 +10,9 @@ import './styles/theme.css'
 import '@shoelace-style/shoelace/dist/themes/dark.css'
 import '@shoelace-style/shoelace/dist/themes/light.css'
 
+// highlight.js dark theme for code blocks
+import 'highlight.js/styles/github-dark.css'
+
 // Set Shoelace asset base path for icons etc.
 import { setBasePath } from '@shoelace-style/shoelace/dist/utilities/base-path.js'
 setBasePath('/shoelace')

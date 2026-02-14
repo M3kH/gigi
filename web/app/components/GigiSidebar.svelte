@@ -1,13 +1,25 @@
 <script lang="ts">
   /** Section B: Chat list / conversation sidebar */
   import { getPanelState, type PanelState } from '$lib/stores/panels.svelte'
+  import { newConversation, loadConversations } from '$lib/stores/chat.svelte'
+  import ChatList from '$components/chat/ChatList.svelte'
+  import { onMount } from 'svelte'
 
   const state: PanelState = $derived(getPanelState('sidebar'))
+  const isCompact = $derived(state === 'compact')
+
+  onMount(() => {
+    loadConversations()
+  })
+
+  function handleNewChat() {
+    newConversation()
+  }
 </script>
 
-<aside class="gigi-sidebar" class:compact={state === 'compact'}>
+<aside class="gigi-sidebar" class:compact={isCompact}>
   <header class="section-header">
-    {#if state === 'full'}
+    {#if !isCompact}
       <span class="section-icon">💬</span>
       <h2>Chats</h2>
     {:else}
@@ -16,21 +28,16 @@
   </header>
 
   <div class="section-body">
-    {#if state === 'full'}
-      <div class="chat-list">
-        <div class="chat-item active">
-          <div class="chat-title">New conversation</div>
-          <div class="chat-preview">Start chatting with Gigi...</div>
-        </div>
-      </div>
+    {#if !isCompact}
+      <ChatList compact={isCompact} />
     {/if}
   </div>
 
   <footer class="section-footer">
-    {#if state === 'full'}
-      <button class="new-chat-btn">+ New Chat</button>
+    {#if !isCompact}
+      <button class="new-chat-btn" onclick={handleNewChat}>+ New Chat</button>
     {:else}
-      <button class="new-chat-btn compact" title="New Chat">+</button>
+      <button class="new-chat-btn compact" title="New Chat" onclick={handleNewChat}>+</button>
     {/if}
   </footer>
 </aside>
@@ -75,42 +82,6 @@
   .section-body {
     flex: 1;
     overflow-y: auto;
-  }
-
-  .chat-list {
-    display: flex;
-    flex-direction: column;
-  }
-
-  .chat-item {
-    padding: var(--gigi-space-sm) var(--gigi-space-md);
-    cursor: pointer;
-    border-bottom: var(--gigi-border-width) solid var(--gigi-border-muted);
-    transition: background var(--gigi-transition-fast);
-  }
-
-  .chat-item:hover {
-    background: var(--gigi-bg-hover);
-  }
-
-  .chat-item.active {
-    background: var(--gigi-bg-active);
-    border-left: 2px solid var(--gigi-accent-green);
-  }
-
-  .chat-title {
-    font-size: var(--gigi-font-size-sm);
-    font-weight: 500;
-    color: var(--gigi-text-primary);
-    margin-bottom: 2px;
-  }
-
-  .chat-preview {
-    font-size: var(--gigi-font-size-xs);
-    color: var(--gigi-text-muted);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
   }
 
   .section-footer {
