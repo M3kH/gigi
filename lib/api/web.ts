@@ -13,6 +13,7 @@ import { getSetupStatus, setupStep } from '../domain/setup'
 import { handleMessage, newConversation, resumeConversation, stopAgent, getRunningAgents } from '../core/router'
 import { subscribe } from '../core/events'
 import { handleWebhook } from './webhooks'
+import { createGiteaProxy } from './gitea-proxy'
 import * as store from '../core/store'
 
 export const createApp = (): Hono => {
@@ -214,6 +215,9 @@ export const createApp = (): Hono => {
       },
     })
   })
+
+  // Gitea proxy endpoints (for frontend SPA)
+  app.route('/api/gitea', createGiteaProxy())
 
   // Webhook endpoint
   app.post('/webhook/gitea', handleWebhook)

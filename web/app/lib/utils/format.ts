@@ -33,6 +33,25 @@ export function formatElapsed(startedAt: number): string {
 }
 
 /**
+ * Relative time display (e.g. "2 hours ago", "3 days ago").
+ */
+export function formatRelativeTime(date: string | Date): string {
+  const d = typeof date === 'string' ? new Date(date) : date
+  const now = Date.now()
+  const diffMs = now - d.getTime()
+  const diffSec = Math.floor(diffMs / 1000)
+  const diffMin = Math.floor(diffSec / 60)
+  const diffHr = Math.floor(diffMin / 60)
+  const diffDay = Math.floor(diffHr / 24)
+
+  if (diffSec < 60) return 'just now'
+  if (diffMin < 60) return `${diffMin}m ago`
+  if (diffHr < 24) return `${diffHr}h ago`
+  if (diffDay < 30) return `${diffDay}d ago`
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
+/**
  * Generate a short summary for a tool invocation.
  */
 export function toolSummary(name: string, input: unknown): string {

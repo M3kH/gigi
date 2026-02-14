@@ -1,60 +1,47 @@
 <script lang="ts">
-  /** Section D: Main content area */
+  /**
+   * Section D: Main content area — View router
+   *
+   * Routes between:
+   * - Overview dashboard (default)
+   * - Issue detail view
+   * - Pull request detail view
+   * - Repository explorer
+   */
+
+  import { getCurrentView } from '$lib/stores/navigation.svelte'
+  import OverviewDashboard from '$components/dashboard/OverviewDashboard.svelte'
+  import IssueDetail from '$components/detail/IssueDetail.svelte'
+  import PullDetail from '$components/detail/PullDetail.svelte'
+  import RepoExplorer from '$components/detail/RepoExplorer.svelte'
+
+  const view = $derived(getCurrentView())
 </script>
 
 <main class="gigi-main-view">
-  <div class="welcome">
-    <div class="logo">G</div>
-    <h1>Gigi</h1>
-    <p class="subtitle">Your persistent AI coordinator</p>
-    <p class="hint">Start a conversation or select one from the sidebar</p>
-  </div>
+  {#if view.view === 'overview'}
+    <OverviewDashboard />
+  {:else if view.view === 'issue'}
+    {#key `${view.owner}/${view.repo}/${view.number}`}
+      <IssueDetail />
+    {/key}
+  {:else if view.view === 'pull'}
+    {#key `${view.owner}/${view.repo}/${view.number}`}
+      <PullDetail />
+    {/key}
+  {:else if view.view === 'repo'}
+    {#key `${view.owner}/${view.repo}`}
+      <RepoExplorer />
+    {/key}
+  {/if}
 </main>
 
 <style>
   .gigi-main-view {
     flex: 1;
     display: flex;
-    align-items: center;
-    justify-content: center;
+    flex-direction: column;
     background: var(--gigi-bg-primary);
-    overflow-y: auto;
-  }
-
-  .welcome {
-    text-align: center;
-    padding: var(--gigi-space-2xl);
-  }
-
-  .logo {
-    width: 64px;
-    height: 64px;
-    border-radius: var(--gigi-radius-lg);
-    background: linear-gradient(135deg, var(--gigi-accent-green), var(--gigi-accent-blue));
-    color: white;
-    font-size: 2rem;
-    font-weight: 700;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin: 0 auto var(--gigi-space-lg);
-  }
-
-  h1 {
-    font-size: var(--gigi-font-size-xl);
-    font-weight: 700;
-    color: var(--gigi-text-primary);
-    margin-bottom: var(--gigi-space-xs);
-  }
-
-  .subtitle {
-    color: var(--gigi-text-secondary);
-    font-size: var(--gigi-font-size-base);
-    margin-bottom: var(--gigi-space-lg);
-  }
-
-  .hint {
-    color: var(--gigi-text-muted);
-    font-size: var(--gigi-font-size-sm);
+    overflow: hidden;
   }
 </style>
