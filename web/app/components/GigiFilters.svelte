@@ -1,5 +1,12 @@
 <script lang="ts">
   /** Section C: Project selector / filters bar */
+  import type { ConnectionState } from '$lib/services/ws-client'
+
+  interface Props {
+    connectionState?: ConnectionState
+  }
+
+  const { connectionState = 'disconnected' }: Props = $props()
 </script>
 
 <div class="gigi-filters">
@@ -25,8 +32,13 @@
 
   <div class="filter-spacer"></div>
 
-  <div class="connection-badge" title="WebSocket status">
-    <span class="status-dot"></span>
+  <div class="connection-badge" title="WebSocket: {connectionState}">
+    <span
+      class="status-dot"
+      class:connected={connectionState === 'connected'}
+      class:connecting={connectionState === 'connecting' || connectionState === 'reconnecting'}
+      class:disconnected={connectionState === 'disconnected'}
+    ></span>
   </div>
 </div>
 
@@ -39,6 +51,7 @@
     background: var(--gigi-bg-secondary);
     border-bottom: var(--gigi-border-width) solid var(--gigi-border-default);
     min-height: var(--gigi-topbar-height);
+    width: 100%;
   }
 
   .filter-group {
@@ -102,12 +115,33 @@
   .connection-badge {
     display: flex;
     align-items: center;
+    flex-shrink: 0;
   }
 
   .status-dot {
+    display: block;
     width: 8px;
     height: 8px;
     border-radius: 50%;
+    background: var(--gigi-border-default);
+    transition: background var(--gigi-transition-fast);
+  }
+
+  .status-dot.connected {
     background: var(--gigi-accent-green);
+  }
+
+  .status-dot.connecting {
+    background: var(--gigi-accent-orange);
+    animation: pulse 1.5s ease-in-out infinite;
+  }
+
+  .status-dot.disconnected {
+    background: var(--gigi-accent-red);
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
   }
 </style>

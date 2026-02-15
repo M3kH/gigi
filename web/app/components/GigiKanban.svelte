@@ -25,7 +25,8 @@
   } from '$lib/stores/kanban.svelte'
   import { navigateToIssue } from '$lib/stores/navigation.svelte'
   import { formatRelativeTime } from '$lib/utils/format'
-  import { getPanelState, type PanelState } from '$lib/stores/panels.svelte'
+  import { getPanelState, setPanelState, type PanelState } from '$lib/stores/panels.svelte'
+  import PanelControls from '$components/ui/PanelControls.svelte'
 
   // ── Derived State ────────────────────────────────────────────────────
 
@@ -127,11 +128,15 @@
   })
 </script>
 
-<section class="gigi-kanban" class:compact={kanbanState === 'compact'}>
+<section class="gigi-kanban" class:header-only={kanbanState === 'hidden'}>
   <!-- Header -->
   <header class="board-header">
     <div class="header-left">
-      <h2 class="board-title">Board</h2>
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <h2
+        class="board-title"
+        ondblclick={() => setPanelState('kanban', kanbanState === 'hidden' ? 'compact' : 'hidden')}
+      >Board</h2>
       <span class="board-count">{totalIssues} issues</span>
     </div>
     <div class="header-right">
@@ -141,6 +146,7 @@
       <button class="refresh-btn" onclick={fetchBoard} title="Refresh board" disabled={loading}>
         ↻
       </button>
+      <PanelControls panel="kanban" state={kanbanState} />
     </div>
   </header>
 
@@ -337,13 +343,13 @@
     to { transform: rotate(360deg); }
   }
 
-  /* ── Compact mode ────────────────────────────────────────────────── */
+  /* ── Hidden mode (header bar only) ──────────────────────────────── */
 
-  .gigi-kanban.compact .board-columns {
+  .gigi-kanban.header-only .board-columns {
     display: none;
   }
 
-  .gigi-kanban.compact .board-error {
+  .gigi-kanban.header-only .board-error {
     display: none;
   }
 

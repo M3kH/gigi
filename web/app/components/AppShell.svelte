@@ -27,6 +27,7 @@
 
   const kanbanState: PanelState = $derived(getPanelState('kanban'))
   const sidebarState: PanelState = $derived(getPanelState('sidebar'))
+  const chatState: PanelState = $derived(getPanelState('chatOverlay'))
   const connectionState: ConnectionState = $derived(getConnectionState())
 
   let sidebarDragging = $state(false)
@@ -123,16 +124,17 @@
 
 <div class="app-shell" class:dragging={sidebarDragging}>
   <!-- Section A: Kanban -->
-  {#if kanbanState !== 'hidden'}
-    <div
-      class="kanban-panel"
-      class:compact={kanbanState === 'compact'}
-    >
-      <GigiKanban />
-    </div>
-  {/if}
+  <div
+    class="kanban-panel"
+    class:kanban-full={kanbanState === 'full'}
+    class:kanban-compact={kanbanState === 'compact'}
+    class:kanban-hidden={kanbanState === 'hidden'}
+  >
+    <GigiKanban />
+  </div>
 
   <!-- Main area: Sidebar + Content -->
+  {#if kanbanState !== 'full'}
   <div class="main-area">
     <!-- Section B: Sidebar (desktop) -->
     {#if !isMobile && sidebarState !== 'hidden'}
@@ -163,26 +165,21 @@
             ☰
           </button>
         {/if}
-        <GigiFilters />
-        <div class="connection-status" title="WebSocket: {connectionState}">
-          <span
-            class="status-dot"
-            class:connected={connectionState === 'connected'}
-            class:connecting={connectionState === 'connecting' || connectionState === 'reconnecting'}
-            class:disconnected={connectionState === 'disconnected'}
-          ></span>
-        </div>
+        <GigiFilters {connectionState} />
       </div>
 
-      <!-- Section D: Main View -->
+      <!-- Section D: Main View / Chat -->
       <div class="main-content">
-        <GigiMainView />
-
-        <!-- Section F: Chat Overlay -->
-        <GigiChatOverlay />
+        {#if chatState === 'full'}
+          <GigiChatOverlay />
+        {:else}
+          <GigiMainView />
+          <GigiChatOverlay />
+        {/if}
       </div>
     </div>
   </div>
+  {/if}
 
   <!-- Mobile sidebar overlay -->
   {#if isMobile && mobileOverlay}
@@ -212,15 +209,24 @@
   /* ── Kanban Panel ──────────────────────────────────────────── */
 
   .kanban-panel {
-    height: 200px;
-    min-height: 120px;
     border-bottom: var(--gigi-border-width) solid var(--gigi-border-default);
-    transition: height var(--gigi-transition-normal);
+    transition: all var(--gigi-transition-normal);
+    flex-shrink: 0;
   }
 
-  .kanban-panel.compact {
-    height: var(--gigi-topbar-height);
-    min-height: var(--gigi-topbar-height);
+  .kanban-panel.kanban-full {
+    flex: 1;
+    overflow: hidden;
+  }
+
+  .kanban-panel.kanban-compact {
+    height: 200px;
+    min-height: 120px;
+  }
+
+  .kanban-panel.kanban-hidden {
+    height: auto;
+    min-height: 0;
     overflow: hidden;
   }
 
@@ -300,38 +306,6 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
-  }
-
-  /* ── Connection Status ─────────────────────────────────────── */
-
-  .connection-status {
-    padding: 0 var(--gigi-space-md);
-  }
-
-  .status-dot {
-    display: block;
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    transition: background var(--gigi-transition-fast);
-  }
-
-  .status-dot.connected {
-    background: var(--gigi-accent-green);
-  }
-
-  .status-dot.connecting {
-    background: var(--gigi-accent-orange);
-    animation: pulse 1.5s ease-in-out infinite;
-  }
-
-  .status-dot.disconnected {
-    background: var(--gigi-accent-red);
-  }
-
-  @keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.4; }
   }
 
   /* ── Mobile ────────────────────────────────────────────────── */

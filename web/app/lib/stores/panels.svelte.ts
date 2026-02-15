@@ -14,10 +14,10 @@ export type PanelId = 'kanban' | 'sidebar' | 'filters' | 'chatOverlay'
 type PanelStates = Record<PanelId, PanelState>
 
 const DEFAULT_STATES: PanelStates = {
-  kanban: 'full',
+  kanban: 'compact',
   sidebar: 'full',
   filters: 'compact',
-  chatOverlay: 'full',
+  chatOverlay: 'compact',
 }
 
 function loadFromStorage(): PanelStates {

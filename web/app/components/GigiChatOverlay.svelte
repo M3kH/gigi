@@ -1,6 +1,7 @@
 <script lang="ts">
   /** Section F: Chat overlay — messages + input + stop button */
-  import { getPanelState, togglePanel, type PanelState } from '$lib/stores/panels.svelte'
+  import { getPanelState, setPanelState, type PanelState } from '$lib/stores/panels.svelte'
+  import PanelControls from '$components/ui/PanelControls.svelte'
   import {
     sendMessage,
     stopAgent,
@@ -26,42 +27,38 @@
   }
 </script>
 
-{#if state !== 'hidden'}
-  <div class="gigi-chat-overlay" class:compact={state === 'compact'}>
-    <header class="overlay-header">
-      <div class="overlay-left">
-        <span class="overlay-title">Chat</span>
-        {#if activeConv}
-          <span class="overlay-conv-title">{activeConv.topic}</span>
-        {/if}
-      </div>
-      <div class="overlay-right">
-        {#if isAgentBusy}
-          <button class="stop-btn" onclick={handleStop} title="Stop agent">
-            ⏹ Stop
-          </button>
-        {/if}
-        <button
-          class="toggle-btn"
-          onclick={() => togglePanel('chatOverlay')}
-          title="Toggle chat overlay"
-        >
-          {state === 'compact' ? '▲' : '▼'}
+<div class="gigi-chat-overlay" class:chat-full={state === 'full'} class:chat-compact={state === 'compact'} class:chat-hidden={state === 'hidden'}>
+  <header class="overlay-header">
+    <div class="overlay-left">
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <span
+        class="overlay-title"
+        ondblclick={() => setPanelState('chatOverlay', state === 'hidden' ? 'compact' : 'hidden')}
+      >Chat</span>
+      {#if activeConv}
+        <span class="overlay-conv-title">{activeConv.topic}</span>
+      {/if}
+    </div>
+    <div class="overlay-right">
+      {#if isAgentBusy}
+        <button class="stop-btn" onclick={handleStop} title="Stop agent">
+          ⏹ Stop
         </button>
-      </div>
-    </header>
+      {/if}
+      <PanelControls panel="chatOverlay" state={state} />
+    </div>
+  </header>
 
-    {#if state === 'full'}
-      <ChatMessages />
+  {#if state !== 'hidden'}
+    <ChatMessages />
 
-      <ChatInput
-        onsend={handleSend}
-        disabled={false}
-        placeholder={activeConvId ? 'Continue conversation...' : 'Message Gigi...'}
-      />
-    {/if}
-  </div>
-{/if}
+    <ChatInput
+      onsend={handleSend}
+      disabled={false}
+      placeholder={activeConvId ? 'Continue conversation...' : 'Message Gigi...'}
+    />
+  {/if}
+</div>
 
 <style>
   .gigi-chat-overlay {
@@ -69,14 +66,23 @@
     flex-direction: column;
     background: var(--gigi-bg-secondary);
     border-top: var(--gigi-border-width) solid var(--gigi-border-default);
-    max-height: 50%;
-    min-height: 180px;
-    transition: all var(--gigi-transition-normal);
   }
 
-  .gigi-chat-overlay.compact {
-    min-height: auto;
-    max-height: auto;
+  /* full: takes entire D area */
+  .gigi-chat-overlay.chat-full {
+    flex: 1;
+    min-height: 0;
+  }
+
+  /* compact: sits in F area, constrained height */
+  .gigi-chat-overlay.chat-compact {
+    max-height: 50%;
+    min-height: 180px;
+  }
+
+  /* hidden: header bar only */
+  .gigi-chat-overlay.chat-hidden {
+    min-height: 0;
   }
 
   .overlay-header {
@@ -85,7 +91,6 @@
     justify-content: space-between;
     padding: var(--gigi-space-xs) var(--gigi-space-md);
     border-bottom: var(--gigi-border-width) solid var(--gigi-border-muted);
-    cursor: pointer;
     flex-shrink: 0;
   }
 
@@ -103,6 +108,8 @@
     text-transform: uppercase;
     letter-spacing: 0.05em;
     flex-shrink: 0;
+    cursor: default;
+    user-select: none;
   }
 
   .overlay-conv-title {
@@ -135,19 +142,4 @@
     filter: brightness(1.2);
   }
 
-  .toggle-btn {
-    background: none;
-    border: none;
-    color: var(--gigi-text-muted);
-    cursor: pointer;
-    padding: var(--gigi-space-xs);
-    font-size: var(--gigi-font-size-xs);
-    border-radius: var(--gigi-radius-sm);
-    transition: all var(--gigi-transition-fast);
-  }
-
-  .toggle-btn:hover {
-    background: var(--gigi-bg-hover);
-    color: var(--gigi-text-primary);
-  }
 </style>

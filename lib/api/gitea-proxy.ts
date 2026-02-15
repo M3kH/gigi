@@ -8,15 +8,16 @@
 
 import { Hono } from 'hono'
 import { createGiteaClient, type GiteaClient } from '../api-gitea'
+import { getConfig } from '../core/store'
 
 // ─── Singleton client ───────────────────────────────────────────────
 
 let client: GiteaClient | null = null
 
-const getClient = (): GiteaClient => {
+const getClient = async (): Promise<GiteaClient> => {
   if (!client) {
-    const baseUrl = process.env.GITEA_URL || 'http://192.168.1.80:3000'
-    const token = process.env.GITEA_TOKEN
+    const baseUrl = process.env.GITEA_URL || await getConfig('gitea_url') || 'http://192.168.1.80:3000'
+    const token = process.env.GITEA_TOKEN || await getConfig('gitea_token')
     if (!token) throw new Error('GITEA_TOKEN not set')
     client = createGiteaClient(baseUrl, token)
   }
@@ -36,7 +37,7 @@ export const createGiteaProxy = (): Hono => {
    */
   api.get('/overview', async (c) => {
     try {
-      const gitea = getClient()
+      const gitea = await getClient()
       const org = 'idea'
 
       // Fetch repos and recent issues/PRs in parallel
@@ -94,7 +95,7 @@ export const createGiteaProxy = (): Hono => {
    */
   api.get('/repos/:owner/:repo/issues', async (c) => {
     try {
-      const gitea = getClient()
+      const gitea = await getClient()
       const { owner, repo } = c.req.param()
       const state = c.req.query('state') || 'open'
       const limit = parseInt(c.req.query('limit') || '20', 10)
@@ -111,7 +112,7 @@ export const createGiteaProxy = (): Hono => {
    */
   api.get('/repos/:owner/:repo/pulls', async (c) => {
     try {
-      const gitea = getClient()
+      const gitea = await getClient()
       const { owner, repo } = c.req.param()
       const state = c.req.query('state') || 'open'
       const limit = parseInt(c.req.query('limit') || '20', 10)
@@ -127,7 +128,7 @@ export const createGiteaProxy = (): Hono => {
    */
   api.get('/repos/:owner/:repo/issues/:number', async (c) => {
     try {
-      const gitea = getClient()
+      const gitea = await getClient()
       const { owner, repo } = c.req.param()
       const num = parseInt(c.req.param('number'), 10)
       const issue = await gitea.issues.get(owner, repo, num)
@@ -142,7 +143,7 @@ export const createGiteaProxy = (): Hono => {
    */
   api.get('/repos/:owner/:repo/pulls/:number', async (c) => {
     try {
-      const gitea = getClient()
+      const gitea = await getClient()
       const { owner, repo } = c.req.param()
       const num = parseInt(c.req.param('number'), 10)
       const pr = await gitea.pulls.get(owner, repo, num)
@@ -160,7 +161,7 @@ export const createGiteaProxy = (): Hono => {
    */
   api.get('/board', async (c) => {
     try {
-      const gitea = getClient()
+      const gitea = await getClient()
       const org = 'idea'
 
       // Define board columns from status labels (matches domain/projects.ts)
@@ -242,7 +243,7 @@ export const createGiteaProxy = (): Hono => {
    */
   api.patch('/board/move', async (c) => {
     try {
-      const gitea = getClient()
+      const gitea = await getClient()
       const { owner, repo, issueNumber, targetColumn } = await c.req.json<{
         owner: string
         repo: string
