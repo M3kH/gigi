@@ -3,14 +3,8 @@ browser.cluster.local {
 }
 
 claude.cluster.local {
-	# Gitea UI proxy (iframe embedding)
-	@gitea {
-		path /gitea/*
-	}
-	handle @gitea {
-		uri strip_prefix /gitea
-		reverse_proxy 192.168.1.80:3000
-	}
+	# Gitea UI proxy (iframe embedding) — routed through Hono which handles auth + prefix stripping
+	# (no separate Caddy→Gitea route needed; Hono's /gitea/* handler does it)
 
 	# Handle WebSocket connections for browser control on /ws path
 	@browserws {

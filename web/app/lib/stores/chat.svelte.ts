@@ -19,6 +19,7 @@ import type {
 } from '$lib/types/chat'
 import type { ServerMessage } from '$lib/types/protocol'
 import { getWSClient } from '$lib/stores/connection.svelte'
+import { getViewContext } from '$lib/stores/navigation.svelte'
 
 // ── State ─────────────────────────────────────────────────────────────
 
@@ -99,12 +100,14 @@ export async function sendMessage(text: string): Promise<void> {
 
   // Send via REST (fire-and-forget, events come via SSE/WS)
   try {
+    const context = getViewContext()
     await fetch('/api/chat/send', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         message: trimmed,
         conversationId: activeConversationId || undefined,
+        context: context.type !== 'overview' ? context : undefined,
       }),
     })
   } catch (err) {
@@ -225,32 +228,15 @@ export function handleServerEvent(event: ServerMessage): void {
       break
     }
 
+    case 'gitea_event': {
+      // Notify listeners that Gitea state changed (repo created/deleted, issue opened, etc.)
+      for (const fn of giteaEventListeners) fn(event as { type: 'gitea_event'; event: string; action?: string; repo?: string })
+      break
+    }
+
     default:
       break
   }
-}
-
-// ── SSE fallback (until WS server is live) ────────────────────────────
-
-let sseSource: EventSource | null = null
-
-export function connectSSE(): void {
-  if (sseSource) return
-  sseSource = new EventSource('/api/events')
-  sseSource.onmessage = (e) => {
-    try {
-      const event = JSON.parse(e.data) as ServerMessage
-      handleServerEvent(event)
-    } catch { /* ignore parse failures */ }
-  }
-  sseSource.onerror = () => {
-    // EventSource auto-reconnects
-  }
-}
-
-export function disconnectSSE(): void {
-  sseSource?.close()
-  sseSource = null
 }
 
 // ── Getters (reactive) ────────────────────────────────────────────────
@@ -288,6 +274,17 @@ export function getActiveConversation(): Conversation | undefined {
   return conversations.find(c => c.id === activeConversationId)
 }
 
+// ── Gitea event listeners ─────────────────────────────────────────────
+
+export type GiteaEventData = { type: 'gitea_event'; event: string; action?: string; repo?: string }
+type GiteaListener = (ev: GiteaEventData) => void
+const giteaEventListeners = new Set<GiteaListener>()
+
+export function onGiteaEvent(fn: GiteaListener): () => void {
+  giteaEventListeners.add(fn)
+  return () => { giteaEventListeners.delete(fn) }
+}
+
 // ── Mappers ───────────────────────────────────────────────────────────
 
 function mapConversation(raw: any): Conversation {
@@ -301,6 +298,10 @@ function mapConversation(raw: any): Conversation {
     repo: raw.repo,
     createdAt: raw.created_at || raw.createdAt || '',
     updatedAt: raw.updated_at || raw.updatedAt || '',
+    lastMessagePreview: raw.last_message_preview || undefined,
+    usageCost: raw.usage_cost ? Number(raw.usage_cost) : undefined,
+    usageInputTokens: raw.usage_input_tokens ? Number(raw.usage_input_tokens) : undefined,
+    usageOutputTokens: raw.usage_output_tokens ? Number(raw.usage_output_tokens) : undefined,
   }
 }
 

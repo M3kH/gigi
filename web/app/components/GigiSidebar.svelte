@@ -6,7 +6,6 @@
   import { onMount } from 'svelte'
 
   const state: PanelState = $derived(getPanelState('sidebar'))
-  const isCompact = $derived(state === 'compact')
 
   onMount(() => {
     loadConversations()
@@ -17,28 +16,18 @@
   }
 </script>
 
-<aside class="gigi-sidebar" class:compact={isCompact}>
+<aside class="gigi-sidebar">
   <header class="section-header">
-    {#if !isCompact}
-      <span class="section-icon">💬</span>
-      <h2>Chats</h2>
-    {:else}
-      <span class="section-icon">💬</span>
-    {/if}
+    <span class="section-icon">💬</span>
+    <h2>Chats</h2>
   </header>
 
   <div class="section-body">
-    {#if !isCompact}
-      <ChatList compact={isCompact} />
-    {/if}
+    <ChatList />
   </div>
 
   <footer class="section-footer">
-    {#if !isCompact}
-      <button class="new-chat-btn" onclick={handleNewChat}>+ New Chat</button>
-    {:else}
-      <button class="new-chat-btn compact" title="New Chat" onclick={handleNewChat}>+</button>
-    {/if}
+    <button class="new-chat-btn" onclick={handleNewChat}>+ New Chat</button>
   </footer>
 </aside>
 
@@ -48,14 +37,6 @@
     display: flex;
     flex-direction: column;
     background: var(--gigi-bg-secondary);
-    width: var(--gigi-sidebar-width);
-    min-width: var(--gigi-sidebar-width);
-    transition: width var(--gigi-transition-normal), min-width var(--gigi-transition-normal);
-  }
-
-  .gigi-sidebar.compact {
-    width: var(--gigi-sidebar-compact);
-    min-width: var(--gigi-sidebar-compact);
   }
 
   .section-header {
@@ -104,11 +85,5 @@
   .new-chat-btn:hover {
     background: var(--gigi-bg-hover);
     color: var(--gigi-text-primary);
-  }
-
-  .new-chat-btn.compact {
-    padding: var(--gigi-space-sm);
-    font-size: var(--gigi-font-size-lg);
-    text-align: center;
   }
 </style>

@@ -1,0 +1,12 @@
+session:
+  implicit_hosting: true
+  locked_controls: false
+  merciful_reconnect: true
+  cookie:
+    enabled: false
+
+member:
+  provider: "multiuser"
+  multiuser:
+    admin_password: "admin"
+    user_password: "neko"

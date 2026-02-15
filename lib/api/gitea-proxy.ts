@@ -8,7 +8,7 @@
 
 import { Hono } from 'hono'
 import { createGiteaClient, type GiteaClient } from '../api-gitea'
-import { getConfig } from '../core/store'
+import { getConfig, listConversations } from '../core/store'
 
 // ─── Singleton client ───────────────────────────────────────────────
 
@@ -195,6 +195,42 @@ export const createGiteaProxy = (): Hono => {
         )
       ).flat()
 
+      // Fetch open PRs per active repo (for cross-referencing "Closes #N")
+      const allPRs = (
+        await Promise.all(
+          activeRepos.map(async (repo) => {
+            try {
+              const prs = await gitea.pulls.list(org, repo.name, { state: 'open', limit: 50 })
+              return prs.map((pr) => ({ ...pr, _repo: repo.name }))
+            } catch {
+              return []
+            }
+          })
+        )
+      ).flat()
+
+      // Build PR cross-reference: repo+issueNumber → PR count
+      const prLinks = new Map<string, number>()
+      for (const pr of allPRs) {
+        const body = (pr.body ?? '') + ' ' + (pr.title ?? '')
+        const matches = body.matchAll(/(?:closes?|fixes?|resolves?)\s+#(\d+)/gi)
+        for (const m of matches) {
+          const key = `${pr._repo}#${m[1]}`
+          prLinks.set(key, (prLinks.get(key) ?? 0) + 1)
+        }
+      }
+
+      // Fetch conversations for chat cross-reference
+      let chatLinks = new Map<string, number>()
+      try {
+        const convs = await listConversations(null, 100)
+        for (const conv of convs) {
+          if (conv.repo) {
+            chatLinks.set(conv.repo, (chatLinks.get(conv.repo) ?? 0) + 1)
+          }
+        }
+      } catch { /* ignore */ }
+
       // Group issues into columns by status/ label
       type CardIssue = (typeof allIssues)[number]
       const columnMap = new Map<string, CardIssue[]>()
@@ -223,6 +259,8 @@ export const createGiteaProxy = (): Hono => {
             : null,
           milestone: issue.milestone ? { title: issue.milestone.title } : null,
           comments: issue.comments ?? 0,
+          linked_prs: prLinks.get(`${issue._repo}#${issue.number}`) ?? 0,
+          linked_chats: chatLinks.get(issue._repo) ?? 0,
           created_at: issue.created_at,
           updated_at: issue.updated_at,
           html_url: issue.html_url,

@@ -10,8 +10,8 @@
    */
 
   import { onMount } from 'svelte'
-  import { getConversations, loadConversations, selectConversation } from '$lib/stores/chat.svelte'
-  import { navigateToRepo } from '$lib/stores/navigation.svelte'
+  import { getConversations, loadConversations, selectConversation, onGiteaEvent } from '$lib/stores/chat.svelte'
+  import { navigateToRepo, navigateToGitea } from '$lib/stores/navigation.svelte'
   import { formatRelativeTime } from '$lib/utils/format'
 
   // ── Types ──────────────────────────────────────────────────────────
@@ -79,6 +79,15 @@
   onMount(() => {
     fetchOverview()
     loadConversations()
+
+    // Auto-refresh when Gitea state changes (repo created/deleted, issues, PRs)
+    const unsubGitea = onGiteaEvent((ev) => {
+      if (['repository', 'create', 'delete', 'issues', 'pull_request', 'push'].includes(ev.event)) {
+        fetchOverview()
+      }
+    })
+
+    return () => { unsubGitea() }
   })
 
   // ── Handlers ───────────────────────────────────────────────────────
@@ -97,6 +106,7 @@
     <!-- Welcome / Empty state -->
     <div class="welcome">
       <div class="welcome-header">
+          <img src="/gigi.png" width="200px">
         <h1 class="welcome-title">Welcome to Gigi</h1>
         <p class="welcome-subtitle">Your AI-powered development workspace. Let's get started.</p>
       </div>
@@ -112,7 +122,7 @@
           <span class="welcome-card-desc">Bring an existing project from GitHub, GitLab, or any git URL</span>
         </button>
 
-        <button class="welcome-card" onclick={() => { /* TODO: create repo flow */ }}>
+        <button class="welcome-card" onclick={() => navigateToGitea('/repo/create')}>
           <span class="welcome-card-icon">
             <svg width="24" height="24" viewBox="0 0 16 16" fill="currentColor">
               <path fill-rule="evenodd" d="M7.75 0a.75.75 0 01.75.75V7h6.25a.75.75 0 010 1.5H8.5v6.25a.75.75 0 01-1.5 0V8.5H.75a.75.75 0 010-1.5H7V.75A.75.75 0 017.75 0z"/>

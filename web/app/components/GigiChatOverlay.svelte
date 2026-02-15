@@ -9,6 +9,7 @@
     getActiveConversationId,
     getActiveConversation,
   } from '$lib/stores/chat.svelte'
+  import { getViewContext, type ViewContext } from '$lib/stores/navigation.svelte'
   import ChatMessages from '$components/chat/ChatMessages.svelte'
   import ChatInput from '$components/chat/ChatInput.svelte'
 
@@ -17,6 +18,18 @@
   const activeConvId = $derived(getActiveConversationId())
   const activeConv = $derived(getActiveConversation())
   const isAgentBusy = $derived(dialogState !== 'idle')
+  const viewCtx: ViewContext = $derived(getViewContext())
+
+  const contextLabel = $derived.by(() => {
+    const ctx = viewCtx
+    if (ctx.type === 'overview') return ''
+    if (ctx.type === 'issue' && ctx.owner && ctx.repo && ctx.number) return `${ctx.owner}/${ctx.repo}#${ctx.number}`
+    if (ctx.type === 'pull' && ctx.owner && ctx.repo && ctx.number) return `PR ${ctx.owner}/${ctx.repo}#${ctx.number}`
+    if (ctx.type === 'file' && ctx.owner && ctx.repo && ctx.filepath) return `${ctx.owner}/${ctx.repo}/${ctx.filepath}`
+    if (ctx.type === 'commit' && ctx.owner && ctx.repo && ctx.commitSha) return `${ctx.owner}/${ctx.repo}@${ctx.commitSha.slice(0, 7)}`
+    if (ctx.type === 'repo' && ctx.owner && ctx.repo) return `${ctx.owner}/${ctx.repo}`
+    return ''
+  })
 
   function handleSend(message: string) {
     sendMessage(message)
@@ -27,7 +40,7 @@
   }
 </script>
 
-<div class="gigi-chat-overlay" class:chat-full={state === 'full'} class:chat-compact={state === 'compact'} class:chat-hidden={state === 'hidden'}>
+<div class="gigi-chat-overlay">
   <header class="overlay-header">
     <div class="overlay-left">
       <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -52,6 +65,12 @@
   {#if state !== 'hidden'}
     <ChatMessages />
 
+    {#if contextLabel}
+      <div class="context-pill">
+        <span class="context-pill-label">Viewing {contextLabel}</span>
+      </div>
+    {/if}
+
     <ChatInput
       onsend={handleSend}
       disabled={false}
@@ -65,23 +84,7 @@
     display: flex;
     flex-direction: column;
     background: var(--gigi-bg-secondary);
-    border-top: var(--gigi-border-width) solid var(--gigi-border-default);
-  }
-
-  /* full: takes entire D area */
-  .gigi-chat-overlay.chat-full {
-    flex: 1;
-    min-height: 0;
-  }
-
-  /* compact: sits in F area, constrained height */
-  .gigi-chat-overlay.chat-compact {
-    max-height: 50%;
-    min-height: 180px;
-  }
-
-  /* hidden: header bar only */
-  .gigi-chat-overlay.chat-hidden {
+    height: 100%;
     min-height: 0;
   }
 
@@ -140,6 +143,24 @@
 
   .stop-btn:hover {
     filter: brightness(1.2);
+  }
+
+  .context-pill {
+    display: flex;
+    align-items: center;
+    gap: var(--gigi-space-xs);
+    padding: var(--gigi-space-xs) var(--gigi-space-md);
+    border-top: var(--gigi-border-width) solid var(--gigi-border-muted);
+    flex-shrink: 0;
+  }
+
+  .context-pill-label {
+    font-size: var(--gigi-font-size-xs);
+    color: var(--gigi-text-muted);
+    font-family: var(--gigi-font-mono, monospace);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
 </style>

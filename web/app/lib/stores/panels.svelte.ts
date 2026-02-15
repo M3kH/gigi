@@ -45,8 +45,11 @@ function saveToStorage(states: PanelStates) {
 
 let panels = $state<PanelStates>(loadFromStorage())
 
-/** Cycle: full → compact → hidden → full */
+/** Default cycle: full → compact → hidden → full */
 const CYCLE: PanelState[] = ['full', 'compact', 'hidden']
+
+/** Sidebar only has two states: full <-> hidden */
+const SIDEBAR_CYCLE: PanelState[] = ['full', 'hidden']
 
 export function getPanelState(id: PanelId): PanelState {
   return panels[id]
@@ -58,9 +61,10 @@ export function setPanelState(id: PanelId, state: PanelState) {
 }
 
 export function togglePanel(id: PanelId) {
+  const cycle = id === 'sidebar' ? SIDEBAR_CYCLE : CYCLE
   const current = panels[id]
-  const idx = CYCLE.indexOf(current)
-  const next = CYCLE[(idx + 1) % CYCLE.length]
+  const idx = cycle.indexOf(current)
+  const next = cycle[(idx + 1) % cycle.length]
   setPanelState(id, next)
 }
 
@@ -70,4 +74,52 @@ export function isMobile(): boolean {
 
 export function getAllPanels(): PanelStates {
   return panels
+}
+
+// ─── Persisted panel sizes ────────────────────────────────────────────
+
+const SIZES_KEY = 'gigi:panel-sizes'
+
+interface PanelSizes {
+  kanbanHeight: number
+  chatHeight: number
+}
+
+const DEFAULT_SIZES: PanelSizes = {
+  kanbanHeight: 200,
+  chatHeight: 300,
+}
+
+function loadSizes(): PanelSizes {
+  try {
+    const stored = localStorage.getItem(SIZES_KEY)
+    if (stored) return { ...DEFAULT_SIZES, ...JSON.parse(stored) }
+  } catch { /* ignore */ }
+  return { ...DEFAULT_SIZES }
+}
+
+function saveSizes(sizes: PanelSizes) {
+  try {
+    localStorage.setItem(SIZES_KEY, JSON.stringify(sizes))
+  } catch { /* ignore */ }
+}
+
+let sizes = $state<PanelSizes>(loadSizes())
+
+export function getKanbanHeight(): number {
+  return sizes.kanbanHeight
+}
+
+export function setKanbanHeight(h: number) {
+  sizes = { ...sizes, kanbanHeight: Math.max(120, Math.min(h, window.innerHeight * 0.6)) }
+  saveSizes(sizes)
+}
+
+export function getChatHeight(): number {
+  return sizes.chatHeight
+}
+
+export function setChatHeight(h: number) {
+  sizes = { ...sizes, chatHeight: Math.max(180, Math.min(h, window.innerHeight * 0.8)) }
+  saveSizes(sizes)
 }

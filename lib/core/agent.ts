@@ -12,6 +12,67 @@ import { execSync } from 'node:child_process'
 import { existsSync, readFileSync, mkdirSync, writeFileSync, chmodSync } from 'node:fs'
 import { homedir } from 'node:os'
 
+// ─── MCP Server Config ──────────────────────────────────────────────
+
+const loadMcpServers = (): Record<string, Record<string, unknown>> => {
+  const appDir = resolve(import.meta.dirname, '../..')
+  const servers: Record<string, Record<string, unknown>> = {}
+
+  try {
+    const raw = readFileSync(resolve(appDir, 'mcp-config.json'), 'utf-8')
+    const config = JSON.parse(raw)
+
+    for (const [name, spec] of Object.entries(config.mcpServers ?? {})) {
+      const s = { ...(spec as Record<string, unknown>) }
+
+      // Resolve env var placeholders in args
+      if (Array.isArray(s.args)) {
+        s.args = (s.args as string[]).map((arg) =>
+          typeof arg === 'string'
+            ? arg.replace(/\$\{(\w+)\}/g, (_, key: string) => process.env[key] || '')
+            : arg
+        )
+      }
+      // Resolve env var placeholders in env
+      if (s.env && typeof s.env === 'object') {
+        const env = { ...(s.env as Record<string, string>) }
+        for (const [k, v] of Object.entries(env)) {
+          env[k] = typeof v === 'string'
+            ? v.replace(/\$\{(\w+)\}/g, (_, key: string) => process.env[key] || '')
+            : v
+        }
+        s.env = env
+      }
+
+      // Resolve relative paths in args (e.g. lib/core/mcp.ts → absolute)
+      if (Array.isArray(s.args)) {
+        s.args = (s.args as string[]).map((arg) => {
+          if (typeof arg === 'string' && arg.match(/^(lib|src)\//) && existsSync(resolve(appDir, arg))) {
+            return resolve(appDir, arg)
+          }
+          return arg
+        })
+      }
+
+      // Skip chrome-devtools if CDP URL is not configured
+      if (name === 'chrome-devtools') {
+        const cdpUrl = process.env.CHROME_CDP_URL
+        if (!cdpUrl) {
+          console.log('[agent] Skipping chrome-devtools MCP (CHROME_CDP_URL not set)')
+          continue
+        }
+      }
+
+      servers[name] = s
+    }
+  } catch (err) {
+    console.warn('[agent] Could not load mcp-config.json:', (err as Error).message)
+  }
+
+  console.log('[agent] Loaded MCP servers:', Object.keys(servers).join(', ') || '(none)')
+  return servers
+}
+
 // ─── Types ──────────────────────────────────────────────────────────
 
 export interface AgentMessage {
@@ -90,6 +151,24 @@ You have full agency to improve yourself through the PR workflow.
 You have Claude Code tools (Bash, Read, Write, Edit, Glob, Grep) plus MCP tools:
 - \`gitea\` — Create PRs, repos, issues, comments (auth is automatic)
 - \`telegram_send\` — Send messages to Mauro on Telegram
+
+### Browser & Chrome DevTools (via chrome-devtools MCP)
+
+You have a shared browser (neko) that Mauro can see in the UI's Browser tab.
+When you navigate or interact, Mauro sees it live. Use these tools:
+
+- **navigate_page** — Open a URL (Mauro sees it in the Browser tab)
+- **evaluate_script** — Run JavaScript in the page (extract data, colors, text, etc.)
+- **take_screenshot** — Capture the current page
+- **take_snapshot** — Get a DOM snapshot (accessibility tree)
+- **click**, **fill**, **hover**, **press_key** — Interact with page elements
+- **list_network_requests**, **get_network_request** — Inspect network traffic
+- **list_console_messages** — Read browser console output
+
+**Example workflow — "What color is on randomcolour.com?":**
+1. \`navigate_page\` to the URL (Mauro sees it load in Browser tab)
+2. \`evaluate_script\` to extract: \`document.body.style.backgroundColor\` or inspect DOM
+3. Reply with the color value
 
 Git credentials are PRE-CONFIGURED. Just run git commands directly.
 
@@ -285,6 +364,7 @@ const getAgentEnv = async (): Promise<Record<string, string>> => {
 
   return {
     ...process.env as Record<string, string>,
+    PATH: process.env.PATH || '/usr/local/bin:/usr/bin:/bin',
     GITEA_URL: giteaUrl,
     GITEA_TOKEN: giteaToken,
     TELEGRAM_BOT_TOKEN: telegramToken,
@@ -424,15 +504,22 @@ export const runAgent = async (
     }
   }
 
+  const mcpServers = process.env.SKIP_MCP === '1' ? {} : loadMcpServers()
+  if (Object.keys(mcpServers).length) {
+    console.log('[agent] MCP servers config:', JSON.stringify(mcpServers, null, 2))
+  }
+
   const baseOptions = {
     systemPrompt: SYSTEM_PROMPT,
     model: 'claude-opus-4-6',
+    executable: process.execPath,
     env,
-    cwd: '/workspace',
+    cwd: process.env.WORKSPACE_DIR || '/workspace',
     maxTurns: 50,
     permissionMode: 'bypassPermissions' as const,
     allowDangerouslySkipPermissions: true,
     persistSession: true,
+    mcpServers,
     stderr: (data: string) => console.error('[claude-code]', data.trim()),
     hooks: {
       PostToolUseFailure: [{
@@ -528,6 +615,7 @@ ${retryCount === 2 ? '⚠️ This is your 2nd attempt. If it fails again, you wi
     }
 
     const prompt = formatMessages(messages)
+    console.log('[agent] spawning with executable:', baseOptions.executable, 'cwd:', baseOptions.cwd)
     const response = query({ prompt, options: baseOptions })
     await processResponse(response as unknown as AsyncIterable<Record<string, unknown>>)
     emitDone()

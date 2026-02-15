@@ -9,6 +9,8 @@ import { runAgent, type AgentMessage, type EventCallback } from './agent'
 import { emit } from './events'
 import * as store from './store'
 import { enforceCompletion, startTask, markNotified } from './enforcer'
+import type { ViewContext } from './protocol'
+import { createGiteaClient } from '../api-gitea'
 
 // Active conversations per channel key (e.g. "telegram:12345", "web:uuid")
 const active = new Map<string, string>()
@@ -16,11 +18,60 @@ const active = new Map<string, string>()
 // Track running agent processes by conversation ID
 const runningAgents = new Map<string, AbortController>()
 
+// ── View Context Enrichment ──────────────────────────────────────────
+
+const getGiteaClient = async () => {
+  const baseUrl = process.env.GITEA_URL || await store.getConfig('gitea_url') || 'http://192.168.1.80:3000'
+  const token = process.env.GITEA_TOKEN || await store.getConfig('gitea_token')
+  if (!token) return null
+  return createGiteaClient(baseUrl, token)
+}
+
+const enrichWithContext = async (text: string, context: ViewContext): Promise<string> => {
+  try {
+    const gitea = await getGiteaClient()
+    if (!gitea) return text
+
+    if (context.type === 'issue' && context.owner && context.repo && context.number) {
+      const issue = await gitea.issues.get(context.owner, context.repo, context.number)
+      const body = issue.body ? `\n${issue.body.slice(0, 2000)}\n` : ''
+      return `[Viewing issue ${context.owner}/${context.repo}#${context.number}: "${issue.title}" (${issue.state})]${body}\n${text}`
+    }
+
+    if (context.type === 'pull' && context.owner && context.repo && context.number) {
+      const pr = await gitea.pulls.get(context.owner, context.repo, context.number)
+      const body = pr.body ? `\n${pr.body.slice(0, 2000)}\n` : ''
+      return `[Viewing PR ${context.owner}/${context.repo}#${context.number}: "${pr.title}" (${pr.state}) ${pr.head?.ref || ''} → ${pr.base?.ref || ''}]${body}\n${text}`
+    }
+
+    if (context.type === 'file' && context.owner && context.repo && context.filepath) {
+      const file = await gitea.repos.getContents(context.owner, context.repo, context.filepath, context.branch)
+      const content = Buffer.from(file.content || '', 'base64').toString('utf-8')
+      return `[Viewing file ${context.owner}/${context.repo}/${context.filepath}]\n\`\`\`\n${content.slice(0, 4000)}\n\`\`\`\n\n${text}`
+    }
+
+    if (context.type === 'commit' && context.owner && context.repo && context.commitSha) {
+      return `[Viewing commit ${context.owner}/${context.repo}@${context.commitSha.slice(0, 12)}]\n\n${text}`
+    }
+
+    if (context.type === 'repo' && context.owner && context.repo) {
+      return `[Viewing repository ${context.owner}/${context.repo}]\n\n${text}`
+    }
+  } catch (err) {
+    console.warn('[router] Context enrichment failed:', (err as Error).message)
+  }
+
+  return text
+}
+
+// ── Message Handling ─────────────────────────────────────────────────
+
 export const handleMessage = async (
   channel: string,
   channelId: string,
   text: string,
-  onEvent?: EventCallback | null
+  onEvent?: EventCallback | null,
+  context?: ViewContext
 ): Promise<{ content: unknown[]; text: string; toolCalls: unknown[]; toolResults: Record<string, string>; sessionId: string | null; usage: unknown }> => {
   const key = `${channel}:${channelId}`
 
@@ -46,8 +97,11 @@ export const handleMessage = async (
     }
   }
 
+  // Enrich message with view context (if provided)
+  const enrichedText = context ? await enrichWithContext(text, context) : text
+
   // Store user message
-  await store.addMessage(convId, 'user', [{ type: 'text', text }])
+  await store.addMessage(convId, 'user', [{ type: 'text', text: enrichedText }])
 
   // Try to get existing session ID for resume
   let sessionId: string | null = null
@@ -60,7 +114,7 @@ export const handleMessage = async (
   // Build messages for agent
   let messages: AgentMessage[]
   if (sessionId) {
-    messages = [{ role: 'user', content: [{ type: 'text', text }] }]
+    messages = [{ role: 'user', content: [{ type: 'text', text: enrichedText }] }]
   } else {
     const history = await store.getMessages(convId)
     messages = history.map((m) => ({

@@ -6,9 +6,11 @@
    * - Loading state
    * - postMessage bridge (listen for Gitea events)
    * - Navigation sync (update SPA route when iframe navigates)
+   * - Polls iframe location to track in-iframe navigation for view context
    */
 
   import { onMount } from 'svelte'
+  import { parseGiteaPath, setViewContext } from '$lib/stores/navigation.svelte'
 
   interface Props {
     src: string
@@ -29,11 +31,38 @@
     }
 
     window.addEventListener('message', handleMessage)
-    return () => window.removeEventListener('message', handleMessage)
+
+    // Poll iframe location to detect in-iframe navigation (same-origin)
+    let lastPath = ''
+    const pollInterval = setInterval(() => {
+      try {
+        const path = iframe?.contentWindow?.location?.pathname
+        if (path && path !== lastPath) {
+          lastPath = path
+          setViewContext(parseGiteaPath(path))
+        }
+      } catch {
+        // Cross-origin or iframe not ready — ignore
+      }
+    }, 500)
+
+    return () => {
+      window.removeEventListener('message', handleMessage)
+      clearInterval(pollInterval)
+    }
   })
 
   function onIframeLoad() {
     loading = false
+    // Also sync view context on full page load
+    try {
+      const path = iframe?.contentWindow?.location?.pathname
+      if (path) {
+        setViewContext(parseGiteaPath(path))
+      }
+    } catch {
+      // Cross-origin — ignore
+    }
   }
 </script>
 

@@ -16,6 +16,10 @@ export interface Conversation {
   repo?: string
   createdAt: string
   updatedAt: string
+  lastMessagePreview?: string
+  usageCost?: number
+  usageInputTokens?: number
+  usageOutputTokens?: number
 }
 
 // ── Message ─────────────────────────────────────────────────────────

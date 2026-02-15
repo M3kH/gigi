@@ -22,6 +22,8 @@ export interface KanbanCard {
   assignee: { login: string; avatar_url: string } | null
   milestone: { title: string } | null
   comments: number
+  linked_prs: number
+  linked_chats: number
   created_at?: string
   updated_at?: string
   html_url: string

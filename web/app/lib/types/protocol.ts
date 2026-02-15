@@ -5,12 +5,15 @@
  * without depending on Zod in the browser bundle.
  */
 
+import type { ViewContext } from '$lib/stores/navigation.svelte'
+
 // ─── Client → Server ────────────────────────────────────────────────
 
 export type ChatSend = {
   type: 'chat:send'
   message: string
   conversationId?: string
+  context?: ViewContext
 }
 
 export type ChatStop = {
@@ -99,6 +102,13 @@ export type PongEvent = {
   type: 'pong'
 }
 
+export type GiteaEvent = {
+  type: 'gitea_event'
+  event: string    // e.g. 'repository', 'issues', 'push', 'pull_request'
+  action?: string  // e.g. 'created', 'deleted', 'opened', 'closed'
+  repo?: string
+}
+
 export type ServerMessage =
   | AgentStartEvent
   | TextChunkEvent
@@ -108,3 +118,4 @@ export type ServerMessage =
   | AgentStoppedEvent
   | TitleUpdateEvent
   | PongEvent
+  | GiteaEvent

@@ -161,7 +161,30 @@ else
   echo "No repositories to import (mount a directory to /repositories/)."
 fi
 
-# --- 6. Write config to Gigi's Postgres ---
+# --- 6. Register system-wide webhook ---
+echo "Registering system webhook..."
+WEBHOOK_SECRET=$(head -c 32 /dev/urandom | xxd -p | head -c 32)
+GIGI_WEBHOOK_URL="http://gigi:3000/webhook/gitea"
+
+# Create system webhook (fires for all events across all repos/orgs)
+curl -s -X POST "${GITEA_URL}/api/v1/admin/hooks" \
+  -H "$AUTH_HEADER" \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"type\": \"gitea\",
+    \"active\": true,
+    \"config\": {
+      \"url\": \"${GIGI_WEBHOOK_URL}\",
+      \"content_type\": \"json\",
+      \"secret\": \"${WEBHOOK_SECRET}\"
+    },
+    \"events\": [\"create\", \"delete\", \"push\", \"issues\", \"issue_comment\", \"pull_request\", \"pull_request_review\", \"repository\"],
+    \"branch_filter\": \"*\"
+  }" > /dev/null 2>&1 || true
+echo "  Webhook registered: ${GIGI_WEBHOOK_URL}"
+
+# --- 7. Write config to Gigi's Postgres ---
+# (was step 6)
 echo "Writing config to Gigi's Postgres..."
 
 psql -c "
@@ -175,6 +198,9 @@ psql -c "
 
 psql -c "INSERT INTO config (key, value) VALUES ('gitea_url', '${GITEA_URL}') ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now();"
 psql -c "INSERT INTO config (key, value) VALUES ('gitea_token', '${GIGI_TOKEN}') ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now();"
+psql -c "INSERT INTO config (key, value) VALUES ('gitea_password', '${GIGI_PASSWORD}') ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now();"
+psql -c "INSERT INTO config (key, value) VALUES ('admin_user', '${ADMIN_USER}') ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now();"
+psql -c "INSERT INTO config (key, value) VALUES ('webhook_secret', '${WEBHOOK_SECRET}') ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now();"
 
 if [ -n "$TELEGRAM_TOKEN" ]; then
   echo "Setting Telegram token..."
@@ -186,7 +212,7 @@ if [ -n "$CLAUDE_TOKEN" ]; then
   psql -c "INSERT INTO config (key, value) VALUES ('claude_oauth_token', '${CLAUDE_TOKEN}') ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now();"
 fi
 
-# --- 7. Write marker ---
+# --- 8. Write marker ---
 touch "$MARKER"
 echo ""
 echo "=== Gigi local-init complete ==="

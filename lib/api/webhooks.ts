@@ -8,14 +8,15 @@ import { createHmac, timingSafeEqual } from 'node:crypto'
 import { getConfig, checkRecentAction } from '../core/store'
 import { handleMessage } from '../core/router'
 import { routeWebhook } from './webhookRouter'
+import { emit } from '../core/events'
 
 import type { Context } from 'hono'
 
 // ─── Types ──────────────────────────────────────────────────────────
 
 export interface WebhookPayload {
-  repository?: { name: string; full_name: string }
-  action?: string
+  repository?: { name: string; full_name: string; html_url?: string }
+  action?: string // e.g. 'created', 'deleted', 'opened', 'closed'
   issue?: { number: number; title: string; body: string; html_url: string; user?: { login: string } }
   pull_request?: { title: string; number: number; head?: { ref: string }; base?: { ref: string }; merged: boolean; user?: { login: string }; html_url: string }
   number?: number
@@ -67,6 +68,14 @@ export const handleWebhook = async (c: Context): Promise<Response> => {
     console.log(`Skipping self-generated ${event}`)
     return c.json({ ok: true, skipped: 'self-generated' })
   }
+
+  // Broadcast to frontend via SSE so the UI updates in real-time
+  emit({
+    type: 'gitea_event',
+    event,
+    action: payload.action,
+    repo: payload.repository?.name,
+  })
 
   try {
     const result = await routeWebhook(event, payload)

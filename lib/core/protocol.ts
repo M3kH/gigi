@@ -6,12 +6,28 @@
 
 import { z } from 'zod'
 
+// ─── View Context ───────────────────────────────────────────────────
+
+export const ViewContextSchema = z.object({
+  type: z.enum(['overview', 'repo', 'issue', 'pull', 'file', 'commit', 'unknown']),
+  owner: z.string().optional(),
+  repo: z.string().optional(),
+  number: z.number().optional(),
+  filepath: z.string().optional(),
+  branch: z.string().optional(),
+  commitSha: z.string().optional(),
+  rawPath: z.string().optional(),
+})
+
+export type ViewContext = z.infer<typeof ViewContextSchema>
+
 // ─── Client → Server ────────────────────────────────────────────────
 
 export const ChatSend = z.object({
   type: z.literal('chat:send'),
   message: z.string().min(1),
   conversationId: z.string().uuid().optional(),
+  context: ViewContextSchema.optional(),
 })
 
 export const ChatStop = z.object({
@@ -103,6 +119,13 @@ export const PongEvent = z.object({
   type: z.literal('pong'),
 })
 
+export const GiteaEvent = z.object({
+  type: z.literal('gitea_event'),
+  event: z.string(),
+  action: z.string().optional(),
+  repo: z.string().optional(),
+})
+
 export const ServerMessage = z.discriminatedUnion('type', [
   AgentStartEvent,
   TextChunkEvent,
@@ -112,6 +135,7 @@ export const ServerMessage = z.discriminatedUnion('type', [
   AgentStoppedEvent,
   TitleUpdateEvent,
   PongEvent,
+  GiteaEvent,
 ])
 
 export type ServerMessage = z.infer<typeof ServerMessage>

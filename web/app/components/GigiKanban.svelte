@@ -211,9 +211,21 @@
                   </div>
                 {/if}
 
-                <!-- Footer: assignee + comments + time -->
+                <!-- Footer: assignee + comments + PRs + chats + time -->
                 <div class="card-footer">
                   <div class="card-meta">
+                    {#if card.linked_prs > 0}
+                      <span class="card-prs" title="{card.linked_prs} linked PRs">
+                        <svg viewBox="0 0 16 16" width="11" height="11" fill="currentColor"><path d="M5 3.254V3.25a.75.75 0 0 1 .75.75v5.5a.75.75 0 0 1-1.5 0V5.377A3.251 3.251 0 0 0 5 12.75a.75.75 0 0 0 1.5 0 1.75 1.75 0 0 1 3.5 0 .75.75 0 0 0 1.5 0A3.25 3.25 0 0 0 8.25 9.5h-.025a.75.75 0 0 1 0-1.5H8.5a1.75 1.75 0 0 1 0-3.5H7.25A.75.75 0 0 1 5 3.254z"/></svg>
+                        {card.linked_prs}
+                      </span>
+                    {/if}
+                    {#if card.linked_chats > 0}
+                      <span class="card-chats" title="{card.linked_chats} linked chats">
+                        <svg viewBox="0 0 16 16" width="11" height="11" fill="currentColor"><path d="M1 2.75A.75.75 0 0 1 1.75 2h12.5a.75.75 0 0 1 .75.75v8.5a.75.75 0 0 1-.75.75h-3.19l-3.06 2.3V12H1.75a.75.75 0 0 1-.75-.75v-8.5z"/></svg>
+                        {card.linked_chats}
+                      </span>
+                    {/if}
                     {#if card.comments > 0}
                       <span class="card-comments" title="{card.comments} comments">
                         💬 {card.comments}
@@ -514,6 +526,23 @@
     display: flex;
     align-items: center;
     gap: var(--gigi-space-sm);
+  }
+
+  .card-prs,
+  .card-chats {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    font-size: 10px;
+    color: var(--gigi-text-muted);
+  }
+
+  .card-prs {
+    color: var(--gigi-accent-green);
+  }
+
+  .card-chats {
+    color: var(--gigi-accent-blue);
   }
 
   .card-comments {

@@ -1,7 +1,7 @@
 /**
  * API — Web Server (Hono)
  *
- * HTTP endpoints for health, setup, conversations, chat, SSE events,
+ * HTTP endpoints for health, setup, conversations, chat,
  * webhooks, and static file serving.
  */
 
@@ -11,7 +11,6 @@ import { readFile } from 'node:fs/promises'
 import { healthCheck } from '../core/health'
 import { getSetupStatus, setupStep } from '../domain/setup'
 import { handleMessage, newConversation, resumeConversation, stopAgent, getRunningAgents } from '../core/router'
-import { subscribe } from '../core/events'
 import { handleWebhook } from './webhooks'
 import { createGiteaProxy } from './gitea-proxy'
 import * as store from '../core/store'
@@ -116,42 +115,9 @@ export const createApp = (): Hono => {
     return c.json(getRunningAgents())
   })
 
-  // SSE event stream — persistent connection, receives all agent events
-  app.get('/api/events', (c) => {
-    const stream = new ReadableStream({
-      start(controller) {
-        const encoder = new TextEncoder()
-        const send = (data: unknown): void => {
-          try { controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`)) } catch { /* ignore */ }
-        }
-
-        const unsubscribe = subscribe(send)
-
-        const keepalive = setInterval(() => {
-          try { controller.enqueue(encoder.encode(': keepalive\n\n')) } catch { /* ignore */ }
-        }, 30000)
-
-        c.req.raw.signal.addEventListener('abort', () => {
-          unsubscribe()
-          clearInterval(keepalive)
-          try { controller.close() } catch { /* ignore */ }
-        })
-      },
-    })
-
-    return new Response(stream, {
-      headers: {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache, no-transform',
-        'Connection': 'keep-alive',
-        'X-Accel-Buffering': 'no',
-      },
-    })
-  })
-
-  // Async chat — fire-and-forget, events flow through SSE
+  // Async chat — fire-and-forget, events flow through WebSocket
   app.post('/api/chat/send', async (c) => {
-    const { message, conversationId } = await c.req.json()
+    const { message, conversationId, context } = await c.req.json()
     if (!message) return c.json({ error: 'message required' }, 400)
 
     const channelId = conversationId || 'default'
@@ -160,7 +126,7 @@ export const createApp = (): Hono => {
       resumeConversation('web', channelId, conversationId)
     }
 
-    handleMessage('web', channelId, message).catch((err) => {
+    handleMessage('web', channelId, message, null, context).catch((err) => {
       console.error('[web] async chat error:', (err as Error).message)
     })
 
@@ -216,6 +182,25 @@ export const createApp = (): Hono => {
     })
   })
 
+  // Browser status (neko availability + auto-login URL)
+  app.get('/api/browser/status', async (c) => {
+    const browserMode = process.env.BROWSER_MODE || 'headless'
+    const nekoBaseUrl = process.env.NEKO_PUBLIC_URL
+    const nekoAdminPassword = process.env.NEKO_PASSWORD_ADMIN || 'admin'
+
+    if (!nekoBaseUrl || browserMode !== 'neko') {
+      return c.json({ available: false })
+    }
+
+    const nekoUrl = `${nekoBaseUrl}?usr=admin&pwd=${encodeURIComponent(nekoAdminPassword)}`
+
+    return c.json({
+      mode: browserMode,
+      nekoUrl,
+      available: true,
+    })
+  })
+
   // Gitea proxy endpoints (for frontend SPA)
   app.route('/api/gitea', createGiteaProxy())
 
@@ -244,21 +229,18 @@ export const createApp = (): Hono => {
   })
 
   // ── Svelte SPA (primary UI) ─────────────────────────────────────────
-  // Vite builds to dist/app/ with assets at /assets/*
-  app.use('/assets/*', serveStatic({ root: './dist/app' }))
+  // Vite builds to dist/app/ — serve all static assets (JS, CSS, images, etc.)
+  // Falls through to next handler when file not found
+  app.use('/*', serveStatic({ root: './dist/app' }))
+
   app.use('/shoelace/*', serveStatic({
     root: './node_modules/@shoelace-style/shoelace/dist',
     rewriteRequestPath: (p: string) => p.replace('/shoelace', ''),
   }))
 
-  // Serve the Svelte SPA or redirect to setup if not configured
+  // Serve the Svelte SPA (onboarding is handled client-side)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const serveSPA = async (c: any) => {
-    const status = await getSetupStatus()
-    if (!status.claude) {
-      const html = await readFile('web/setup.html', 'utf-8')
-      return c.html(html)
-    }
     const html = await readFile('dist/app/index.html', 'utf-8').catch(() => null)
     if (!html) {
       // Fallback to legacy UI if SPA not built yet
@@ -274,8 +256,10 @@ export const createApp = (): Hono => {
   app.all('/gitea/*', async (c) => {
     const giteaUrl = process.env.GITEA_URL || await store.getConfig('gitea_url') || 'http://192.168.1.80:3000'
     const giteaToken = process.env.GITEA_TOKEN || await store.getConfig('gitea_token')
+    const giteaPassword = process.env.GITEA_PASSWORD || await store.getConfig('gitea_password')
     const path = c.req.path.replace(/^\/gitea/, '') || '/'
-    const targetUrl = `${giteaUrl}${path}`
+    const query = c.req.url.includes('?') ? c.req.url.slice(c.req.url.indexOf('?')) : ''
+    const targetUrl = `${giteaUrl}${path}${query}`
 
     const headers = new Headers()
     // Forward relevant headers
@@ -284,25 +268,35 @@ export const createApp = (): Hono => {
       if (val) headers.set(key, val)
     }
 
-    // Inject auth so Gitea pages render as logged in
-    if (giteaToken) {
-      headers.set('Authorization', `token ${giteaToken}`)
-    }
+    // Reverse proxy auth — Gitea trusts X-WEBAUTH-USER for session creation
+    // The iframe shows the human user's session (admin), not the AI (gigi)
+    const adminUser = process.env.ADMIN_USER || await store.getConfig('admin_user') || 'mauro'
+    headers.set('X-WEBAUTH-USER', adminUser)
 
+    const hasBody = c.req.method !== 'GET' && c.req.method !== 'HEAD'
+    const body = hasBody ? await c.req.arrayBuffer() : undefined
     const resp = await fetch(targetUrl, {
       method: c.req.method,
       headers,
-      body: c.req.method !== 'GET' && c.req.method !== 'HEAD' ? c.req.raw.body : undefined,
-      redirect: 'follow',
+      body,
+      redirect: 'manual',
     })
 
-    // Forward response headers
+    // Forward response headers (use append for Set-Cookie)
     const respHeaders = new Headers()
-    resp.headers.forEach((v, k) => {
-      if (!['transfer-encoding', 'content-encoding'].includes(k.toLowerCase())) {
+    const skipHeaders = new Set(['transfer-encoding', 'content-encoding'])
+    for (const [k, v] of resp.headers.entries()) {
+      if (skipHeaders.has(k.toLowerCase())) continue
+      if (k.toLowerCase() === 'location') {
+        // Gitea redirects use ROOT_URL paths (e.g. /gitea/idea/repo)
+        // which already match our proxy prefix — pass through as-is
+        respHeaders.set(k, v)
+      } else if (k.toLowerCase() === 'set-cookie') {
+        respHeaders.append(k, v)
+      } else {
         respHeaders.set(k, v)
       }
-    })
+    }
 
     return new Response(resp.body, {
       status: resp.status,

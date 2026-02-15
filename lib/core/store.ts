@@ -23,6 +23,13 @@ export interface Conversation {
   closed_at: string | null
 }
 
+export interface ConversationWithPreview extends Conversation {
+  last_message_preview: string | null
+  usage_cost: number | null
+  usage_input_tokens: number | null
+  usage_output_tokens: number | null
+}
+
 export interface Message {
   id: string
   conversation_id: string
@@ -195,23 +202,23 @@ export const listConversations = async (
   channel: string | null = null,
   limit: number = 20,
   filters: ListFilters = {}
-): Promise<Conversation[]> => {
+): Promise<ConversationWithPreview[]> => {
   const conditions: string[] = []
   const params: unknown[] = []
   let i = 1
 
   if (channel) {
-    conditions.push(`channel = $${i}`)
+    conditions.push(`c.channel = $${i}`)
     params.push(channel)
     i++
   }
   if (filters.status) {
-    conditions.push(`status = $${i}`)
+    conditions.push(`c.status = $${i}`)
     params.push(filters.status)
     i++
   }
   if (filters.tag) {
-    conditions.push(`$${i} = ANY(tags)`)
+    conditions.push(`$${i} = ANY(c.tags)`)
     params.push(filters.tag)
     i++
   }
@@ -219,7 +226,40 @@ export const listConversations = async (
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''
   params.push(limit)
   const { rows } = await pool.query(
-    `SELECT * FROM conversations ${where} ORDER BY updated_at DESC LIMIT $${i}`,
+    `SELECT c.*,
+       lm.preview AS last_message_preview,
+       u.total_cost AS usage_cost,
+       u.input_tokens AS usage_input_tokens,
+       u.output_tokens AS usage_output_tokens
+     FROM conversations c
+     LEFT JOIN LATERAL (
+       SELECT LEFT(
+         CASE
+           WHEN jsonb_typeof(m.content) = 'string' THEN m.content #>> '{}'
+           WHEN jsonb_typeof(m.content) = 'array' THEN (
+             SELECT string_agg(elem->>'text', '')
+             FROM jsonb_array_elements(m.content) elem
+             WHERE elem->>'type' = 'text'
+           )
+           ELSE ''
+         END, 120
+       ) AS preview
+       FROM messages m
+       WHERE m.conversation_id = c.id
+       ORDER BY m.created_at DESC
+       LIMIT 1
+     ) lm ON true
+     LEFT JOIN LATERAL (
+       SELECT
+         COALESCE(SUM((usage->>'inputTokens')::int), 0) AS input_tokens,
+         COALESCE(SUM((usage->>'outputTokens')::int), 0) AS output_tokens,
+         COALESCE(SUM((usage->>'costUSD')::numeric), 0) AS total_cost
+       FROM messages
+       WHERE conversation_id = c.id AND usage IS NOT NULL
+     ) u ON true
+     ${where}
+     ORDER BY c.updated_at DESC
+     LIMIT $${i}`,
     params
   )
   return rows

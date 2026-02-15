@@ -11,6 +11,9 @@ services:
       - GITEA__server__START_SSH_SERVER=true
       - GITEA__server__BUILTIN_SSH_SERVER_USER=git
       - GITEA__service__DISABLE_REGISTRATION=true
+      - GITEA__service__ENABLE_REVERSE_PROXY_AUTHENTICATION=true
+      - GITEA__service__ENABLE_REVERSE_PROXY_AUTO_REGISTRATION=false
+      - GITEA__ui__DEFAULT_THEME=gitea-dark
       - GITEA__webhook__ALLOWED_HOST_LIST=*
     ports:
       - "3300:3000"
@@ -26,6 +29,45 @@ services:
       timeout: 3s
       retries: 30
       start_period: 10s
+
+  neko:
+    build:
+      context: ./neko
+      dockerfile: Dockerfile
+    shm_size: "2gb"
+    ports:
+      - "8080:8080"
+      - "9223:9223"
+      - "52000:52000/tcp"
+      - "52000:52000/udp"
+    environment:
+      NEKO_SCREEN: 1920x1080@30
+      NEKO_PASSWORD: neko
+      NEKO_PASSWORD_ADMIN: admin
+      NEKO_UDPMUX: 52000
+      NEKO_TCPMUX: 52000
+      NEKO_ICELITE: 1
+      NEKO_NAT1TO1: 127.0.0.1
+      NEKO_VIDEO_CODEC: h264
+      NEKO_VIDEO_BITRATE: 3000
+      NEKO_AUDIO_CODEC: opus
+      NEKO_IMPLICITCONTROL: "true"
+    volumes:
+      - ./neko/neko.yaml:/etc/neko/neko.yaml:ro
+      - ./neko/supervisord/chromium.conf:/etc/neko/supervisord/chromium.conf:ro
+      - ./neko/supervisord/cdp-relay.conf:/etc/neko/supervisord/cdp-relay.conf:ro
+    networks:
+      - gigi-local
+    cap_add:
+      - SYS_ADMIN
+    security_opt:
+      - seccomp:unconfined
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
   postgres:
     image: postgres:16-alpine
@@ -84,7 +126,10 @@ services:
         condition: service_completed_successfully
     environment:
       DATABASE_URL: postgresql://gigi:gigi@postgres:5432/gigi
-      BROWSER_MODE: headless
+      BROWSER_MODE: neko
+      NEKO_PUBLIC_URL: http://neko:8080/
+      NEKO_PASSWORD_ADMIN: admin
+      CHROME_CDP_URL: http://neko:9223
       PORT: 3000
     ports:
       - "3100:3000"

@@ -10,6 +10,7 @@
   import { getCurrentView } from '$lib/stores/navigation.svelte'
   import OverviewDashboard from '$components/dashboard/OverviewDashboard.svelte'
   import GiteaFrame from '$components/GiteaFrame.svelte'
+  import NekoBrowser from '$components/NekoBrowser.svelte'
 
   const view = $derived(getCurrentView())
 </script>
@@ -21,6 +22,8 @@
     {#key view.giteaPath}
       <GiteaFrame src={view.giteaPath} />
     {/key}
+  {:else if view.view === 'browser'}
+    <NekoBrowser />
   {/if}
 </main>
 

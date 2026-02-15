@@ -6,6 +6,7 @@ import { serve } from '@hono/node-server'
 import { connect, disconnect, cleanupOldActions } from '../lib/core/store'
 import { initEnforcer } from '../lib/core/enforcer'
 import { createApp } from '../lib/api/web'
+import { createWSServer } from './server'
 import { startTelegram, stopTelegram } from '../lib/api/telegram'
 
 const PORT = parseInt(process.env.PORT || '3000', 10)
@@ -28,10 +29,13 @@ const main = async (): Promise<void> => {
 
   // Start HTTP server
   const app = createApp()
-  serve({ fetch: app.fetch, port: PORT }, () => {
+  const server = serve({ fetch: app.fetch, port: PORT }, () => {
     console.log(`Gigi listening on :${PORT}`)
     console.log(`Open http://localhost:${PORT} for the web UI`)
   })
+
+  // Attach WebSocket server to the same HTTP server
+  createWSServer(server)
 
   // Start Telegram bot (if configured)
   try {
