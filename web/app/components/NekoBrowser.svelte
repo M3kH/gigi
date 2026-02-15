@@ -1,39 +1,17 @@
 <script lang="ts">
   /**
-   * NekoBrowser — Renders neko browser stream in Section D via iframe
+   * NekoBrowser — Renders browser view in Section D via noVNC iframe
    *
-   * Loads neko via same-origin proxy (/neko/) so we can inject CSS
-   * to strip the UI down to just the video canvas + minimal controls.
-   * Both Gigi (agent) and user share the same browser session.
+   * Connects to a headless Chrome instance running in a custom container
+   * with Xvfb + x11vnc + noVNC. No authentication needed.
+   * Both Gigi (agent via CDP) and user (via noVNC) share the same browser.
    */
 
   import { onMount } from 'svelte'
 
-  let iframe: HTMLIFrameElement
   let loading = $state(true)
-  let nekoUrl = $state('')
+  let browserUrl = $state('')
   let error = $state('')
-
-  // CSS injected into the neko iframe — hide chat, keep settings
-  const embedCSS = `
-    /* Hide chat panel and emoji picker */
-    .chat, .chat-history, .chat-send,
-    .neko-emoji, .emoji-menu { display: none !important; }
-  `
-
-  function injectStyles() {
-    try {
-      const doc = iframe?.contentDocument
-      if (!doc) return
-      if (doc.getElementById('gigi-neko-embed')) return
-      const style = doc.createElement('style')
-      style.id = 'gigi-neko-embed'
-      style.textContent = embedCSS
-      doc.head.appendChild(style)
-    } catch {
-      // Cross-origin — can't inject (will happen in production with external URL)
-    }
-  }
 
   onMount(async () => {
     try {
@@ -41,7 +19,7 @@
       if (res.ok) {
         const data = await res.json()
         if (data.available) {
-          nekoUrl = data.nekoUrl
+          browserUrl = data.browserUrl
         } else {
           error = 'Browser not available'
         }
@@ -55,10 +33,6 @@
 
   function onIframeLoad() {
     loading = false
-    injectStyles()
-    // Re-inject after neko's SPA renders (Vue mounts asynchronously)
-    setTimeout(injectStyles, 500)
-    setTimeout(injectStyles, 1500)
   }
 </script>
 
@@ -69,10 +43,9 @@
     {#if loading}
       <div class="neko-frame-loading">Loading browser...</div>
     {/if}
-    {#if nekoUrl}
+    {#if browserUrl}
       <iframe
-        bind:this={iframe}
-        src={nekoUrl}
+        src={browserUrl}
         title="Browser"
         class="neko-frame"
         class:loaded={!loading}

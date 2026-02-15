@@ -30,32 +30,16 @@ services:
       retries: 30
       start_period: 10s
 
-  neko:
+  chrome:
     build:
-      context: ./neko
+      context: ./chrome
       dockerfile: Dockerfile
     shm_size: "2gb"
     ports:
-      - "8080:8080"
-      - "9223:9223"
-      - "52000:52000/tcp"
-      - "52000:52000/udp"
+      - "6080:6080"    # noVNC (visual browser access)
+      - "9223:9223"    # CDP via nginx relay
     environment:
-      NEKO_SCREEN: 1920x1080@30
-      NEKO_PASSWORD: neko
-      NEKO_PASSWORD_ADMIN: admin
-      NEKO_UDPMUX: 52000
-      NEKO_TCPMUX: 52000
-      NEKO_ICELITE: 1
-      NEKO_NAT1TO1: 127.0.0.1
-      NEKO_VIDEO_CODEC: h264
-      NEKO_VIDEO_BITRATE: 3000
-      NEKO_AUDIO_CODEC: opus
-      NEKO_IMPLICITCONTROL: "true"
-    volumes:
-      - ./neko/neko.yaml:/etc/neko/neko.yaml:ro
-      - ./neko/supervisord/chromium.conf:/etc/neko/supervisord/chromium.conf:ro
-      - ./neko/supervisord/cdp-relay.conf:/etc/neko/supervisord/cdp-relay.conf:ro
+      DISPLAY: ":99"
     networks:
       - gigi-local
     cap_add:
@@ -63,7 +47,7 @@ services:
     security_opt:
       - seccomp:unconfined
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:8080/ || exit 1"]
+      test: ["CMD-SHELL", "curl -sf http://localhost:9223/json/version || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -126,10 +110,9 @@ services:
         condition: service_completed_successfully
     environment:
       DATABASE_URL: postgresql://gigi:gigi@postgres:5432/gigi
-      BROWSER_MODE: neko
-      NEKO_PUBLIC_URL: http://neko:8080/
-      NEKO_PASSWORD_ADMIN: admin
-      CHROME_CDP_URL: http://neko:9223
+      BROWSER_MODE: chrome
+      BROWSER_VIEW_URL: /browser/
+      CHROME_CDP_URL: http://chrome:9223
       PORT: 3000
     ports:
       - "3100:3000"

@@ -20,6 +20,7 @@
     "@hono/node-server": "^1.14.0",
     "@modelcontextprotocol/sdk": "^1.0.0",
     "@shoelace-style/shoelace": "^2.20.1",
+    "chrome-devtools-mcp": "^0.17.0",
     "grammy": "^1.35.0",
     "highlight.js": "^11.11.1",
     "hono": "^4.7.0",

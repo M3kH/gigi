@@ -35,14 +35,14 @@ export default defineConfig({
         target: process.env.GIGI_WS_URL || 'ws://localhost:3000',
         ws: true,
       },
-      '/neko': {
-        target: 'http://localhost:8080',
+      '/browser': {
+        target: 'http://localhost:6080',
         changeOrigin: true,
-        rewrite: (path: string) => path.replace(/^\/neko/, ''),
+        rewrite: (path: string) => path.replace(/^\/browser/, ''),
         ws: true,
       },
       '/cdp': {
-        target: 'http://localhost:9222',
+        target: 'http://localhost:9223',
         changeOrigin: true,
         rewrite: (path: string) => path.replace(/^\/cdp/, ''),
         ws: true,

@@ -47,7 +47,7 @@ const loadMcpServers = (): Record<string, Record<string, unknown>> => {
       // Resolve relative paths in args (e.g. lib/core/mcp.ts → absolute)
       if (Array.isArray(s.args)) {
         s.args = (s.args as string[]).map((arg) => {
-          if (typeof arg === 'string' && arg.match(/^(lib|src)\//) && existsSync(resolve(appDir, arg))) {
+          if (typeof arg === 'string' && arg.match(/^(lib|src|node_modules)\//) && existsSync(resolve(appDir, arg))) {
             return resolve(appDir, arg)
           }
           return arg

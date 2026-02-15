@@ -120,17 +120,23 @@ export const createApp = (): Hono => {
     const { message, conversationId, context } = await c.req.json()
     if (!message) return c.json({ error: 'message required' }, 400)
 
+    let resolvedConvId = conversationId
     const channelId = conversationId || 'default'
 
     if (conversationId) {
       resumeConversation('web', channelId, conversationId)
+    } else {
+      // Create conversation upfront so we can return the ID immediately
+      const conv = await store.createConversation('web', null)
+      resolvedConvId = conv.id
+      resumeConversation('web', channelId, resolvedConvId)
     }
 
     handleMessage('web', channelId, message, null, context).catch((err) => {
       console.error('[web] async chat error:', (err as Error).message)
     })
 
-    return c.json({ ok: true })
+    return c.json({ ok: true, conversationId: resolvedConvId })
   })
 
   // Legacy sync chat endpoint (backward compat)
@@ -182,21 +188,22 @@ export const createApp = (): Hono => {
     })
   })
 
-  // Browser status (neko availability + auto-login URL)
+  // Browser status (noVNC availability + auto-connect URL)
   app.get('/api/browser/status', async (c) => {
     const browserMode = process.env.BROWSER_MODE || 'headless'
-    const nekoBaseUrl = process.env.NEKO_PUBLIC_URL
-    const nekoAdminPassword = process.env.NEKO_PASSWORD_ADMIN || 'admin'
+    const viewUrl = process.env.BROWSER_VIEW_URL
 
-    if (!nekoBaseUrl || browserMode !== 'neko') {
+    if (!viewUrl || browserMode === 'headless') {
       return c.json({ available: false })
     }
 
-    const nekoUrl = `${nekoBaseUrl}?usr=admin&pwd=${encodeURIComponent(nekoAdminPassword)}`
+    // path= tells noVNC where to open the WebSocket (relative to page origin)
+    const wsPath = viewUrl.replace(/^\//, '') + 'websockify'
+    const browserUrl = `${viewUrl}vnc.html?autoconnect=true&resize=scale&reconnect=true&reconnect_delay=1000&path=${wsPath}`
 
     return c.json({
       mode: browserMode,
-      nekoUrl,
+      browserUrl,
       available: true,
     })
   })

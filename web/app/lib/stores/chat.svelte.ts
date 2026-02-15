@@ -33,6 +33,9 @@ let agentRunning = $state<Set<string>>(new Set())
 let streamingText = $state('')
 let liveToolBlocks = $state<LiveToolBlock[]>([])
 
+// Track when we're waiting for a new conversation's ID
+let awaitingConversation = $state(false)
+
 // ── REST API helpers ──────────────────────────────────────────────────
 
 async function apiFetch<T>(path: string, opts?: RequestInit): Promise<T> {
@@ -98,10 +101,14 @@ export async function sendMessage(text: string): Promise<void> {
   }
   messages = [...messages, userMsg]
 
-  // Send via REST (fire-and-forget, events come via SSE/WS)
+  // Track that we're awaiting a new conversation ID
+  const isNew = !activeConversationId
+  if (isNew) awaitingConversation = true
+
+  // Send via REST (fire-and-forget, events come via WS)
   try {
     const context = getViewContext()
-    await fetch('/api/chat/send', {
+    const res = await fetch('/api/chat/send', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -110,8 +117,19 @@ export async function sendMessage(text: string): Promise<void> {
         context: context.type !== 'overview' ? context : undefined,
       }),
     })
+
+    if (res.ok) {
+      const data = await res.json()
+      // Set conversation ID if we don't have one yet
+      // (agent_start event may have already set it via the race handler)
+      if (data.conversationId && !activeConversationId) {
+        activeConversationId = data.conversationId
+        awaitingConversation = false
+      }
+    }
   } catch (err) {
     console.error('[chat] Send failed:', err)
+    awaitingConversation = false
   }
 
   // Refresh sidebar shortly to catch new conversation
@@ -138,6 +156,11 @@ export function handleServerEvent(event: ServerMessage): void {
     case 'agent_start': {
       if (convId) {
         agentRunning = new Set([...agentRunning, convId])
+      }
+      // Adopt conversation ID for new conversations (handles race with REST response)
+      if (!activeConversationId && awaitingConversation && convId) {
+        activeConversationId = convId
+        awaitingConversation = false
       }
       if (convId === activeConversationId) {
         dialogState = 'thinking'
