@@ -53,6 +53,12 @@
       .slice(0, 5)
   )
 
+  // Filter out the gigi repo itself — it's platform infrastructure, not a user project
+  const userRepos = $derived(
+    overview?.repos.filter(r => r.name !== 'gigi') ?? []
+  )
+  const isEmpty = $derived(!loading && !error && userRepos.length === 0)
+
   // ── Fetch ──────────────────────────────────────────────────────────
 
   async function fetchOverview(): Promise<void> {
@@ -87,88 +93,129 @@
 </script>
 
 <div class="dashboard">
-  <!-- Quick Stats -->
-  <div class="stats-row">
-    <div class="stat-card">
-      <span class="stat-value">{overview?.totalRepos ?? '—'}</span>
-      <span class="stat-label">Repositories</span>
-    </div>
-    <div class="stat-card">
-      <span class="stat-value">{overview?.totalOpenIssues ?? '—'}</span>
-      <span class="stat-label">Open Issues</span>
-    </div>
-    <div class="stat-card">
-      <span class="stat-value">{overview?.totalOpenPRs ?? '—'}</span>
-      <span class="stat-label">Open PRs</span>
-    </div>
-    <div class="stat-card">
-      <span class="stat-value">{conversations.length}</span>
-      <span class="stat-label">Conversations</span>
-    </div>
-  </div>
+  {#if isEmpty}
+    <!-- Welcome / Empty state -->
+    <div class="welcome">
+      <div class="welcome-header">
+        <h1 class="welcome-title">Welcome to Gigi</h1>
+        <p class="welcome-subtitle">Your AI-powered development workspace. Let's get started.</p>
+      </div>
 
-  <!-- Main grid: repos + activity -->
-  <div class="dashboard-grid">
-    <!-- Repositories -->
-    <section class="section">
-      <h2 class="section-title">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-          <path d="M2 2.5A2.5 2.5 0 014.5 0h8.75a.75.75 0 01.75.75v12.5a.75.75 0 01-.75.75h-2.5a.75.75 0 110-1.5h1.75v-2h-8a1 1 0 00-.714 1.7.75.75 0 01-1.072 1.05A2.495 2.495 0 012 11.5v-9zm10.5-1h-8a1 1 0 00-1 1v6.708A2.486 2.486 0 014.5 9h8V1.5z"/>
-        </svg>
-        Repositories
-      </h2>
+      <div class="welcome-actions">
+        <button class="welcome-card" onclick={() => { /* TODO: import flow */ }}>
+          <span class="welcome-card-icon">
+            <svg width="24" height="24" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M2 2.5A2.5 2.5 0 014.5 0h8.75a.75.75 0 01.75.75v12.5a.75.75 0 01-.75.75h-2.5a.75.75 0 110-1.5h1.75v-2h-8a1 1 0 00-.714 1.7.75.75 0 01-1.072 1.05A2.495 2.495 0 012 11.5v-9zm10.5-1h-8a1 1 0 00-1 1v6.708A2.486 2.486 0 014.5 9h8V1.5z"/>
+            </svg>
+          </span>
+          <span class="welcome-card-title">Import a repository</span>
+          <span class="welcome-card-desc">Bring an existing project from GitHub, GitLab, or any git URL</span>
+        </button>
 
-      {#if loading}
-        <div class="loading-placeholder">
-          {#each Array(3) as _}
-            <div class="skeleton-card"></div>
-          {/each}
-        </div>
-      {:else if error}
-        <div class="error-banner">
-          <span>Failed to load: {error}</span>
-          <button onclick={fetchOverview}>Retry</button>
-        </div>
-      {:else if overview?.repos}
-        <div class="repo-list">
-          {#each overview.repos as repo}
-            <button class="repo-card" onclick={() => handleRepoClick(repo)}>
-              <div class="repo-header">
-                <span class="repo-name">{repo.name}</span>
-                {#if repo.updated_at}
-                  <span class="repo-updated">{formatRelativeTime(repo.updated_at)}</span>
+        <button class="welcome-card" onclick={() => { /* TODO: create repo flow */ }}>
+          <span class="welcome-card-icon">
+            <svg width="24" height="24" viewBox="0 0 16 16" fill="currentColor">
+              <path fill-rule="evenodd" d="M7.75 0a.75.75 0 01.75.75V7h6.25a.75.75 0 010 1.5H8.5v6.25a.75.75 0 01-1.5 0V8.5H.75a.75.75 0 010-1.5H7V.75A.75.75 0 017.75 0z"/>
+            </svg>
+          </span>
+          <span class="welcome-card-title">Create a new project</span>
+          <span class="welcome-card-desc">Start fresh with an empty repository</span>
+        </button>
+
+        <button class="welcome-card welcome-card-accent" onclick={() => { /* TODO: open chat */ }}>
+          <span class="welcome-card-icon">
+            <svg width="24" height="24" viewBox="0 0 16 16" fill="currentColor">
+              <path fill-rule="evenodd" d="M1.5 2.75a.25.25 0 01.25-.25h8.5a.25.25 0 01.25.25v5.5a.25.25 0 01-.25.25h-3.5a.75.75 0 00-.53.22L3.5 11.44V9.25a.75.75 0 00-.75-.75h-1a.25.25 0 01-.25-.25v-5.5zM1.75 1A1.75 1.75 0 000 2.75v5.5C0 9.216.784 10 1.75 10H2v1.543a1.457 1.457 0 002.487 1.03L7.061 10h3.189A1.75 1.75 0 0012 8.25v-5.5A1.75 1.75 0 0010.25 1h-8.5zM14.5 4.75a.25.25 0 00-.25-.25h-.5a.75.75 0 110-1.5h.5c.966 0 1.75.784 1.75 1.75v5.5A1.75 1.75 0 0114.25 12H14v1.543a1.457 1.457 0 01-2.487 1.03L9.22 12.28a.75.75 0 111.06-1.06l2.22 2.22v-2.19a.75.75 0 01.75-.75h1a.25.25 0 00.25-.25v-5.5z"/>
+            </svg>
+          </span>
+          <span class="welcome-card-title">Describe your project to Gigi</span>
+          <span class="welcome-card-desc">Tell Gigi what you want to build and she'll set it up for you</span>
+        </button>
+      </div>
+    </div>
+  {:else}
+    <!-- Quick Stats -->
+    <div class="stats-row">
+      <div class="stat-card">
+        <span class="stat-value">{userRepos.length}</span>
+        <span class="stat-label">Repositories</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-value">{overview?.totalOpenIssues ?? '—'}</span>
+        <span class="stat-label">Open Issues</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-value">{overview?.totalOpenPRs ?? '—'}</span>
+        <span class="stat-label">Open PRs</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-value">{conversations.length}</span>
+        <span class="stat-label">Conversations</span>
+      </div>
+    </div>
+
+    <!-- Main grid: repos + activity -->
+    <div class="dashboard-grid">
+      <!-- Repositories -->
+      <section class="section">
+        <h2 class="section-title">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M2 2.5A2.5 2.5 0 014.5 0h8.75a.75.75 0 01.75.75v12.5a.75.75 0 01-.75.75h-2.5a.75.75 0 110-1.5h1.75v-2h-8a1 1 0 00-.714 1.7.75.75 0 01-1.072 1.05A2.495 2.495 0 012 11.5v-9zm10.5-1h-8a1 1 0 00-1 1v6.708A2.486 2.486 0 014.5 9h8V1.5z"/>
+          </svg>
+          Repositories
+        </h2>
+
+        {#if loading}
+          <div class="loading-placeholder">
+            {#each Array(3) as _}
+              <div class="skeleton-card"></div>
+            {/each}
+          </div>
+        {:else if error}
+          <div class="error-banner">
+            <span>Failed to load: {error}</span>
+            <button onclick={fetchOverview}>Retry</button>
+          </div>
+        {:else}
+          <div class="repo-list">
+            {#each userRepos as repo}
+              <button class="repo-card" onclick={() => handleRepoClick(repo)}>
+                <div class="repo-header">
+                  <span class="repo-name">{repo.name}</span>
+                  {#if repo.updated_at}
+                    <span class="repo-updated">{formatRelativeTime(repo.updated_at)}</span>
+                  {/if}
+                </div>
+                {#if repo.description}
+                  <p class="repo-desc">{repo.description}</p>
                 {/if}
-              </div>
-              {#if repo.description}
-                <p class="repo-desc">{repo.description}</p>
-              {/if}
-              <div class="repo-stats">
-                {#if repo.open_issues_count > 0}
-                  <span class="badge badge-issues" title="Open issues">
-                    <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
-                      <path d="M8 9.5a1.5 1.5 0 100-3 1.5 1.5 0 000 3z"/>
-                      <path fill-rule="evenodd" d="M8 0a8 8 0 100 16A8 8 0 008 0zM1.5 8a6.5 6.5 0 1113 0 6.5 6.5 0 01-13 0z"/>
-                    </svg>
-                    {repo.open_issues_count}
-                  </span>
-                {/if}
-                {#if repo.open_pr_count > 0}
-                  <span class="badge badge-prs" title="Open PRs">
-                    <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
-                      <path fill-rule="evenodd" d="M7.177 3.073L9.573.677A.25.25 0 0110 .854v4.792a.25.25 0 01-.427.177L7.177 3.427a.25.25 0 010-.354zM3.75 2.5a.75.75 0 100 1.5.75.75 0 000-1.5zm-2.25.75a2.25 2.25 0 113 2.122v5.256a2.251 2.251 0 11-1.5 0V5.372A2.25 2.25 0 011.5 3.25zM11 2.5h-1V4h1a1 1 0 011 1v5.628a2.251 2.251 0 101.5 0V5A2.5 2.5 0 0011 2.5zm1 10.25a.75.75 0 111.5 0 .75.75 0 01-1.5 0zM3.75 12a.75.75 0 100 1.5.75.75 0 000-1.5z"/>
-                    </svg>
-                    {repo.open_pr_count}
-                  </span>
-                {/if}
-                {#if repo.open_issues_count === 0 && repo.open_pr_count === 0}
-                  <span class="badge badge-clean">All clear</span>
-                {/if}
-              </div>
-            </button>
-          {/each}
-        </div>
-      {/if}
-    </section>
+                <div class="repo-stats">
+                  {#if repo.open_issues_count > 0}
+                    <span class="badge badge-issues" title="Open issues">
+                      <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+                        <path d="M8 9.5a1.5 1.5 0 100-3 1.5 1.5 0 000 3z"/>
+                        <path fill-rule="evenodd" d="M8 0a8 8 0 100 16A8 8 0 008 0zM1.5 8a6.5 6.5 0 1113 0 6.5 6.5 0 01-13 0z"/>
+                      </svg>
+                      {repo.open_issues_count}
+                    </span>
+                  {/if}
+                  {#if repo.open_pr_count > 0}
+                    <span class="badge badge-prs" title="Open PRs">
+                      <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+                        <path fill-rule="evenodd" d="M7.177 3.073L9.573.677A.25.25 0 0110 .854v4.792a.25.25 0 01-.427.177L7.177 3.427a.25.25 0 010-.354zM3.75 2.5a.75.75 0 100 1.5.75.75 0 000-1.5zm-2.25.75a2.25 2.25 0 113 2.122v5.256a2.251 2.251 0 11-1.5 0V5.372A2.25 2.25 0 011.5 3.25zM11 2.5h-1V4h1a1 1 0 011 1v5.628a2.251 2.251 0 101.5 0V5A2.5 2.5 0 0011 2.5zm1 10.25a.75.75 0 111.5 0 .75.75 0 01-1.5 0zM3.75 12a.75.75 0 100 1.5.75.75 0 000-1.5z"/>
+                      </svg>
+                      {repo.open_pr_count}
+                    </span>
+                  {/if}
+                  {#if repo.open_issues_count === 0 && repo.open_pr_count === 0}
+                    <span class="badge badge-clean">All clear</span>
+                  {/if}
+                </div>
+              </button>
+            {/each}
+          </div>
+        {/if}
+      </section>
 
     <!-- Activity Feed -->
     <section class="section">
@@ -224,6 +271,7 @@
       </div>
     </section>
   </div>
+  {/if}
 </div>
 
 <style>
@@ -537,5 +585,94 @@
     padding: var(--gigi-space-xl);
     color: var(--gigi-text-muted);
     font-size: var(--gigi-font-size-sm);
+  }
+
+  /* ── Welcome / Empty State ─────────────────────────────────────── */
+
+  .welcome {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    gap: var(--gigi-space-2xl, 48px);
+    padding: var(--gigi-space-xl);
+  }
+
+  .welcome-header {
+    text-align: center;
+  }
+
+  .welcome-title {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--gigi-text-primary);
+    margin: 0 0 var(--gigi-space-sm) 0;
+  }
+
+  .welcome-subtitle {
+    font-size: var(--gigi-font-size-base);
+    color: var(--gigi-text-secondary);
+    margin: 0;
+  }
+
+  .welcome-actions {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: var(--gigi-space-md);
+    max-width: 780px;
+    width: 100%;
+  }
+
+  .welcome-card {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--gigi-space-sm);
+    background: var(--gigi-bg-secondary);
+    border: var(--gigi-border-width) solid var(--gigi-border-default);
+    border-radius: var(--gigi-radius-lg, 12px);
+    padding: var(--gigi-space-lg);
+    cursor: pointer;
+    transition: all var(--gigi-transition-fast);
+    font-family: var(--gigi-font-sans);
+    color: var(--gigi-text-primary);
+    text-align: left;
+  }
+
+  .welcome-card:hover {
+    border-color: var(--gigi-accent-blue);
+    background: var(--gigi-bg-hover);
+    transform: translateY(-2px);
+    box-shadow: var(--gigi-shadow-md, 0 4px 12px rgba(0, 0, 0, 0.15));
+  }
+
+  .welcome-card-accent {
+    border-color: var(--gigi-accent-green);
+    background: rgba(63, 185, 80, 0.05);
+  }
+
+  .welcome-card-accent:hover {
+    border-color: var(--gigi-accent-green);
+    background: rgba(63, 185, 80, 0.1);
+  }
+
+  .welcome-card-icon {
+    color: var(--gigi-text-muted);
+  }
+
+  .welcome-card-accent .welcome-card-icon {
+    color: var(--gigi-accent-green);
+  }
+
+  .welcome-card-title {
+    font-size: var(--gigi-font-size-base);
+    font-weight: 600;
+  }
+
+  .welcome-card-desc {
+    font-size: var(--gigi-font-size-sm);
+    color: var(--gigi-text-secondary);
+    line-height: 1.4;
   }
 </style>

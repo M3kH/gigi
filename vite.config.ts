@@ -20,7 +20,6 @@ export default defineConfig({
     proxy: {
       '/gitea': {
         target: 'http://localhost:3000',
-        rewrite: (path) => path.replace(/^\/gitea/, ''),
       },
       '/api': {
         // Proxy to the live Gigi app running on the cluster

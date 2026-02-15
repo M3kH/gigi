@@ -4,7 +4,7 @@ services:
     environment:
       - GITEA__security__INSTALL_LOCK=true
       - GITEA__database__DB_TYPE=sqlite3
-      - GITEA__server__ROOT_URL=http://localhost:3000
+      - GITEA__server__ROOT_URL=http://localhost:3300/gitea
       - GITEA__server__SSH_DOMAIN=localhost
       - GITEA__server__SSH_PORT=2222
       - GITEA__server__SSH_LISTEN_PORT=2222
@@ -13,7 +13,7 @@ services:
       - GITEA__service__DISABLE_REGISTRATION=true
       - GITEA__webhook__ALLOWED_HOST_LIST=*
     ports:
-      - "3000:3000"
+      - "3300:3000"
       - "2222:2222"
     volumes:
       - gitea-data:/data
@@ -92,8 +92,6 @@ services:
       - workspace:/workspace
     networks:
       - gigi-local
-    profiles:
-      - prod
 
 volumes:
   gitea-data:

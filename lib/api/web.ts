@@ -269,9 +269,11 @@ export const createApp = (): Hono => {
   }
 
   // ── Gitea UI proxy (iframe embedding) ──────────────────────────────
-  // Strips /gitea prefix and forwards to Gitea's web UI
+  // Forwards /gitea/* to Gitea (which serves at /gitea/ subpath via ROOT_URL)
+  // Injects auth token so the user appears logged in
   app.all('/gitea/*', async (c) => {
     const giteaUrl = process.env.GITEA_URL || await store.getConfig('gitea_url') || 'http://192.168.1.80:3000'
+    const giteaToken = process.env.GITEA_TOKEN || await store.getConfig('gitea_token')
     const path = c.req.path.replace(/^\/gitea/, '') || '/'
     const targetUrl = `${giteaUrl}${path}`
 
@@ -280,6 +282,11 @@ export const createApp = (): Hono => {
     for (const key of ['cookie', 'content-type', 'accept', 'accept-language']) {
       const val = c.req.header(key)
       if (val) headers.set(key, val)
+    }
+
+    // Inject auth so Gitea pages render as logged in
+    if (giteaToken) {
+      headers.set('Authorization', `token ${giteaToken}`)
     }
 
     const resp = await fetch(targetUrl, {

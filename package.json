@@ -6,7 +6,8 @@
   "main": "src/index.ts",
   "scripts": {
     "start": "node --import tsx src/index.ts",
-    "dev": "vite --config vite.config.ts",
+    "dev": "npm run dev:server & npm run dev:vite",
+    "dev:vite": "vite --config vite.config.ts",
     "dev:server": "node --import tsx --watch src/index.ts",
     "build": "vite build --config vite.config.ts",
     "typecheck": "tsc --noEmit",
