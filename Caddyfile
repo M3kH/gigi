@@ -9,7 +9,7 @@ claude.cluster.local {
 	}
 	handle @gitea {
 		uri strip_prefix /gitea
-		reverse_proxy idea-biancifiore-gigi_gitea:3000
+		reverse_proxy 192.168.1.80:3000
 	}
 
 	# Handle WebSocket connections for browser control on /ws path
