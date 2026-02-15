@@ -3,20 +3,19 @@
  *
  * Manages which view is displayed in the main content area:
  * - overview: Dashboard with repo summaries, stats, activity
- * - issue: Single issue detail view
- * - pull: Single PR detail view
- * - repo: Repository file explorer
+ * - gitea: Gitea page rendered in iframe (issues, PRs, code explorer)
  */
 
 // ── Types ─────────────────────────────────────────────────────────────
 
-export type ViewType = 'overview' | 'issue' | 'pull' | 'repo'
+export type ViewType = 'overview' | 'gitea'
 
 export interface NavigationTarget {
   view: ViewType
   owner?: string
   repo?: string
   number?: number
+  giteaPath?: string
 }
 
 // ── State ─────────────────────────────────────────────────────────────
@@ -44,16 +43,20 @@ export function goHome(): void {
   current = { view: 'overview' }
 }
 
+export function navigateToGitea(path: string): void {
+  navigate({ view: 'gitea', giteaPath: `/gitea${path}` })
+}
+
 export function navigateToIssue(owner: string, repo: string, number: number): void {
-  navigate({ view: 'issue', owner, repo, number })
+  navigate({ view: 'gitea', owner, repo, number, giteaPath: `/gitea/${owner}/${repo}/issues/${number}` })
 }
 
 export function navigateToPull(owner: string, repo: string, number: number): void {
-  navigate({ view: 'pull', owner, repo, number })
+  navigate({ view: 'gitea', owner, repo, number, giteaPath: `/gitea/${owner}/${repo}/pulls/${number}` })
 }
 
 export function navigateToRepo(owner: string, repo: string): void {
-  navigate({ view: 'repo', owner, repo })
+  navigate({ view: 'gitea', owner, repo, giteaPath: `/gitea/${owner}/${repo}` })
 }
 
 // ── Getters ───────────────────────────────────────────────────────────

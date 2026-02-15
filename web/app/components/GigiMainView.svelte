@@ -3,17 +3,13 @@
    * Section D: Main content area — View router
    *
    * Routes between:
-   * - Overview dashboard (default)
-   * - Issue detail view
-   * - Pull request detail view
-   * - Repository explorer
+   * - overview: Dashboard with repo summaries, stats, activity
+   * - gitea: Gitea page rendered in iframe (issues, PRs, code explorer)
    */
 
   import { getCurrentView } from '$lib/stores/navigation.svelte'
   import OverviewDashboard from '$components/dashboard/OverviewDashboard.svelte'
-  import IssueDetail from '$components/detail/IssueDetail.svelte'
-  import PullDetail from '$components/detail/PullDetail.svelte'
-  import RepoExplorer from '$components/detail/RepoExplorer.svelte'
+  import GiteaFrame from '$components/GiteaFrame.svelte'
 
   const view = $derived(getCurrentView())
 </script>
@@ -21,17 +17,9 @@
 <main class="gigi-main-view">
   {#if view.view === 'overview'}
     <OverviewDashboard />
-  {:else if view.view === 'issue'}
-    {#key `${view.owner}/${view.repo}/${view.number}`}
-      <IssueDetail />
-    {/key}
-  {:else if view.view === 'pull'}
-    {#key `${view.owner}/${view.repo}/${view.number}`}
-      <PullDetail />
-    {/key}
-  {:else if view.view === 'repo'}
-    {#key `${view.owner}/${view.repo}`}
-      <RepoExplorer />
+  {:else if view.view === 'gitea' && view.giteaPath}
+    {#key view.giteaPath}
+      <GiteaFrame src={view.giteaPath} />
     {/key}
   {/if}
 </main>
