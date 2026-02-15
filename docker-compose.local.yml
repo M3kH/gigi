@@ -17,6 +17,7 @@ services:
       - "2222:2222"
     volumes:
       - gitea-data:/data
+      - ./gitea/custom/templates:/data/gitea/templates:ro
     networks:
       - gigi-local
     healthcheck:

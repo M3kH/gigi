@@ -3,6 +3,15 @@ browser.cluster.local {
 }
 
 claude.cluster.local {
+	# Gitea UI proxy (iframe embedding)
+	@gitea {
+		path /gitea/*
+	}
+	handle @gitea {
+		uri strip_prefix /gitea
+		reverse_proxy idea-biancifiore-gigi_gitea:3000
+	}
+
 	# Handle WebSocket connections for browser control on /ws path
 	@browserws {
 		path /ws

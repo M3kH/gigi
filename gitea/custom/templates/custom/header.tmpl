@@ -1,0 +1,38 @@
+<script>
+(function() {
+  if (window.self === window.top) return;
+
+  window.parent.postMessage({
+    type: 'gitea:loaded',
+    path: window.location.pathname,
+    title: document.title
+  }, '*');
+
+  document.addEventListener('click', function(e) {
+    var link = e.target.closest('a[href]');
+    if (!link) return;
+    var href = link.getAttribute('href');
+    if (!href || href.startsWith('#') || href.startsWith('javascript:')) return;
+    if (href.startsWith('http') && !href.includes(window.location.host)) {
+      link.target = '_blank';
+      return;
+    }
+  });
+
+  window.addEventListener('message', function(e) {
+    if (!e.data || !e.data.type) return;
+
+    if (e.data.type === 'gigi:scrollTo') {
+      var el = document.querySelector(e.data.selector);
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    if (e.data.type === 'gigi:getHeight') {
+      window.parent.postMessage({
+        type: 'gitea:height',
+        height: document.documentElement.scrollHeight
+      }, '*');
+    }
+  });
+})();
+</script>

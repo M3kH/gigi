@@ -18,6 +18,10 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
+      '/gitea': {
+        target: 'http://localhost:3000',
+        rewrite: (path) => path.replace(/^\/gitea/, ''),
+      },
       '/api': {
         // Proxy to the live Gigi app running on the cluster
         // Falls back to localhost:3000 if GIGI_API_URL env var not set
