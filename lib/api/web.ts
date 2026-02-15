@@ -268,6 +268,41 @@ export const createApp = (): Hono => {
     return c.html(html)
   }
 
+  // ── Gitea UI proxy (iframe embedding) ──────────────────────────────
+  // Strips /gitea prefix and forwards to Gitea's web UI
+  app.all('/gitea/*', async (c) => {
+    const giteaUrl = process.env.GITEA_URL || await store.getConfig('gitea_url') || 'http://192.168.1.80:3000'
+    const path = c.req.path.replace(/^\/gitea/, '') || '/'
+    const targetUrl = `${giteaUrl}${path}`
+
+    const headers = new Headers()
+    // Forward relevant headers
+    for (const key of ['cookie', 'content-type', 'accept', 'accept-language']) {
+      const val = c.req.header(key)
+      if (val) headers.set(key, val)
+    }
+
+    const resp = await fetch(targetUrl, {
+      method: c.req.method,
+      headers,
+      body: c.req.method !== 'GET' && c.req.method !== 'HEAD' ? c.req.raw.body : undefined,
+      redirect: 'follow',
+    })
+
+    // Forward response headers
+    const respHeaders = new Headers()
+    resp.headers.forEach((v, k) => {
+      if (!['transfer-encoding', 'content-encoding'].includes(k.toLowerCase())) {
+        respHeaders.set(k, v)
+      }
+    })
+
+    return new Response(resp.body, {
+      status: resp.status,
+      headers: respHeaders,
+    })
+  })
+
   // Root route — now serves the Svelte app
   app.get('/', async (c) => serveSPA(c))
 
