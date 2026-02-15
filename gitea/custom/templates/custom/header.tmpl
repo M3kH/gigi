@@ -8,15 +8,36 @@
     title: document.title
   }, '*');
 
+  // Rewrite internal links to stay within /gitea/ proxy path
   document.addEventListener('click', function(e) {
     var link = e.target.closest('a[href]');
     if (!link) return;
     var href = link.getAttribute('href');
     if (!href || href.startsWith('#') || href.startsWith('javascript:')) return;
+
+    // External links open in new tab
     if (href.startsWith('http') && !href.includes(window.location.host)) {
       link.target = '_blank';
       return;
     }
+
+    // Absolute paths without /gitea/ prefix: rewrite to stay in proxy
+    if (href.startsWith('/') && !href.startsWith('/gitea/')) {
+      e.preventDefault();
+      window.location.href = '/gitea' + href;
+    }
+  });
+
+  // Rewrite form actions to stay within /gitea/ proxy path
+  document.addEventListener('submit', function(e) {
+    var form = e.target;
+    if (!form || !form.action) return;
+    try {
+      var url = new URL(form.action);
+      if (url.origin === window.location.origin && !url.pathname.startsWith('/gitea/')) {
+        form.action = '/gitea' + url.pathname + url.search;
+      }
+    } catch(err) {}
   });
 
   window.addEventListener('message', function(e) {
