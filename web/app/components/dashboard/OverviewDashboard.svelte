@@ -55,10 +55,7 @@
       .slice(0, 5)
   )
 
-  // Filter out the gigi repo itself — it's platform infrastructure, not a user project
-  const userRepos = $derived(
-    overview?.repos.filter(r => r.name !== 'gigi') ?? []
-  )
+  const userRepos = $derived(overview?.repos ?? [])
   const isEmpty = $derived(!loading && !error && userRepos.length === 0)
 
   // ── Fetch ──────────────────────────────────────────────────────────
