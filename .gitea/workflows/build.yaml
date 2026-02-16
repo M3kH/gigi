@@ -40,10 +40,21 @@ jobs:
           docker push ${{ env.REGISTRY }}/${{ env.IMAGE }}:${{ github.sha }}
           docker push ${{ env.REGISTRY }}/${{ env.IMAGE }}:latest
 
+      - name: Build AIO image
+        run: |
+          docker build -f Dockerfile.aio \
+            -t ${{ env.REGISTRY }}/${{ env.IMAGE }}:aio-${{ github.sha }} \
+            -t ${{ env.REGISTRY }}/${{ env.IMAGE }}:aio .
+
+      - name: Push AIO image
+        run: |
+          docker push ${{ env.REGISTRY }}/${{ env.IMAGE }}:aio-${{ github.sha }}
+          docker push ${{ env.REGISTRY }}/${{ env.IMAGE }}:aio
+
       - name: Deploy service
         run: |
           ssh $SSH_OPTS m@${{ env.DEPLOY_HOST }} "
-            sudo docker service update --image ${{ env.REGISTRY }}/${{ env.IMAGE }}:latest \
+            sudo docker service update --image ${{ env.REGISTRY }}/${{ env.IMAGE }}:aio \
               --with-registry-auth --force gigi-prod_gigi"
 
       - name: Verify health
