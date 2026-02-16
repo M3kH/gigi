@@ -330,7 +330,7 @@ export const createApp = (): Hono => {
 
     const headers = new Headers()
     // Forward relevant headers
-    for (const key of ['cookie', 'content-type', 'accept', 'accept-language']) {
+    for (const key of ['cookie', 'content-type', 'accept', 'accept-language', 'x-csrf-token']) {
       const val = c.req.header(key)
       if (val) headers.set(key, val)
     }
