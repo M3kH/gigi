@@ -195,7 +195,7 @@ EOINI
       );" 2>/dev/null || true
 
     for kv in \
-      "gitea_url|http://localhost:3300" \
+      "gitea_url|http://localhost:3300/gitea" \
       "gitea_token|${GIGI_TOKEN}" \
       "gitea_password|${GIGI_PASSWORD}" \
       "admin_user|${ADMIN_USER}" \
@@ -216,10 +216,11 @@ EOINI
   # Clean up LevelDB locks left by init Gitea (prevents queue lock errors)
   rm -f /data/gitea/data/queues/common/LOCK
 
-  # Enable SSH for the production Gitea instance (was disabled during init to avoid port conflicts)
+  # Reconfigure for production: subpath + SSH
   GITEA_CONF="/data/gitea/conf/app.ini"
+  INSTANCE_URL="${GIGI_INSTANCE_URL:-https://prod.gigi.local}"
+  sed -i "s|ROOT_URL = http://localhost:3300/|ROOT_URL = ${INSTANCE_URL}/gitea/|" "$GITEA_CONF"
   sed -i 's/START_SSH_SERVER = false/START_SSH_SERVER = true/' "$GITEA_CONF"
-  # Add SSH config if not present
   if ! grep -q "SSH_PORT" "$GITEA_CONF"; then
     sed -i '/START_SSH_SERVER/a SSH_PORT = 2222\nSSH_LISTEN_PORT = 2222\nSSH_DOMAIN = prod.gigi.local\nBUILTIN_SSH_SERVER_USER = git' "$GITEA_CONF"
   fi
