@@ -1,0 +1,95 @@
+# ── Stage 1: Build the Node app (reuses existing Dockerfile logic) ────
+FROM node:20-slim AS app-builder
+
+WORKDIR /app
+
+COPY package.json package-lock.json* ./
+RUN npm ci
+
+COPY tsconfig.json vite.config.ts ./
+COPY src/ src/
+COPY lib/ lib/
+COPY web/ web/
+COPY mcp-config.json ./
+
+# Build: type-check + Vite SPA
+RUN npx tsc --noEmit && npx vite build --config vite.config.ts
+
+# Prune to production deps + tsx for TS runtime
+RUN npm prune --omit=dev 2>/dev/null; npm install tsx
+
+# ── Stage 2: Download Gitea binary ────────────────────────────────────
+FROM debian:bookworm-slim AS gitea-downloader
+
+ARG GITEA_VERSION=1.24.0
+RUN apt-get update && apt-get install -y --no-install-recommends wget ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN ARCH=$(dpkg --print-architecture) \
+    && wget -qO /usr/local/bin/gitea \
+       "https://dl.gitea.com/gitea/${GITEA_VERSION}/gitea-${GITEA_VERSION}-linux-${ARCH}" \
+    && chmod +x /usr/local/bin/gitea
+
+# ── Stage 3: Final AIO image ─────────────────────────────────────────
+FROM debian:bookworm-slim
+
+# System packages: Node.js, Chrome, display, VNC, supervisor, nginx, tools
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    # Node.js runtime
+    curl ca-certificates \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
+    # Chrome + display
+    chromium xvfb x11vnc novnc websockify \
+    # Networking & tools
+    nginx supervisor git ssh postgresql-client \
+    # Chrome dependencies
+    libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 \
+    libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 \
+    libasound2 libatspi2.0-0 libgtk-3-0 \
+    # Docker CLI (for runner-worker image build)
+    docker.io \
+    && rm -rf /var/lib/apt/lists/* \
+    && rm -f /etc/nginx/sites-enabled/default
+
+# Install Claude Code CLI
+RUN curl -fsSL https://claude.ai/install.sh | bash \
+    || npm install -g @anthropic-ai/claude-code
+
+# Create gigi user
+RUN useradd -m -s /bin/bash gigi \
+    && mkdir -p /data/gitea /data/workspace /data/chrome-profile /var/log/gigi /opt/runner-worker \
+    && chown -R gigi:gigi /data /var/log/gigi
+
+# Gitea binary
+COPY --from=gitea-downloader /usr/local/bin/gitea /usr/local/bin/gitea
+
+# Node app
+WORKDIR /app
+COPY --from=app-builder /app/node_modules ./node_modules
+COPY --from=app-builder /app/dist ./dist
+COPY --from=app-builder /app/package.json ./
+COPY src/ src/
+COPY lib/ lib/
+COPY web/ web/
+COPY mcp-config.json ./
+COPY gitea/ gitea/
+COPY scripts/entrypoint.sh scripts/
+
+# AIO config
+COPY aio/supervisord.conf /etc/supervisor/conf.d/gigi-aio.conf.template
+COPY aio/cdp-proxy.conf /etc/nginx/conf.d/cdp-proxy.conf
+COPY aio/entrypoint.sh /aio-entrypoint.sh
+RUN chmod +x /aio-entrypoint.sh
+
+# Runner-worker Dockerfile (for bootstrap build)
+COPY runner-worker/Dockerfile /opt/runner-worker/Dockerfile
+
+RUN chown -R gigi:gigi /app
+
+EXPOSE 3000 6080
+
+HEALTHCHECK --interval=10s --timeout=5s --retries=3 \
+  CMD curl -f http://localhost:3000/health || exit 1
+
+CMD ["/aio-entrypoint.sh"]
