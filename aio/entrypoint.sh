@@ -69,11 +69,8 @@ if [ "$ENABLE_GITEA" = "true" ] && [ ! -f "$MARKER" ]; then
 [server]
 HTTP_PORT = 3300
 ROOT_URL = http://localhost:3300/
-SSH_DOMAIN = localhost
-SSH_PORT = 2222
-SSH_LISTEN_PORT = 2222
-START_SSH_SERVER = true
-BUILTIN_SSH_SERVER_USER = git
+START_SSH_SERVER = false
+SSH_DISABLE_AUTHORIZED_KEYS_DB = true
 
 [database]
 DB_TYPE = sqlite3
