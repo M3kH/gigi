@@ -572,6 +572,12 @@ export const runAgent = async (
 
   const processResponse = async (response: AsyncIterable<Record<string, unknown>>): Promise<void> => {
     for await (const message of response) {
+      // Check abort signal each iteration so stop takes effect mid-stream
+      if (signal?.aborted) {
+        const err = new Error('Agent aborted')
+        err.name = 'AbortError'
+        throw err
+      }
       if (!capturedSessionId && message.session_id) {
         capturedSessionId = message.session_id as string
       }
