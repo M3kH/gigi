@@ -195,7 +195,7 @@ EOINI
       );" 2>/dev/null || true
 
     for kv in \
-      "gitea_url|http://localhost:3300/gitea" \
+      "gitea_url|http://localhost:3300" \
       "gitea_token|${GIGI_TOKEN}" \
       "gitea_password|${GIGI_PASSWORD}" \
       "admin_user|${ADMIN_USER}" \
