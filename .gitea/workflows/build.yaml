@@ -4,6 +4,7 @@ on:
     branches: [main]
 
 env:
+  REGISTRY: prod.gigi.local/gitea
   IMAGE: gigi/gigi
   DEPLOY_HOST: 192.168.1.110
   SSH_OPTS: "-i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=accept-new"
@@ -22,22 +23,28 @@ jobs:
           chmod 600 ~/.ssh/id_ed25519
           echo "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
 
-      - name: Build on cluster (arm64)
+      - name: Login to Gitea registry
         run: |
-          rsync -az -e "ssh $SSH_OPTS" --exclude=.git --exclude=node_modules \
-            . m@${{ env.DEPLOY_HOST }}:/tmp/gigi-build/
-          ssh $SSH_OPTS m@${{ env.DEPLOY_HOST }} "
-            set -e
-            cd /tmp/gigi-build
-            sudo docker build -t prod.gigi.local/${{ env.IMAGE }}:${{ github.sha }} \
-                               -t prod.gigi.local/${{ env.IMAGE }}:latest .
-            rm -rf /tmp/gigi-build"
+          echo "${{ secrets.REGISTRY_PASSWORD }}" | docker login ${{ env.REGISTRY }} \
+            -u "${{ secrets.REGISTRY_USER }}" --password-stdin
+
+      - name: Build Docker image
+        run: |
+          docker build \
+            -t ${{ env.REGISTRY }}/${{ env.IMAGE }}:${{ github.sha }} \
+            -t ${{ env.REGISTRY }}/${{ env.IMAGE }}:latest \
+            .
+
+      - name: Push to Gitea registry
+        run: |
+          docker push ${{ env.REGISTRY }}/${{ env.IMAGE }}:${{ github.sha }}
+          docker push ${{ env.REGISTRY }}/${{ env.IMAGE }}:latest
 
       - name: Deploy service
         run: |
           ssh $SSH_OPTS m@${{ env.DEPLOY_HOST }} "
-            sudo docker service update --image prod.gigi.local/${{ env.IMAGE }}:latest \
-              --force gigi-prod_gigi"
+            sudo docker service update --image ${{ env.REGISTRY }}/${{ env.IMAGE }}:latest \
+              --with-registry-auth --force gigi-prod_gigi"
 
       - name: Verify health
         run: |
