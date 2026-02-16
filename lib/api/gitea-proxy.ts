@@ -13,6 +13,7 @@ import { getConfig, listConversations } from '../core/store'
 // ─── Singleton client ───────────────────────────────────────────────
 
 let client: GiteaClient | null = null
+let orgName: string | null = null
 
 const getClient = async (): Promise<GiteaClient> => {
   if (!client) {
@@ -22,6 +23,13 @@ const getClient = async (): Promise<GiteaClient> => {
     client = createGiteaClient(baseUrl, token)
   }
   return client
+}
+
+const getOrg = async (): Promise<string> => {
+  if (!orgName) {
+    orgName = process.env.GITEA_ORG || await getConfig('gitea_org') || 'gigi'
+  }
+  return orgName
 }
 
 // ─── Routes ─────────────────────────────────────────────────────────
@@ -38,7 +46,7 @@ export const createGiteaProxy = (): Hono => {
   api.get('/overview', async (c) => {
     try {
       const gitea = await getClient()
-      const org = 'idea'
+      const org = await getOrg()
 
       // Fetch org info and repos in parallel
       const [orgInfo, repos] = await Promise.all([
@@ -78,7 +86,7 @@ export const createGiteaProxy = (): Hono => {
       })
 
       return c.json({
-        org: { id: orgInfo.id, name: orgInfo.username },
+        org: { id: orgInfo.id, name: (orgInfo as Record<string, unknown>).username ?? orgInfo.name },
         repos: repoSummaries.filter(r => !r.archived),
         totalRepos: repoSummaries.filter(r => !r.archived).length,
         totalOpenIssues: repoSummaries.reduce((sum, r) => sum + (r.open_issues_count || 0), 0),
@@ -162,7 +170,7 @@ export const createGiteaProxy = (): Hono => {
   api.get('/board', async (c) => {
     try {
       const gitea = await getClient()
-      const org = 'idea'
+      const org = await getOrg()
 
       // Define board columns from status labels (matches domain/projects.ts)
       const columns = [

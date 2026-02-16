@@ -153,7 +153,7 @@ export interface ToolFailureInput {
   error: string
 }
 
-export const handlePreToolUse = async (_input: { tool_name: string }): Promise<Record<string, unknown>> => ({
+export const handlePreToolUse = async (_input: unknown): Promise<Record<string, unknown>> => ({
   hookSpecificOutput: {
     hookEventName: 'PreToolUse' as const,
     permissionDecision: 'deny' as const,
@@ -164,7 +164,8 @@ export const handlePreToolUse = async (_input: { tool_name: string }): Promise<R
 export const createToolFailureHandler = () => {
   const toolFailures = new Map<string, number>()
 
-  const handler = async (input: ToolFailureInput): Promise<{ systemMessage: string }> => {
+  const handler = async (rawInput: unknown): Promise<{ systemMessage: string }> => {
+    const input = rawInput as ToolFailureInput
     const failureKey = `${input.tool_name}:${JSON.stringify(input.tool_input)}`
     const retryCount = (toolFailures.get(failureKey) || 0) + 1
     toolFailures.set(failureKey, retryCount)
@@ -269,8 +270,8 @@ You have Claude Code tools (Bash, Read, Write, Edit, Glob, Grep) plus MCP tools 
 **CRITICAL — MCP tool usage:**
 - Use MCP tools EXACTLY as they appear in your tool list. Do NOT invent tool names.
 - The \`gitea\` tool takes an \`action\` parameter: \`create_repo\`, \`create_pr\`, \`list_issues\`, \`get_issue\`, \`comment_issue\`, \`list_repos\`, \`list_prs\`, \`get_pr\`, \`get_pr_diff\`
-- ALWAYS use \`owner: "idea"\` when creating repos — repos go under the org, not personal accounts
-- Example: \`gitea({ action: "create_repo", owner: "idea", repo: "my-project", body: "Description here" })\`
+- ALWAYS use \`owner: "${process.env.GITEA_ORG || 'gigi'}"\` when creating repos — repos go under the org, not personal accounts
+- Example: \`gitea({ action: "create_repo", owner: "${process.env.GITEA_ORG || 'gigi'}", repo: "my-project", body: "Description here" })\`
 
 **CRITICAL — Asking questions:**
 - Use the \`ask_user\` MCP tool to ask Mauro questions. It blocks until he answers.
@@ -307,14 +308,14 @@ Git credentials are PRE-CONFIGURED. Just run git commands directly.
 
 ## How to create a PR
 
-1. \`git clone $GITEA_URL/idea/{repo}.git /workspace/{repo}\`
+1. \`git clone $GITEA_URL/${process.env.GITEA_ORG || 'gigi'}/{repo}.git /workspace/{repo}\`
 2. \`cd /workspace/{repo} && git checkout -b feat/my-feature\`
 3. Use Write/Edit to create/modify files
 4. \`cd /workspace/{repo} && git add -A && git commit -m "..." && git push -u origin feat/my-feature\`
 5. Create PR via MCP gitea tool:
    \`\`\`
    Use the gitea tool with action: "create_pr"
-   owner: "idea", repo: "{repo}"
+   owner: "${process.env.GITEA_ORG || 'gigi'}", repo: "{repo}"
    title: "...", body: "...", head: "feat/my-feature", base: "main"
    \`\`\`
    **IMPORTANT**: Include "Closes #N" in the PR body to link to the issue
@@ -640,7 +641,7 @@ export const runAgent = async (
     }
   }
 
-  const mcpServers = process.env.SKIP_MCP === '1' ? {} : loadMcpServers(env)
+  const mcpServers = process.env.SKIP_MCP === '1' ? {} : loadMcpServers(env) as Record<string, never>
   if (Object.keys(mcpServers).length) {
     console.log('[agent] MCP servers config:', JSON.stringify(mcpServers, null, 2))
   }
@@ -648,7 +649,7 @@ export const runAgent = async (
   const baseOptions = {
     systemPrompt: SYSTEM_PROMPT,
     model: 'claude-opus-4-6',
-    executable: process.execPath,
+    executable: process.execPath as 'node' | 'bun' | 'deno',
     env,
     cwd: process.env.WORKSPACE_DIR || '/workspace',
     maxTurns: 50,
