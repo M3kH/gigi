@@ -275,7 +275,7 @@ export const createGiteaProxy = (): Hono => {
         })),
       }))
 
-      return c.json({ columns: board, totalIssues: allIssues.length })
+      return c.json({ org, columns: board, totalIssues: allIssues.length })
     } catch (err) {
       console.error('[gitea-proxy] board error:', (err as Error).message)
       return c.json({ error: (err as Error).message }, 500)

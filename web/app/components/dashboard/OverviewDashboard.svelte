@@ -104,7 +104,7 @@
   // ── Handlers ───────────────────────────────────────────────────────
 
   function handleRepoClick(repo: RepoSummary): void {
-    navigateToRepo('idea', repo.name)
+    navigateToRepo(overview?.org.name ?? 'gigi', repo.name)
   }
 
   function handleConversationClick(convId: string): void {
@@ -290,7 +290,7 @@
           <span class="action-icon">💬</span>
           <span>Ask Gigi</span>
         </button>
-        <button class="action-btn" onclick={() => window.open('http://192.168.1.80:3000/idea', '_blank')}>
+        <button class="action-btn" onclick={() => navigateToGitea('/gigi')}>
           <span class="action-icon">📦</span>
           <span>Gitea</span>
         </button>

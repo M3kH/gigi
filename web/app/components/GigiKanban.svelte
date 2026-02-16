@@ -11,6 +11,7 @@
   import {
     fetchBoard,
     getColumns,
+    getOrgName,
     getTotalIssues,
     isLoading,
     getError,
@@ -84,7 +85,7 @@
   }
 
   function handleCardClick(card: KanbanCard): void {
-    navigateToIssue('idea', card.repo, card.number)
+    navigateToIssue(getOrgName(), card.repo, card.number)
   }
 
   // ── Label Color Helpers ─────────────────────────────────────────────

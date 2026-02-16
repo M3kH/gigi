@@ -37,6 +37,7 @@ export interface KanbanColumn {
 }
 
 export interface BoardData {
+  org: string
   columns: KanbanColumn[]
   totalIssues: number
 }
@@ -49,6 +50,7 @@ export interface DragState {
 // ── State ─────────────────────────────────────────────────────────────
 
 let columns = $state<KanbanColumn[]>([])
+let orgName = $state('gigi')
 let totalIssues = $state(0)
 let loading = $state(false)
 let error = $state<string | null>(null)
@@ -65,6 +67,7 @@ export async function fetchBoard(): Promise<void> {
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     const data: BoardData = await res.json()
     columns = data.columns
+    orgName = data.org
     totalIssues = data.totalIssues
     lastFetch = Date.now()
   } catch (err) {
@@ -101,7 +104,7 @@ export async function moveCard(
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        owner: 'idea',
+        owner: orgName,
         repo: card.repo,
         issueNumber: card.number,
         targetColumn: targetColumnId,
@@ -134,6 +137,10 @@ export function getDragState(): DragState {
 
 export function getColumns(): KanbanColumn[] {
   return columns
+}
+
+export function getOrgName(): string {
+  return orgName
 }
 
 export function getTotalIssues(): number {

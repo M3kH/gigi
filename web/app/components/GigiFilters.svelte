@@ -54,7 +54,7 @@
   }
 
   function handleRepositories() {
-    navigateToGitea('/idea')
+    navigateToGitea('/gigi')
   }
 
   function handleBrowser() {
