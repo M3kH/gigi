@@ -5,7 +5,8 @@ MARKER="/data/.aio-init-done"
 SUPERVISORD_CONF="/etc/supervisor/conf.d/gigi-aio.conf"
 LOG_DIR="/var/log/gigi"
 
-mkdir -p "$LOG_DIR" /data/gitea /data/workspace /data/chrome-profile
+mkdir -p "$LOG_DIR" /data/gitea/conf /data/workspace /data/chrome-profile
+chown -R gigi:gigi /data
 
 # ── 1. Determine which services to start ──────────────────────────────
 
