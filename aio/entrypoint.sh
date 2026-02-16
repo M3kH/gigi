@@ -216,6 +216,14 @@ EOINI
   # Clean up LevelDB locks left by init Gitea (prevents queue lock errors)
   rm -f /data/gitea/data/queues/common/LOCK
 
+  # Enable SSH for the production Gitea instance (was disabled during init to avoid port conflicts)
+  GITEA_CONF="/data/gitea/conf/app.ini"
+  sed -i 's/START_SSH_SERVER = false/START_SSH_SERVER = true/' "$GITEA_CONF"
+  # Add SSH config if not present
+  if ! grep -q "SSH_PORT" "$GITEA_CONF"; then
+    sed -i '/START_SSH_SERVER/a SSH_PORT = 2222\nSSH_LISTEN_PORT = 2222\nSSH_DOMAIN = prod.gigi.local\nBUILTIN_SSH_SERVER_USER = git' "$GITEA_CONF"
+  fi
+
   touch "$MARKER"
   echo "[aio] Init complete"
 elif [ "$ENABLE_GITEA" = "true" ]; then
