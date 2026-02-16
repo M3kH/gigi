@@ -199,7 +199,8 @@ EOINI
       "gitea_token|${GIGI_TOKEN}" \
       "gitea_password|${GIGI_PASSWORD}" \
       "admin_user|${ADMIN_USER}" \
-      "webhook_secret|${WEBHOOK_SECRET}"; do
+      "webhook_secret|${WEBHOOK_SECRET}" \
+      "gitea_org|${ORG_NAME}"; do
       k="${kv%%|*}"; v="${kv#*|}"
       psql "$DATABASE_URL" -c "INSERT INTO config (key,value) VALUES ('$k','$v') ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_at=now();" 2>/dev/null || true
     done

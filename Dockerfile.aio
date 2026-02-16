@@ -50,7 +50,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # Docker CLI (for runner-worker image build)
     docker.io \
     && rm -rf /var/lib/apt/lists/* \
-    && rm -f /etc/nginx/sites-enabled/default
+    && rm -f /etc/nginx/sites-enabled/default \
+    && ln -sf /usr/share/novnc/vnc.html /usr/share/novnc/index.html
 
 # Install Claude Code CLI
 RUN curl -fsSL https://claude.ai/install.sh | bash \
