@@ -25,7 +25,7 @@ jobs:
 
       - name: Login to Gitea registry
         run: |
-          echo "${{ secrets.GITEA_TOKEN }}" | docker login ${{ env.REGISTRY }} \
+          echo "${{ secrets.REGISTRY_TOKEN }}" | docker login ${{ env.REGISTRY }} \
             -u gigi-admin --password-stdin
 
       - name: Build Docker image
