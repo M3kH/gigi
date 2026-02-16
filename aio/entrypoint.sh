@@ -34,7 +34,8 @@ fi
 # ── 2. Enable supervisord programs ────────────────────────────────────
 
 enable_program() {
-  sed -i "s/\(\[program:$1\]\)/\1\nautostart=true/" "$SUPERVISORD_CONF"
+  # Replace autostart=false with autostart=true for the named program section
+  sed -i "/\[program:$1\]/,/^\[/{s/autostart=false/autostart=true/}" "$SUPERVISORD_CONF"
 }
 
 # Copy base config (don't modify the original)
