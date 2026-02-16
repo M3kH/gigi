@@ -125,7 +125,7 @@ EOINI
   ADMIN_USER="${ADMIN_USER:-mauro}"
   ADMIN_PASSWORD="${ADMIN_PASSWORD:-admin}"
   ADMIN_EMAIL="${ADMIN_EMAIL:-mauro@localhost}"
-  ORG_NAME="${ORG_NAME:-gigi}"
+  ORG_NAME="${ORG_NAME:-idea}"
   GIGI_PASSWORD="gigi-local-dev"
 
   echo "[aio] Creating admin user: $ADMIN_USER"
@@ -176,7 +176,7 @@ EOINI
   fi
 
   # Register webhook
-  WEBHOOK_SECRET=$(head -c 32 /dev/urandom | xxd -p | head -c 32)
+  WEBHOOK_SECRET=$(openssl rand -hex 16)
   curl -s -X POST "http://localhost:3300/api/v1/admin/hooks" \
     -H "$AUTH" -H "Content-Type: application/json" \
     -d "{
