@@ -66,7 +66,7 @@ if [ "$ENABLE_GITEA" = "true" ] && [ ! -f "$MARKER" ]; then
     cat > "$GITEA_CONF" << 'EOINI'
 [server]
 HTTP_PORT = 3300
-ROOT_URL = %(PROTOCOL)s://%(DOMAIN)s:%(HTTP_PORT)s/
+ROOT_URL = http://localhost:3300/
 SSH_DOMAIN = localhost
 SSH_PORT = 2222
 SSH_LISTEN_PORT = 2222
