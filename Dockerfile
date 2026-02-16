@@ -29,6 +29,8 @@ COPY src/ src/
 COPY lib/ lib/
 COPY web/ web/
 COPY mcp-config.json ./
+COPY gitea/ gitea/
+COPY scripts/entrypoint.sh scripts/
 
 # Build: type-check TypeScript and build Vite SPA
 RUN npx tsc --noEmit && npx vite build --config vite.config.ts
@@ -44,4 +46,4 @@ HEALTHCHECK --interval=10s --timeout=5s --retries=3 \
   CMD curl -f http://localhost:3000/health || exit 1
 
 EXPOSE 3000
-CMD ["node", "--import", "tsx", "src/index.ts"]
+CMD ["/bin/sh", "/app/scripts/entrypoint.sh"]
