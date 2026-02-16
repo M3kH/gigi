@@ -61,6 +61,24 @@ export interface LiveToolBlock {
   startedAt: number
 }
 
+// ── Ask user block (agent asking a question) ───────────────────────
+
+export interface AskUserBlock {
+  questionId: string
+  question: string
+  options: string[]
+  answer?: string
+  answeredAt?: number
+}
+
+// ── Stream segment (unified live rendering) ────────────────────────
+
+export type StreamSegment =
+  | { type: 'text'; content: string }
+  | { type: 'tool'; toolUseId: string; name: string; input: unknown; result?: string; status: 'running' | 'done'; startedAt: number }
+  | { type: 'ask_user'; questionId: string; question: string; options: string[]; answer?: string; answeredAt?: number }
+  | { type: 'system'; text: string; event?: string; action?: string; repo?: string }
+
 // ── Chat dialog state ───────────────────────────────────────────────
 
-export type DialogState = 'idle' | 'thinking' | 'streaming' | 'tool_running'
+export type DialogState = 'idle' | 'thinking' | 'streaming' | 'tool_running' | 'waiting_for_user'

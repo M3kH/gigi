@@ -5,6 +5,7 @@
  */
 
 import { Marked } from 'marked'
+import DOMPurify from 'dompurify'
 import hljs from 'highlight.js/lib/core'
 
 // Register languages
@@ -55,7 +56,7 @@ export function renderMarkdown(text: string): string {
   if (!text) return ''
   const html = marked.parse(text)
   if (typeof html !== 'string') return ''
-  return html
+  return DOMPurify.sanitize(html)
 }
 
 /**

@@ -13,11 +13,12 @@
 import type {
   Conversation,
   ChatMessage,
-  LiveToolBlock,
+  StreamSegment,
   DialogState,
   TokenUsage,
 } from '$lib/types/chat'
 import type { ServerMessage } from '$lib/types/protocol'
+import { applyEvent, answerSegment as applyAnswer } from '$lib/utils/segment-builder'
 import { getWSClient } from '$lib/stores/connection.svelte'
 import { getViewContext } from '$lib/stores/navigation.svelte'
 
@@ -29,12 +30,14 @@ let messages = $state<ChatMessage[]>([])
 let dialogState = $state<DialogState>('idle')
 let agentRunning = $state<Set<string>>(new Set())
 
-// Streaming accumulator
-let streamingText = $state('')
-let liveToolBlocks = $state<LiveToolBlock[]>([])
+// Unified streaming segments
+let streamSegments = $state<StreamSegment[]>([])
 
 // Track when we're waiting for a new conversation's ID
 let awaitingConversation = $state(false)
+
+// System prompt prepended to the next user message (e.g. from greeting flow)
+let pendingPrompt = $state<string | null>(null)
 
 // ── REST API helpers ──────────────────────────────────────────────────
 
@@ -68,8 +71,7 @@ export async function loadMessages(convId: string): Promise<void> {
 
 export async function selectConversation(convId: string): Promise<void> {
   activeConversationId = convId
-  streamingText = ''
-  liveToolBlocks = []
+  streamSegments = []
   dialogState = 'idle'
 
   await loadMessages(convId)
@@ -83,9 +85,23 @@ export async function selectConversation(convId: string): Promise<void> {
 export function newConversation(): void {
   activeConversationId = null
   messages = []
-  streamingText = ''
-  liveToolBlocks = []
+  streamSegments = []
   dialogState = 'idle'
+}
+
+/** Add a local-only message to the chat (not sent to the agent) */
+export function addLocalMessage(role: 'user' | 'assistant', content: string): void {
+  messages = [...messages, {
+    id: `local-${Date.now()}`,
+    role,
+    content,
+    createdAt: new Date().toISOString(),
+  }]
+}
+
+/** Queue a hidden prompt to prepend to the next user message */
+export function setPendingPrompt(prompt: string): void {
+  pendingPrompt = prompt
 }
 
 export async function sendMessage(text: string): Promise<void> {
@@ -105,6 +121,13 @@ export async function sendMessage(text: string): Promise<void> {
   const isNew = !activeConversationId
   if (isNew) awaitingConversation = true
 
+  // Consume pending prompt (e.g. "make sure to create a repo for: ...")
+  let agentMessage = trimmed
+  if (pendingPrompt) {
+    agentMessage = `${pendingPrompt}\n\n${trimmed}`
+    pendingPrompt = null
+  }
+
   // Send via REST (fire-and-forget, events come via WS)
   try {
     const context = getViewContext()
@@ -112,7 +135,7 @@ export async function sendMessage(text: string): Promise<void> {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        message: trimmed,
+        message: agentMessage,
         conversationId: activeConversationId || undefined,
         context: context.type !== 'overview' ? context : undefined,
       }),
@@ -151,6 +174,7 @@ export async function stopAgent(): Promise<void> {
 
 export function handleServerEvent(event: ServerMessage): void {
   const convId = 'conversationId' in event ? event.conversationId : undefined
+  const isActive = convId === activeConversationId || (!convId && activeConversationId)
 
   switch (event.type) {
     case 'agent_start': {
@@ -164,43 +188,30 @@ export function handleServerEvent(event: ServerMessage): void {
       }
       if (convId === activeConversationId) {
         dialogState = 'thinking'
-        streamingText = ''
-        liveToolBlocks = []
+        streamSegments = []
       }
       break
     }
 
     case 'text_chunk': {
-      if (convId === activeConversationId || (!convId && activeConversationId)) {
+      if (isActive) {
         dialogState = 'streaming'
-        streamingText += event.text
+        streamSegments = applyEvent(streamSegments, event)
       }
       break
     }
 
     case 'tool_use': {
-      if (convId === activeConversationId || (!convId && activeConversationId)) {
+      if (isActive) {
         dialogState = 'tool_running'
-        // Finalize any current streaming text as a message segment
-        const block: LiveToolBlock = {
-          toolUseId: event.toolUseId,
-          name: event.name,
-          input: event.input,
-          status: 'running',
-          startedAt: Date.now(),
-        }
-        liveToolBlocks = [...liveToolBlocks, block]
+        streamSegments = applyEvent(streamSegments, event)
       }
       break
     }
 
     case 'tool_result': {
-      if (convId === activeConversationId || (!convId && activeConversationId)) {
-        liveToolBlocks = liveToolBlocks.map(b =>
-          b.toolUseId === event.toolUseId
-            ? { ...b, result: event.result, status: 'done' as const }
-            : b
-        )
+      if (isActive) {
+        streamSegments = applyEvent(streamSegments, event)
       }
       break
     }
@@ -211,14 +222,12 @@ export function handleServerEvent(event: ServerMessage): void {
         next.delete(convId)
         agentRunning = next
       }
-      if (convId === activeConversationId || (!convId && activeConversationId)) {
-        // Finalize: re-load messages from server to get authoritative state
+      if (isActive) {
         dialogState = 'idle'
         if (activeConversationId) {
           loadMessages(activeConversationId)
         }
-        streamingText = ''
-        liveToolBlocks = []
+        streamSegments = []
       }
       loadConversations()
       break
@@ -235,8 +244,7 @@ export function handleServerEvent(event: ServerMessage): void {
         if (activeConversationId) {
           loadMessages(activeConversationId)
         }
-        streamingText = ''
-        liveToolBlocks = []
+        streamSegments = []
       }
       loadConversations()
       break
@@ -251,9 +259,21 @@ export function handleServerEvent(event: ServerMessage): void {
       break
     }
 
+    case 'ask_user': {
+      if (isActive) {
+        dialogState = 'waiting_for_user'
+        streamSegments = applyEvent(streamSegments, event)
+      }
+      break
+    }
+
     case 'gitea_event': {
-      // Notify listeners that Gitea state changed (repo created/deleted, issue opened, etc.)
+      // Notify listeners that Gitea state changed
       for (const fn of giteaEventListeners) fn(event as { type: 'gitea_event'; event: string; action?: string; repo?: string })
+      // Also push a system segment into the chat
+      if (activeConversationId) {
+        streamSegments = applyEvent(streamSegments, event)
+      }
       break
     }
 
@@ -280,12 +300,22 @@ export function getDialogState(): DialogState {
   return dialogState
 }
 
-export function getStreamingText(): string {
-  return streamingText
+export function getStreamSegments(): StreamSegment[] {
+  return streamSegments
 }
 
-export function getLiveToolBlocks(): LiveToolBlock[] {
-  return liveToolBlocks
+export function answerQuestion(questionId: string, answer: string): void {
+  // Mark as answered locally
+  streamSegments = applyAnswer(streamSegments, questionId, answer)
+
+  // Send answer to backend via WebSocket
+  const ws = getWSClient()
+  ws.send({ type: 'user:answer', questionId, answer })
+
+  // Resume agent state
+  if (dialogState === 'waiting_for_user') {
+    dialogState = 'thinking'
+  }
 }
 
 export function isAgentRunning(convId: string): boolean {

@@ -23,6 +23,7 @@
   import { getPanelState, togglePanel, setPanelState, getKanbanHeight, setKanbanHeight, getChatHeight, setChatHeight, type PanelState } from '$lib/stores/panels.svelte'
   import { initConnection, getConnectionState, type ConnectionState } from '$lib/stores/connection.svelte'
   import { handleServerEvent } from '$lib/stores/chat.svelte'
+  import { initUrlSync } from '$lib/stores/navigation.svelte'
   import { onMount } from 'svelte'
 
   const kanbanState: PanelState = $derived(getPanelState('kanban'))
@@ -45,6 +46,9 @@
   )
 
   onMount(() => {
+    // Initialize URL-based routing
+    const unsubUrl = initUrlSync()
+
     // Initialize WebSocket connection
     const ws = initConnection()
 
@@ -93,6 +97,7 @@
       window.removeEventListener('resize', checkMobile)
       window.removeEventListener('keydown', handleKeydown)
       unsubMsg()
+      unsubUrl()
     }
   })
 

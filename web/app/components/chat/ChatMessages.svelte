@@ -1,39 +1,45 @@
 <script lang="ts">
   /**
-   * Chat message stream
+   * Chat message stream — unified segment rendering
    *
    * Renders the full conversation:
    * - Historical messages (from store)
-   * - Live streaming text
-   * - Live tool blocks
+   * - Live streaming segments in chronological order
    * - Typing indicator
    */
+  import type { StreamSegment } from '$lib/types/chat'
   import {
     getMessages,
     getDialogState,
-    getStreamingText,
-    getLiveToolBlocks,
+    getStreamSegments,
   } from '$lib/stores/chat.svelte'
   import { renderMarkdown, highlightAll } from '$lib/utils/markdown'
+  import { getToolDescription } from '$lib/utils/tool-descriptions'
+  import { interceptLinks } from '$lib/utils/intercept-links'
   import ChatMessageComponent from './ChatMessage.svelte'
   import ToolBlock from './ToolBlock.svelte'
+  import AskUser from './AskUser.svelte'
+  import SystemMessage from './SystemMessage.svelte'
 
   const messages = $derived(getMessages())
   const dialogState = $derived(getDialogState())
-  const streamingText = $derived(getStreamingText())
-  const liveToolBlocks = $derived(getLiveToolBlocks())
+  const segments = $derived(getStreamSegments())
 
   let messagesEl: HTMLDivElement | undefined = $state()
-  let streamContentEl: HTMLDivElement | undefined = $state()
 
-  const streamingHtml = $derived(renderMarkdown(streamingText))
+  function segmentKey(seg: StreamSegment, i: number): string {
+    switch (seg.type) {
+      case 'tool': return seg.toolUseId
+      case 'ask_user': return seg.questionId
+      case 'system': return `sys-${i}`
+      case 'text': return `text-${i}`
+    }
+  }
 
   // Auto-scroll on new content
   $effect(() => {
-    // Track these reactive values to trigger scroll
     messages.length
-    streamingText
-    liveToolBlocks.length
+    segments.length
     dialogState
 
     if (messagesEl) {
@@ -45,18 +51,21 @@
     }
   })
 
-  // Highlight code in streaming text
+  // Highlight code blocks in streaming text segments
   $effect(() => {
-    if (streamContentEl && streamingHtml) {
+    // Re-run whenever segments change
+    segments.length
+
+    if (messagesEl) {
       requestAnimationFrame(() => {
-        if (streamContentEl) highlightAll(streamContentEl)
+        if (messagesEl) highlightAll(messagesEl)
       })
     }
   })
 </script>
 
 <div class="messages-area" bind:this={messagesEl}>
-  {#if messages.length === 0 && dialogState === 'idle'}
+  {#if messages.length === 0 && segments.length === 0 && dialogState === 'idle'}
     <p class="empty-state">Send a message to get started</p>
   {:else}
     <!-- Historical messages -->
@@ -64,8 +73,8 @@
       <ChatMessageComponent message={msg} />
     {/each}
 
-    <!-- Live streaming content -->
-    {#if dialogState === 'thinking'}
+    <!-- Thinking indicator (before first segment arrives) -->
+    {#if dialogState === 'thinking' && segments.length === 0}
       <div class="message assistant">
         <div class="meta">
           <span class="role">Gigi</span>
@@ -78,29 +87,34 @@
       </div>
     {/if}
 
-    {#if streamingText}
-      <div class="message assistant">
-        <div class="meta">
-          <span class="role">Gigi</span>
+    <!-- Live streaming segments — chronological order -->
+    {#each segments as seg, i (segmentKey(seg, i))}
+      {#if seg.type === 'text'}
+        <div class="message assistant">
+          <div class="meta">
+            <span class="role">Gigi</span>
+          </div>
+          <div class="content" use:interceptLinks>
+            {@html renderMarkdown(seg.content)}
+          </div>
         </div>
-        <div class="content" bind:this={streamContentEl}>
-          {@html streamingHtml}
+      {:else if seg.type === 'tool' && seg.name !== 'ask_user'}
+        <div class="live-tool">
+          <ToolBlock
+            toolUseId={seg.toolUseId}
+            name={seg.name}
+            description={getToolDescription(seg.name)}
+            input={seg.input}
+            result={seg.result}
+            status={seg.status}
+            startedAt={seg.startedAt}
+          />
         </div>
-      </div>
-    {/if}
-
-    <!-- Live tool blocks -->
-    {#each liveToolBlocks as block (block.toolUseId)}
-      <div class="live-tool">
-        <ToolBlock
-          toolUseId={block.toolUseId}
-          name={block.name}
-          input={block.input}
-          result={block.result}
-          status={block.status}
-          startedAt={block.startedAt}
-        />
-      </div>
+      {:else if seg.type === 'ask_user'}
+        <AskUser block={seg} />
+      {:else if seg.type === 'system'}
+        <SystemMessage text={seg.text} />
+      {/if}
     {/each}
   {/if}
 </div>

@@ -4,6 +4,7 @@
    */
   import type { ChatMessage as ChatMessageType } from '$lib/types/chat'
   import { renderMarkdown, highlightAll } from '$lib/utils/markdown'
+  import { interceptLinks } from '$lib/utils/intercept-links'
   import { formatTime } from '$lib/utils/format'
   import ToolBlock from './ToolBlock.svelte'
   import TokenBadge from './TokenBadge.svelte'
@@ -17,7 +18,7 @@
   let contentEl: HTMLDivElement | undefined = $state()
 
   const isUser = $derived(message.role === 'user')
-  const renderedHtml = $derived(isUser ? '' : renderMarkdown(message.content))
+  const renderedHtml = $derived(renderMarkdown(message.content))
 
   // Highlight code blocks after content renders
   $effect(() => {
@@ -42,17 +43,19 @@
   </div>
 
   {#if isUser}
-    <div class="content user-content">{message.content}</div>
+    <div class="content user-content" bind:this={contentEl} use:interceptLinks>
+      {@html renderedHtml}
+    </div>
   {:else}
-    <div class="content" bind:this={contentEl}>
+    <div class="content" bind:this={contentEl} use:interceptLinks>
       {@html renderedHtml}
     </div>
   {/if}
 
-  <!-- Tool blocks from history -->
+  <!-- Tool blocks from history (hide ask_user — rendered as interactive blocks) -->
   {#if message.toolCalls && message.toolCalls.length > 0}
     <div class="tool-blocks">
-      {#each message.toolCalls as tc}
+      {#each message.toolCalls.filter(tc => tc.name !== 'ask_user') as tc}
         <ToolBlock
           toolUseId={tc.toolUseId}
           name={tc.name}

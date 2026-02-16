@@ -96,6 +96,10 @@ export function navigate(target: NavigationTarget): void {
   } else if (target.view === 'browser') {
     viewContext = { type: 'overview' }
   }
+  // Push URL state for deep-linking
+  if (typeof window !== 'undefined') {
+    window.history.pushState(target, '', targetToUrl(target))
+  }
 }
 
 export function goBack(): void {
@@ -155,4 +159,50 @@ export function getCurrentView(): NavigationTarget {
 
 export function canGoBack(): boolean {
   return history.length > 0
+}
+
+// ── URL sync ──────────────────────────────────────────────────────────
+
+function targetToUrl(t: NavigationTarget): string {
+  if (t.giteaPath) return t.giteaPath.replace(/^\/gitea/, '')
+  if (t.view === 'browser') return '/browser'
+  return '/'
+}
+
+function urlToTarget(pathname: string): NavigationTarget {
+  if (pathname === '/' || pathname === '') return { view: 'overview' }
+  if (pathname === '/browser') return { view: 'browser' }
+  // Treat any other path as a Gitea path
+  return { view: 'gitea', giteaPath: `/gitea${pathname}` }
+}
+
+/**
+ * Initialize URL-based routing: parse initial URL + listen for popstate.
+ * Call once from AppShell onMount.
+ */
+export function initUrlSync(): () => void {
+  // Parse initial URL
+  const initial = urlToTarget(window.location.pathname)
+  if (initial.view !== 'overview') {
+    current = initial
+    if (initial.giteaPath) {
+      viewContext = parseGiteaPath(initial.giteaPath)
+    }
+  }
+
+  // Listen for back/forward
+  function onPopState(e: PopStateEvent) {
+    const target = (e.state as NavigationTarget) ?? urlToTarget(window.location.pathname)
+    current = target
+    if (target.giteaPath) {
+      viewContext = parseGiteaPath(target.giteaPath)
+    } else if (target.view === 'overview') {
+      viewContext = { type: 'overview' }
+    } else {
+      viewContext = { type: 'overview' }
+    }
+  }
+
+  window.addEventListener('popstate', onPopState)
+  return () => window.removeEventListener('popstate', onPopState)
 }

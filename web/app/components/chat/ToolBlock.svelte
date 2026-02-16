@@ -9,13 +9,14 @@
   interface Props {
     toolUseId: string
     name: string
+    description?: string
     input: unknown
     result?: string
     status: 'running' | 'done'
     startedAt?: number
   }
 
-  const { toolUseId, name, input, result, status, startedAt }: Props = $props()
+  const { toolUseId, name, description, input, result, status, startedAt }: Props = $props()
 
   let expanded = $state(false)
   let elapsed = $state('')
@@ -40,6 +41,9 @@
   <button class="tool-header" onclick={() => (expanded = !expanded)}>
     <span class="tool-arrow" class:open={expanded}>▶</span>
     <span class="tool-name">{name}</span>
+    {#if description}
+      <span class="tool-desc">{description}</span>
+    {/if}
     <span class="tool-summary">{summary}</span>
     {#if elapsed || (status === 'done' && startedAt)}
       <span class="tool-elapsed">{elapsed}</span>
@@ -104,6 +108,13 @@
     font-weight: 600;
     color: var(--gigi-accent-green);
     flex-shrink: 0;
+  }
+
+  .tool-desc {
+    color: var(--gigi-text-muted);
+    font-size: 0.65rem;
+    flex-shrink: 0;
+    opacity: 0.7;
   }
 
   .tool-summary {
