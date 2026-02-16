@@ -8,7 +8,6 @@
 import { Hono } from 'hono'
 import { serveStatic } from '@hono/node-server/serve-static'
 import { readFile } from 'node:fs/promises'
-import { resolve4 } from 'node:dns/promises'
 import { healthCheck } from '../core/health'
 import { getSetupStatus, setupStep } from '../domain/setup'
 import { handleMessage, newConversation, resumeConversation, stopAgent, getRunningAgents } from '../core/router'
@@ -199,9 +198,9 @@ export const createApp = (): Hono => {
       return c.json({ available: false })
     }
 
-    // path= tells noVNC where to open the WebSocket (relative to page origin)
-    const wsPath = viewUrl.replace(/^\//, '') + 'websockify'
-    const browserUrl = `${viewUrl}vnc.html?autoconnect=true&resize=scale&reconnect=true&reconnect_delay=1000&path=${wsPath}`
+    // Selenium standalone serves a self-contained noVNC viewer on port 7900.
+    // Caddy routes /browser/* directly to browser:7900, stripping the prefix.
+    const browserUrl = `${viewUrl}?autoconnect=true&resize=scale`
 
     return c.json({
       mode: browserMode,
@@ -242,52 +241,8 @@ export const createApp = (): Hono => {
   // Legacy static assets
   app.use('/static/*', serveStatic({ root: './' }))
 
-  // Browser proxy — forward /browser/* to headless Chrome container
-  // Chrome CDP rejects Host headers that aren't localhost or an IP,
-  // and Node fetch auto-sets Host from the URL hostname. So we resolve
-  // the service name to an IP and use that in the URL.
-  let browserIp: string | null = null
-  app.all('/browser/*', async (c) => {
-    const cdpUrl = process.env.CHROME_CDP_URL || 'ws://browser:9222'
-    const cdpHostname = new URL(cdpUrl.replace(/^ws/, 'http')).hostname
-    const port = new URL(cdpUrl.replace(/^ws/, 'http')).port || '9222'
-
-    if (!browserIp) {
-      try {
-        const [ip] = await resolve4(cdpHostname)
-        browserIp = ip
-      } catch {
-        return c.json({ error: 'Browser not reachable (DNS)' }, 502)
-      }
-    }
-
-    const path = c.req.path.replace(/^\/browser/, '') || '/'
-    const query = c.req.url.includes('?') ? c.req.url.slice(c.req.url.indexOf('?')) : ''
-    const targetUrl = `http://${browserIp}:${port}${path}${query}`
-
-    try {
-      const headers = new Headers()
-      for (const key of ['accept', 'accept-language', 'content-type']) {
-        const val = c.req.header(key)
-        if (val) headers.set(key, val)
-      }
-      const resp = await fetch(targetUrl, {
-        method: c.req.method,
-        headers,
-        body: c.req.method !== 'GET' && c.req.method !== 'HEAD' ? await c.req.arrayBuffer() : undefined,
-        redirect: 'manual',
-      })
-      const respHeaders = new Headers()
-      for (const [k, v] of resp.headers.entries()) {
-        if (k.toLowerCase() === 'transfer-encoding') continue
-        respHeaders.set(k, v)
-      }
-      return new Response(resp.body, { status: resp.status, headers: respHeaders })
-    } catch {
-      browserIp = null // Reset cached IP in case container restarted
-      return c.json({ error: 'Browser not reachable' }, 502)
-    }
-  })
+  // Browser view is handled directly by Caddy → browser:7900 (noVNC)
+  // No Hono proxy needed — Caddy handles HTTP + WebSocket natively
 
   // Legacy vanilla UI (deprecated — kept at /legacy for backward compat)
   app.get('/legacy', async (c) => {

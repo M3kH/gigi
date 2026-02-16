@@ -4,7 +4,7 @@ on:
     branches: [main]
 
 env:
-  REGISTRY: prod.gigi.local/gitea
+  REGISTRY: prod.gigi.local
   IMAGE: gigi/gigi
   DEPLOY_HOST: 192.168.1.110
   SSH_OPTS: "-i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=accept-new"
