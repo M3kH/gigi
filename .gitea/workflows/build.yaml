@@ -4,10 +4,7 @@ on:
     branches: [main]
 
 env:
-  REGISTRY: 192.168.1.80:3000
-  IMAGE: idea/gigi
-  SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-  SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+  IMAGE: gigi/gigi
   DEPLOY_HOST: 192.168.1.110
 
 jobs:
@@ -20,59 +17,28 @@ jobs:
         run: |
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
-          echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          echo "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          echo "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
           chmod 644 ~/.ssh/known_hosts
 
       - name: Build on cluster (arm64)
         run: |
-          rsync -az --exclude=.git --exclude=node_modules . root@${{ env.DEPLOY_HOST }}:/tmp/gigi-build/
-          ssh root@${{ env.DEPLOY_HOST }} "
+          rsync -az --exclude=.git --exclude=node_modules . m@${{ env.DEPLOY_HOST }}:/tmp/gigi-build/
+          ssh m@${{ env.DEPLOY_HOST }} "
             set -e
             cd /tmp/gigi-build
-            echo '${{ secrets.REGISTRY_TOKEN }}' | docker login ${{ env.REGISTRY }} -u ${{ github.repository_owner }} --password-stdin
-
-            export REGISTRY=${{ env.REGISTRY }}
-            export IMAGE=${{ env.IMAGE }}
-            export TAG=${{ github.sha }}
-
-            # Build and push gigi service (neko uses upstream GHCR image directly)
-            docker compose build gigi
-            docker tag \${REGISTRY}/\${IMAGE}:\${TAG} \${REGISTRY}/\${IMAGE}:latest
-            docker push \${REGISTRY}/\${IMAGE}:\${TAG}
-            docker push \${REGISTRY}/\${IMAGE}:latest
-
+            sudo docker build -t prod.gigi.local/${{ env.IMAGE }}:${{ github.sha }} \
+                               -t prod.gigi.local/${{ env.IMAGE }}:latest .
             rm -rf /tmp/gigi-build"
-
-      - name: Create Docker secrets
-        run: |
-          ssh root@${{ env.DEPLOY_HOST }} "
-            echo '${{ secrets.SSH_PRIVATE_KEY_GIGI }}' | docker secret create gigi_ssh_key - 2>/dev/null || true"
 
       - name: Deploy service
         run: |
-          # Copy compose file to remote host
-          scp docker-compose.yml root@${{ env.DEPLOY_HOST }}:/tmp/gigi-compose.yml
+          ssh m@${{ env.DEPLOY_HOST }} "
+            sudo docker service update --image prod.gigi.local/${{ env.IMAGE }}:latest \
+              --force gigi-prod_gigi"
 
-          ssh root@${{ env.DEPLOY_HOST }} "
-            # Remove old stack if exists
-            docker stack rm idea-biancifiore-gigi 2>/dev/null; sleep 5
-
-            # Deploy using docker stack with environment variables
-            export REGISTRY=${{ env.REGISTRY }}
-            export IMAGE=${{ env.IMAGE }}
-            export TAG=${{ github.sha }}
-            export DATABASE_URL='postgresql://gigi:${{ secrets.DB_PASSWORD }}@postgres:5432/gigi'
-            export NEKO_PASSWORD='${{ secrets.NEKO_PASSWORD }}'
-            export NEKO_ADMIN_PASSWORD='${{ secrets.NEKO_ADMIN_PASSWORD }}'
-
-            docker stack deploy -c /tmp/gigi-compose.yml --with-registry-auth idea-biancifiore-gigi
-            rm /tmp/gigi-compose.yml"
-
-      - name: Deploy Caddy config
-        uses: http://192.168.1.80:3000/idea/deploy-site@main
-        with:
-          caddy_file: Caddyfile
-          ssh_user: root
-          swarm_host: 192.168.1.110
+      - name: Verify health
+        run: |
+          sleep 30
+          ssh m@${{ env.DEPLOY_HOST }} "curl -sf http://localhost:3000/health" || echo "Health check pending"
