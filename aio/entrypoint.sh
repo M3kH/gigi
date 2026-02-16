@@ -94,6 +94,9 @@ ALLOWED_HOST_LIST = *
 EOINI
   fi
 
+  # Ensure gigi owns everything in /data (root created files above)
+  chown -R gigi:gigi /data
+
   # Symlink custom templates
   TEMPLATE_DIR="/data/gitea/templates"
   if [ -d /app/gitea/custom/templates ] && [ ! -L "$TEMPLATE_DIR" ]; then
