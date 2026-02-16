@@ -11,6 +11,7 @@ export { BrowserManager, browserManager } from './browser-manager'
 import { agentTools as giteaTools } from './gitea'
 import { agentTools as telegramTools } from './telegram'
 import { agentTools as browserTools } from './browser'
+import { agentTools as askUserTools } from './ask-user'
 import type { AgentTool } from '../core/registry'
 
 /** All agent tools from the tools module */
@@ -18,4 +19,5 @@ export const agentTools: AgentTool[] = [
   ...giteaTools,
   ...telegramTools,
   ...browserTools,
+  ...askUserTools,
 ]

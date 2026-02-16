@@ -13,6 +13,7 @@ import { ClientMessage } from '../lib/core/protocol'
 import type { ServerMessage } from '../lib/core/protocol'
 import { subscribe, type AgentEvent } from '../lib/core/events'
 import { handleMessage, resumeConversation, stopAgent } from '../lib/core/router'
+import { answerQuestion } from '../lib/core/ask-user'
 import * as store from '../lib/core/store'
 
 // ── Types ────────────────────────────────────────────────────────────
@@ -122,6 +123,14 @@ const handleClientMessage = (ws: WebSocket, msg: ClientMessage): void => {
 
     case 'view:navigate': {
       // Frontend-only state — no server action needed
+      break
+    }
+
+    case 'user:answer': {
+      const resolved = answerQuestion(msg.questionId, msg.answer)
+      if (!resolved) {
+        console.warn('[ws] user:answer for unknown questionId:', msg.questionId)
+      }
       break
     }
   }

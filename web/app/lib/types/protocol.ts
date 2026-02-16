@@ -41,6 +41,12 @@ export type Ping = {
   type: 'ping'
 }
 
+export type UserAnswer = {
+  type: 'user:answer'
+  questionId: string
+  answer: string
+}
+
 export type ClientMessage =
   | ChatSend
   | ChatStop
@@ -48,6 +54,7 @@ export type ClientMessage =
   | ConversationSelect
   | TitleUpdate
   | Ping
+  | UserAnswer
 
 // ─── Server → Client ────────────────────────────────────────────────
 
@@ -109,6 +116,14 @@ export type GiteaEvent = {
   repo?: string
 }
 
+export type AskUserEvent = {
+  type: 'ask_user'
+  conversationId?: string
+  questionId: string
+  question: string
+  options: string[]
+}
+
 export type ServerMessage =
   | AgentStartEvent
   | TextChunkEvent
@@ -119,3 +134,4 @@ export type ServerMessage =
   | TitleUpdateEvent
   | PongEvent
   | GiteaEvent
+  | AskUserEvent

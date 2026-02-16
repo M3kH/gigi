@@ -158,6 +158,7 @@ const migrate = async (): Promise<void> => {
 // ─── Config store ───────────────────────────────────────────────────
 
 export const getConfig = async (key: string): Promise<string | null> => {
+  if (!pool) return null // No DB connection (e.g. in tests)
   const { rows } = await pool.query(
     'SELECT value FROM config WHERE key = $1', [key]
   )
@@ -306,6 +307,7 @@ export const logAction = async (
   refId: string | null = null,
   metadata: unknown = null
 ): Promise<void> => {
+  if (!pool) return // No DB connection (e.g. in tests)
   await pool.query(
     'INSERT INTO action_log (action_type, repo, ref_id, metadata) VALUES ($1, $2, $3, $4)',
     [actionType, repo, refId, metadata ? JSON.stringify(metadata) : null]

@@ -1,5 +1,34 @@
 <script>
 (function() {
+  // ── Owner warning (repo create/migrate pages) ──────────────────────
+  // Fomantic UI sets the value attribute on the hidden input when the
+  // dropdown changes. MutationObserver catches it cleanly.
+  window.addEventListener('load', function() {
+    var uid = document.querySelector('input[name="uid"]');
+    if (!uid) return;
+
+    var orgValue = uid.getAttribute('value');
+    var field = uid.closest('.field');
+    if (!field) return;
+
+    new MutationObserver(function() {
+      var current = uid.getAttribute('value');
+      var warn = document.getElementById('gigi-owner-warn');
+      if (current !== orgValue) {
+        if (!warn) {
+          warn = document.createElement('div');
+          warn.id = 'gigi-owner-warn';
+          warn.style.cssText = 'padding:8px 12px;margin:8px 0;border-radius:4px;background:#d4822e22;border:1px solid #d4822e55;color:#d4822e;font-size:13px';
+          warn.textContent = '\u26a0\ufe0f Gigi can\u2019t manage personal repos \u2014 no board, no issues, no fun. Pick the org!';
+          field.appendChild(warn);
+        }
+      } else if (warn) {
+        warn.remove();
+      }
+    }).observe(uid, { attributes: true, attributeFilter: ['value'] });
+  });
+
+  // ── Iframe bridge (postMessage, link handling) ─────────────────────
   if (window.self === window.top) return;
 
   window.parent.postMessage({
@@ -8,27 +37,22 @@
     title: document.title
   }, '*');
 
-  // External links open in new tab
   document.addEventListener('click', function(e) {
     var link = e.target.closest('a[href]');
     if (!link) return;
     var href = link.getAttribute('href');
     if (!href || href.startsWith('#') || href.startsWith('javascript:')) return;
-
     if (href.startsWith('http') && !href.includes(window.location.host)) {
       link.target = '_blank';
-      return;
     }
   });
 
   window.addEventListener('message', function(e) {
     if (!e.data || !e.data.type) return;
-
     if (e.data.type === 'gigi:scrollTo') {
       var el = document.querySelector(e.data.selector);
       if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
-
     if (e.data.type === 'gigi:getHeight') {
       window.parent.postMessage({
         type: 'gitea:height',

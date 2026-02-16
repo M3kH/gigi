@@ -13,6 +13,7 @@ import { getSetupStatus, setupStep } from '../domain/setup'
 import { handleMessage, newConversation, resumeConversation, stopAgent, getRunningAgents } from '../core/router'
 import { handleWebhook } from './webhooks'
 import { createGiteaProxy } from './gitea-proxy'
+import { askUser } from '../core/ask-user'
 import * as store from '../core/store'
 
 export const createApp = (): Hono => {
@@ -206,6 +207,23 @@ export const createApp = (): Hono => {
       browserUrl,
       available: true,
     })
+  })
+
+  // Internal: ask-user bridge (MCP process → main process → frontend)
+  app.post('/api/internal/ask-user', async (c) => {
+    const body = await c.req.json<{ questionId: string; question: string; options?: string[] }>()
+    const { questionId, question, options } = body
+
+    if (!questionId || !question) {
+      return c.json({ error: 'questionId and question are required' }, 400)
+    }
+
+    // Find the active conversation from running agents
+    const running = getRunningAgents()
+    const conversationId = running.length > 0 ? running[0] : undefined
+
+    const answer = await askUser(questionId, question, options, conversationId)
+    return c.json({ answer })
   })
 
   // Gitea proxy endpoints (for frontend SPA)

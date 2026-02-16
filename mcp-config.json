@@ -5,7 +5,10 @@
       "command": "node",
       "args": ["--import", "tsx", "lib/core/mcp.ts"],
       "env": {
-        "DATABASE_URL": "${DATABASE_URL}"
+        "DATABASE_URL": "${DATABASE_URL}",
+        "GITEA_URL": "${GITEA_URL}",
+        "GITEA_TOKEN": "${GITEA_TOKEN}",
+        "PORT": "${PORT}"
       }
     },
     "chrome-devtools": {

@@ -10,8 +10,8 @@ import { getConfig, logAction } from '../core/store'
 import type { AgentTool } from '../core/registry'
 
 const request = async (method: string, path: string, body: unknown = null): Promise<unknown> => {
-  const url = await getConfig('gitea_url')
-  const token = await getConfig('gitea_token')
+  const url = process.env.GITEA_URL || await getConfig('gitea_url')
+  const token = process.env.GITEA_TOKEN || await getConfig('gitea_token')
   if (!url || !token) return 'Gitea not configured — complete setup first'
 
   const opts: RequestInit = {
@@ -76,8 +76,10 @@ export const runGitea = async (input: GiteaInput): Promise<unknown> => {
       return request('GET', '/user/repos?limit=50')
 
     case 'create_repo':
-      return request('POST', '/user/repos', {
+      // Create under org if owner is specified, otherwise under user
+      return request('POST', owner ? `/orgs/${owner}/repos` : '/user/repos', {
         name: repo,
+        description: body || '',
         private: input.private ?? false,
         auto_init: true,
       })

@@ -55,6 +55,12 @@ export const Ping = z.object({
   type: z.literal('ping'),
 })
 
+export const UserAnswer = z.object({
+  type: z.literal('user:answer'),
+  questionId: z.string(),
+  answer: z.string(),
+})
+
 export const ClientMessage = z.discriminatedUnion('type', [
   ChatSend,
   ChatStop,
@@ -62,6 +68,7 @@ export const ClientMessage = z.discriminatedUnion('type', [
   ConversationSelect,
   TitleUpdate,
   Ping,
+  UserAnswer,
 ])
 
 export type ClientMessage = z.infer<typeof ClientMessage>
@@ -126,6 +133,14 @@ export const GiteaEvent = z.object({
   repo: z.string().optional(),
 })
 
+export const AskUserEvent = z.object({
+  type: z.literal('ask_user'),
+  conversationId: z.string().optional(),
+  questionId: z.string(),
+  question: z.string(),
+  options: z.array(z.string()),
+})
+
 export const ServerMessage = z.discriminatedUnion('type', [
   AgentStartEvent,
   TextChunkEvent,
@@ -136,6 +151,7 @@ export const ServerMessage = z.discriminatedUnion('type', [
   TitleUpdateEvent,
   PongEvent,
   GiteaEvent,
+  AskUserEvent,
 ])
 
 export type ServerMessage = z.infer<typeof ServerMessage>

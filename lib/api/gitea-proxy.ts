@@ -40,11 +40,10 @@ export const createGiteaProxy = (): Hono => {
       const gitea = await getClient()
       const org = 'idea'
 
-      // Fetch repos and recent issues/PRs in parallel
-      const [repos, allConvs] = await Promise.all([
+      // Fetch org info and repos in parallel
+      const [orgInfo, repos] = await Promise.all([
+        gitea.orgs.get(org),
         gitea.orgs.listRepos(org, { limit: 50 }),
-        // We'll get conversations from the store endpoint separately
-        Promise.resolve([]),
       ])
 
       // For each repo, get open issues and PRs count in parallel
@@ -79,6 +78,7 @@ export const createGiteaProxy = (): Hono => {
       })
 
       return c.json({
+        org: { id: orgInfo.id, name: orgInfo.username },
         repos: repoSummaries.filter(r => !r.archived),
         totalRepos: repoSummaries.filter(r => !r.archived).length,
         totalOpenIssues: repoSummaries.reduce((sum, r) => sum + (r.open_issues_count || 0), 0),

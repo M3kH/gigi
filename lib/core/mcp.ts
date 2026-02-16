@@ -12,6 +12,10 @@
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
+import {
+  ListToolsRequestSchema,
+  CallToolRequestSchema,
+} from '@modelcontextprotocol/sdk/types.js'
 import { registerTools, getMCPToolDefinitions, executeTool } from './registry'
 
 // ─── Register all module tools ──────────────────────────────────────
@@ -22,12 +26,6 @@ import { agentTools as toolsAgentTools } from '../tools/index'
 
 registerTools(toolsAgentTools)
 
-// Future modules register here as they're built:
-// import { agentTools as kanbanTools } from '../feat-kanban/index'
-// registerTools(kanbanTools)
-// import { agentTools as viewTools } from '../feat-view/index'
-// registerTools(viewTools)
-
 // ─── MCP Server ─────────────────────────────────────────────────────
 
 const server = new Server(
@@ -35,17 +33,14 @@ const server = new Server(
   { capabilities: { tools: {} } }
 )
 
-// MCP SDK expects specific schema types; we use `as any` at the boundary.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-server.setRequestHandler('tools/list' as any, async () => ({
+server.setRequestHandler(ListToolsRequestSchema, async () => ({
   tools: getMCPToolDefinitions(),
 }))
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-server.setRequestHandler('tools/call' as any, async (request: { params: { name: string; arguments: Record<string, unknown> } }) => {
+server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params
 
-  const { result, error } = await executeTool(name, args).catch((err) => ({
+  const { result, error } = await executeTool(name, args ?? {}).catch((err) => ({
     result: null,
     error: `Error: ${(err as Error).message}`,
   }))
