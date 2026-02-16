@@ -6,6 +6,7 @@ on:
 env:
   IMAGE: gigi/gigi
   DEPLOY_HOST: 192.168.1.110
+  SSH_OPTS: "-i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=accept-new"
 
 jobs:
   build:
@@ -17,15 +18,15 @@ jobs:
         run: |
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
           echo "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
-          chmod 644 ~/.ssh/known_hosts
 
       - name: Build on cluster (arm64)
         run: |
-          rsync -az --exclude=.git --exclude=node_modules . m@${{ env.DEPLOY_HOST }}:/tmp/gigi-build/
-          ssh m@${{ env.DEPLOY_HOST }} "
+          rsync -az -e "ssh $SSH_OPTS" --exclude=.git --exclude=node_modules \
+            . m@${{ env.DEPLOY_HOST }}:/tmp/gigi-build/
+          ssh $SSH_OPTS m@${{ env.DEPLOY_HOST }} "
             set -e
             cd /tmp/gigi-build
             sudo docker build -t prod.gigi.local/${{ env.IMAGE }}:${{ github.sha }} \
@@ -34,11 +35,11 @@ jobs:
 
       - name: Deploy service
         run: |
-          ssh m@${{ env.DEPLOY_HOST }} "
+          ssh $SSH_OPTS m@${{ env.DEPLOY_HOST }} "
             sudo docker service update --image prod.gigi.local/${{ env.IMAGE }}:latest \
               --force gigi-prod_gigi"
 
       - name: Verify health
         run: |
           sleep 30
-          ssh m@${{ env.DEPLOY_HOST }} "curl -sf http://localhost:3000/health" || echo "Health check pending"
+          ssh $SSH_OPTS m@${{ env.DEPLOY_HOST }} "curl -sf http://localhost:3000/health" || echo "Health check pending"
