@@ -323,6 +323,27 @@ export const createApp = (): Hono => {
       }
     }
 
+    // Gitea pages are missing the footer (index.js + closing tags) due to a
+    // custom template override. For HTML responses, buffer the body and append
+    // the missing script tag so Vue components (Actions log viewer etc.) work.
+    const contentType = resp.headers.get('content-type') || ''
+    if (contentType.includes('text/html') && c.req.method === 'GET') {
+      const html = await resp.text()
+      if (!html.includes('/js/index.js') && html.includes('<!DOCTYPE html')) {
+        // Extract asset version from the page (e.g. from webcomponents.js?v=1.24.7)
+        const versionMatch = html.match(/assets\/js\/webcomponents\.js\?v=([^"&]+)/)
+        const version = versionMatch?.[1] || '1.24.7'
+        const assetPrefix = '/gitea/assets'
+        const footer = `\n<script src="${assetPrefix}/js/index.js?v=${version}"></script>\n</body>\n</html>`
+        respHeaders.delete('content-length')
+        return new Response(html + footer, {
+          status: resp.status,
+          headers: respHeaders,
+        })
+      }
+      return new Response(html, { status: resp.status, headers: respHeaders })
+    }
+
     return new Response(resp.body, {
       status: resp.status,
       headers: respHeaders,

@@ -1,1 +1,15 @@
-{{/* Stripped: Gigi platform provides its own layout */}}
+{{/* Gigi — Minimal footer: skip the visual footer, but keep essential JS */}}
+{{/* index.js is REQUIRED for Gitea's Vue/React components to render */}}
+{{/* (Actions log viewer, diff viewer, code editor, repo settings, etc.) */}}
+
+	{{template "custom/body_inner_post" .}}
+
+	</div>
+
+	{{template "custom/body_outer_post" .}}
+
+	<script src="{{AssetUrlPrefix}}/js/index.js?v={{AssetVersion}}" onerror="alert('Failed to load asset files from ' + this.src + '. Please make sure the asset files can be accessed.')"></script>
+
+	{{template "custom/footer" .}}
+</body>
+</html>
