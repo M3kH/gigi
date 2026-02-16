@@ -212,8 +212,11 @@ EOINI
   fi
 
   # Stop temporary Gitea (supervisord will restart it)
-  kill $GITEA_PID 2>/dev/null || true
+  kill -TERM $GITEA_PID 2>/dev/null || true
   wait $GITEA_PID 2>/dev/null || true
+  sleep 2
+  # Clean up LevelDB locks left by init Gitea (prevents queue lock errors)
+  rm -f /data/gitea/data/queues/common/LOCK
 
   touch "$MARKER"
   echo "[aio] Init complete"
