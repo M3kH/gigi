@@ -74,6 +74,7 @@ COPY src/ src/
 COPY lib/ lib/
 COPY web/ web/
 COPY mcp-config.json ./
+COPY gigi.config.yaml ./
 COPY gitea/ gitea/
 COPY scripts/entrypoint.sh scripts/
 
