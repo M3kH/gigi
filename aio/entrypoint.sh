@@ -323,9 +323,16 @@ if [ -S /var/run/docker.sock ] && [ -f /opt/runner-worker/Dockerfile ]; then
   fi
 fi
 
-# ── 6. Export env vars for supervisord child processes ────────────────
+# ── 6. Inject env vars into supervisord gigi program ──────────────────
+# supervisord doesn't inherit parent env for child processes — inject explicitly
 
-export GITEA_URL CHROME_CDP_URL BROWSER_MODE BROWSER_VIEW_URL
+GIGI_ENV_LINE="HOME=\"/home/gigi\""
+[ -n "$GITEA_URL" ] && GIGI_ENV_LINE="$GIGI_ENV_LINE,GITEA_URL=\"$GITEA_URL\""
+[ -n "$CHROME_CDP_URL" ] && GIGI_ENV_LINE="$GIGI_ENV_LINE,CHROME_CDP_URL=\"$CHROME_CDP_URL\""
+[ -n "$BROWSER_MODE" ] && GIGI_ENV_LINE="$GIGI_ENV_LINE,BROWSER_MODE=\"$BROWSER_MODE\""
+[ -n "$BROWSER_VIEW_URL" ] && GIGI_ENV_LINE="$GIGI_ENV_LINE,BROWSER_VIEW_URL=\"$BROWSER_VIEW_URL\""
+
+sed -i "/\[program:gigi\]/,/^\[/{s|environment=HOME=\"/home/gigi\"|environment=$GIGI_ENV_LINE|}" "$SUPERVISORD_CONF"
 
 # ── 7. Start supervisord ─────────────────────────────────────────────
 
