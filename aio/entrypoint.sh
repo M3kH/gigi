@@ -305,9 +305,10 @@ fi
 
 # ── 4. Fix permissions & stale locks ───────────────────────────────────
 
-# Workspace bind mount comes in as root — ensure gigi can write
+# Workspace bind mount comes in as root — ensure gigi can write to top level
+# (don't recurse — workspace may contain large cloned repos with node_modules)
 if [ -d /workspace ]; then
-  chown -R gigi:gigi /workspace
+  chown gigi:gigi /workspace
 fi
 
 # Chrome profile lock from previous container prevents startup (exit 21)
