@@ -143,6 +143,25 @@ EOINI
     --email gigi@localhost \
     --must-change-password=false" 2>&1 || echo "(may already exist)"
 
+  # Add SSH keys from Docker secrets
+  for keyfile in /run/secrets/*_ssh_pubkey; do
+    if [ -f "$keyfile" ]; then
+      KEY_TITLE=$(basename "$keyfile" _ssh_pubkey)
+      KEY_CONTENT=$(cat "$keyfile" | tr -d '\n')
+      echo "[aio] Adding SSH key: $KEY_TITLE"
+      # Add to admin user
+      curl -s -X POST "http://localhost:3300/api/v1/admin/users/${ADMIN_USER}/keys" \
+        -u "${ADMIN_USER}:${ADMIN_PASSWORD}" \
+        -H "Content-Type: application/json" \
+        -d "{\"title\":\"${KEY_TITLE}\",\"key\":\"${KEY_CONTENT}\"}" > /dev/null 2>&1 || true
+      # Also add to gigi user
+      curl -s -X POST "http://localhost:3300/api/v1/admin/users/gigi/keys" \
+        -u "${ADMIN_USER}:${ADMIN_PASSWORD}" \
+        -H "Content-Type: application/json" \
+        -d "{\"title\":\"${KEY_TITLE}\",\"key\":\"${KEY_CONTENT}\"}" > /dev/null 2>&1 || true
+    fi
+  done
+
   # Create API tokens
   TOKEN_SUFFIX=$(date +%s)
 
