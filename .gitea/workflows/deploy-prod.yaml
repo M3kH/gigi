@@ -1,7 +1,10 @@
-name: Build and Deploy Dev
+name: Deploy to Prod
 on:
-  push:
-    branches: [main]
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: 'Commit SHA to deploy (default: HEAD of main)'
+        required: false
 
 env:
   REGISTRY: prod.gigi.local
@@ -10,10 +13,19 @@ env:
   SSH_OPTS: "-i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=accept-new"
 
 jobs:
-  build:
+  deploy:
     runs-on: ubuntu-latest-utils
     steps:
       - uses: actions/checkout@v4
+
+      - name: Determine SHA
+        id: sha
+        run: |
+          if [ -n "${{ github.event.inputs.sha }}" ]; then
+            echo "sha=${{ github.event.inputs.sha }}" >> $GITHUB_OUTPUT
+          else
+            echo "sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+          fi
 
       - name: Setup SSH
         run: |
@@ -28,26 +40,21 @@ jobs:
           echo "${{ secrets.REGISTRY_TOKEN }}" | docker login ${{ env.REGISTRY }} \
             -u gigi-admin --password-stdin
 
-      - name: Build AIO image
+      - name: Retag and push as prod
         run: |
-          docker build -f Dockerfile.aio \
-            -t ${{ env.REGISTRY }}/${{ env.IMAGE }}:${{ github.sha }} \
-            -t ${{ env.REGISTRY }}/${{ env.IMAGE }}:dev-latest \
-            .
+          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE }}:${{ steps.sha.outputs.sha }}
+          docker tag ${{ env.REGISTRY }}/${{ env.IMAGE }}:${{ steps.sha.outputs.sha }} \
+            ${{ env.REGISTRY }}/${{ env.IMAGE }}:aio
+          docker push ${{ env.REGISTRY }}/${{ env.IMAGE }}:aio
 
-      - name: Push to registry
-        run: |
-          docker push ${{ env.REGISTRY }}/${{ env.IMAGE }}:${{ github.sha }}
-          docker push ${{ env.REGISTRY }}/${{ env.IMAGE }}:dev-latest
-
-      - name: Deploy dev
+      - name: Deploy prod
         run: |
           ssh $SSH_OPTS m@${{ env.DEPLOY_HOST }} "
             sudo docker service update \
-              --image ${{ env.REGISTRY }}/${{ env.IMAGE }}:${{ github.sha }} \
-              --with-registry-auth gigi-dev_gigi"
+              --image ${{ env.REGISTRY }}/${{ env.IMAGE }}:aio \
+              --with-registry-auth gigi-prod_gigi"
 
-      - name: Verify dev health
+      - name: Verify prod health
         run: |
           sleep 30
           ssh $SSH_OPTS m@${{ env.DEPLOY_HOST }} \
