@@ -37,8 +37,8 @@ jobs:
 
       - name: Login to Gitea registry
         run: |
-          echo "${{ secrets.REGISTRY_TOKEN }}" | docker login ${{ env.REGISTRY }} \
-            -u gigi-admin --password-stdin
+          docker login ${{ env.REGISTRY }} \
+            -u gigi-admin -p "${{ secrets.REGISTRY_TOKEN }}"
 
       - name: Retag and push as prod
         run: |
