@@ -8,6 +8,7 @@
 import type { BackupConfig } from './config'
 import { resolveRepos } from './sources'
 import { mirrorAll, type MirrorRunResult } from './mirror'
+import { getConfig } from '../core/store'
 
 // ─── State ──────────────────────────────────────────────────────────
 
@@ -62,11 +63,11 @@ export const runBackup = async (config?: BackupConfig): Promise<MirrorRunResult[
   const results: MirrorRunResult[] = []
 
   try {
-    const giteaUrl = process.env.GITEA_URL || 'http://localhost:3000'
-    const giteaToken = process.env.GITEA_TOKEN || ''
+    const giteaUrl = process.env.GITEA_URL || await getConfig('gitea_url') || 'http://localhost:3300'
+    const giteaToken = process.env.GITEA_TOKEN || await getConfig('gitea_token') || ''
 
     if (!giteaToken) {
-      console.error('[backup:scheduler] GITEA_TOKEN not set, cannot resolve repos')
+      console.error('[backup:scheduler] no gitea token available, cannot resolve repos')
       return []
     }
 
@@ -112,12 +113,12 @@ export const startScheduler = (config: BackupConfig): void => {
   console.log(`[backup:scheduler] starting with interval ${config.schedule.interval} (${intervalMs}ms)`)
   console.log(`[backup:scheduler] sources: ${config.sources.length}, targets: ${config.targets.length}`)
 
-  // Run first backup after a short delay (don't block startup)
+  // Run first backup after a delay (give internal Gitea time to start in AIO mode)
   setTimeout(() => {
     runBackup().catch(err => {
       console.error('[backup:scheduler] initial backup failed:', err)
     })
-  }, 10_000) // 10 second delay after startup
+  }, 60_000) // 60 second delay after startup
 
   // Schedule periodic backups
   schedulerTimer = setInterval(() => {
