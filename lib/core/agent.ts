@@ -13,6 +13,9 @@ import { execSync } from 'node:child_process'
 import { existsSync, readFileSync, mkdirSync, writeFileSync, chmodSync } from 'node:fs'
 import { homedir } from 'node:os'
 
+// Increase UV thread pool for concurrent TLS handshakes (ARM64 needs this for MCP tool token counting)
+if (!process.env.UV_THREADPOOL_SIZE) process.env.UV_THREADPOOL_SIZE = '64'
+
 // ─── MCP Server Config ──────────────────────────────────────────────
 
 export const loadMcpServers = (resolvedEnv?: Record<string, string>): Record<string, Record<string, unknown>> => {
@@ -497,7 +500,15 @@ let configured = false
 const ensureReady = async (): Promise<void> => {
   const token = await getConfig('claude_oauth_token')
   if (!token) throw new Error('Claude not configured — complete setup first')
-  process.env.CLAUDE_CODE_OAUTH_TOKEN = token
+
+  // OAuth tokens (sk-ant-oat*) use CLAUDE_CODE_OAUTH_TOKEN, API keys use ANTHROPIC_API_KEY
+  if (token.startsWith('sk-ant-oat')) {
+    process.env.CLAUDE_CODE_OAUTH_TOKEN = token
+    delete process.env.ANTHROPIC_API_KEY
+  } else {
+    process.env.ANTHROPIC_API_KEY = token
+    delete process.env.CLAUDE_CODE_OAUTH_TOKEN
+  }
 
   if (!configured) {
     await configureGit()
@@ -513,8 +524,11 @@ const getAgentEnv = async (): Promise<Record<string, string>> => {
   const telegramToken = await getConfig('telegram_bot_token') || ''
   const chatId = await getConfig('telegram_chat_id') || ''
 
+  // Strip CLAUDECODE to avoid "nested session" detection when running inside Claude Code
+  const { CLAUDECODE, ...cleanEnv } = process.env as Record<string, string>
+
   return {
-    ...process.env as Record<string, string>,
+    ...cleanEnv,
     PATH: process.env.PATH || '/usr/local/bin:/usr/bin:/bin',
     PORT: process.env.PORT || '3000',
     GITEA_URL: giteaUrl,
@@ -714,7 +728,7 @@ export const runAgent = async (
     }
 
     const prompt = formatMessages(messages)
-    console.log('[agent] spawning with executable:', baseOptions.executable, 'cwd:', baseOptions.cwd)
+    console.log('[agent] prompt:', prompt.length, 'chars, model:', baseOptions.model)
     const response = query({ prompt, options: baseOptions })
     await processResponse(response as unknown as AsyncIterable<Record<string, unknown>>)
     emitDone()

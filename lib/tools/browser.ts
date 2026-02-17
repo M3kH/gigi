@@ -151,7 +151,7 @@ const BrowserActionSchema = z.object({
   text: z.string().optional().describe('Text to type (for type action)'),
   script: z.string().optional().describe('JavaScript to evaluate in page context'),
   mode: z.enum(['headless', 'interactive']).optional().describe('Browser mode to switch to'),
-  options: z.record(z.unknown()).optional().describe('Additional options for the action'),
+  options: z.record(z.string(), z.unknown()).optional().describe('Additional options for the action'),
 })
 
 export const agentTools: AgentTool[] = [

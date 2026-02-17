@@ -331,13 +331,15 @@ cat > /app/start-gigi.sh << 'WRAPPER_EOF'
 #!/bin/bash
 # Source env vars written by entrypoint
 [ -f /app/.env.sh ] && source /app/.env.sh
+# Increase UV thread pool for concurrent TLS handshakes (MCP tool token counting on ARM64)
+export UV_THREADPOOL_SIZE=${UV_THREADPOOL_SIZE:-64}
 exec node --import tsx src/index.ts
 WRAPPER_EOF
 chmod +x /app/start-gigi.sh
 
 # Dump all relevant env vars for the gigi process
 {
-  env | grep -E '^(DATABASE_URL|GITEA_|CHROME_|BROWSER_|BACKUP_|PORT|GIGI_|WORKSPACE_|ADMIN_|ORG_|TELEGRAM_|CLAUDE_|NODE_)=' | while IFS='=' read -r key value; do
+  env | grep -E '^(DATABASE_URL|GITEA_|CHROME_|BROWSER_|BACKUP_|PORT|GIGI_|WORKSPACE_|ADMIN_|ORG_|TELEGRAM_|CLAUDE_|NODE_|UV_THREADPOOL_SIZE)=' | while IFS='=' read -r key value; do
     printf 'export %s=%q\n' "$key" "$value"
   done
 } > /app/.env.sh

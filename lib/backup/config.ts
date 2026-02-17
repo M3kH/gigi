@@ -47,7 +47,7 @@ const ScheduleSchema = z.object({
 const BackupConfigSchema = z.object({
   sources: z.array(SourceSchema).min(1),
   targets: z.array(TargetSchema).min(1),
-  schedule: ScheduleSchema.default({}),
+  schedule: ScheduleSchema.default(() => ({ interval: '6h', before_deploy: true })),
 })
 
 const RootConfigSchema = z.object({

@@ -16,7 +16,7 @@
     "test:ci": "node scripts/test-runner.js"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.1.0",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.44",
     "@hono/node-server": "^1.14.0",
     "@modelcontextprotocol/sdk": "^1.0.0",
     "@shoelace-style/shoelace": "^2.20.1",
@@ -32,7 +32,7 @@
     "sharp": "^0.33.2",
     "svelte": "^5.51.0",
     "ws": "^8.16.0",
-    "zod": "^3.24.0"
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^6.2.4",

@@ -17,7 +17,7 @@
  *   with WebSocket confirmation flow (see #64 acceptance criteria).
  */
 
-import { z } from 'zod'
+import { z, toJSONSchema } from 'zod'
 
 // ─── Types ──────────────────────────────────────────────────────────
 
@@ -136,95 +136,14 @@ export const getPermissions = (): Record<string, PermissionPolicy> => {
 
 /**
  * Convert a Zod schema to a JSON Schema object for MCP tool definitions.
- *
- * Handles the common cases we use (objects with string/number/boolean/enum fields).
- * Falls back to a permissive schema if conversion isn't straightforward.
+ * Uses Zod 4's built-in toJSONSchema.
  */
 const zodToJsonSchema = (schema: z.ZodType): Record<string, unknown> => {
-  // Try to get the shape from ZodObject
-  if (schema instanceof z.ZodObject) {
-    const shape = schema.shape
-    const properties: Record<string, unknown> = {}
-    const required: string[] = []
-
-    for (const [key, value] of Object.entries(shape)) {
-      const fieldSchema = value as z.ZodType
-      properties[key] = zodFieldToJsonSchema(fieldSchema)
-
-      // Check if field is required (not optional)
-      if (!(fieldSchema instanceof z.ZodOptional)) {
-        required.push(key)
-      }
-    }
-
-    return {
-      type: 'object',
-      properties,
-      ...(required.length > 0 ? { required } : {}),
-    }
-  }
-
-  // Fallback: accept anything
-  return { type: 'object' }
-}
-
-const zodFieldToJsonSchema = (field: z.ZodType): Record<string, unknown> => {
-  // Unwrap optional
-  if (field instanceof z.ZodOptional) {
-    return zodFieldToJsonSchema(field._def.innerType)
-  }
-
-  // Unwrap default
-  if (field instanceof z.ZodDefault) {
-    return zodFieldToJsonSchema(field._def.innerType)
-  }
-
-  // String
-  if (field instanceof z.ZodString) {
-    const result: Record<string, unknown> = { type: 'string' }
-    if (field.description) result.description = field.description
-    return result
-  }
-
-  // Number
-  if (field instanceof z.ZodNumber) {
-    const result: Record<string, unknown> = { type: 'number' }
-    if (field.description) result.description = field.description
-    return result
-  }
-
-  // Boolean
-  if (field instanceof z.ZodBoolean) {
-    return { type: 'boolean' }
-  }
-
-  // Enum
-  if (field instanceof z.ZodEnum) {
-    return { type: 'string', enum: field._def.values }
-  }
-
-  // Literal
-  if (field instanceof z.ZodLiteral) {
-    return { type: typeof field._def.value, const: field._def.value }
-  }
-
-  // Array
-  if (field instanceof z.ZodArray) {
-    return { type: 'array', items: zodFieldToJsonSchema(field._def.type) }
-  }
-
-  // Record / generic object
-  if (field instanceof z.ZodRecord || field instanceof z.ZodObject) {
+  try {
+    return toJSONSchema(schema) as Record<string, unknown>
+  } catch {
     return { type: 'object' }
   }
-
-  // Unknown / any
-  if (field instanceof z.ZodUnknown || field instanceof z.ZodAny) {
-    return {}
-  }
-
-  // Fallback
-  return { type: 'string' }
 }
 
 // ─── Tool Registry ──────────────────────────────────────────────────
