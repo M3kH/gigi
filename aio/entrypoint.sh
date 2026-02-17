@@ -192,6 +192,15 @@ EOINI
       -H "$AUTH" > /dev/null 2>&1 || true
   fi
 
+  # Create default repositories
+  INIT_REPOS="${INIT_REPOS:-gigi gigi-infra}"
+  for repo in $INIT_REPOS; do
+    echo "[aio] Creating repo: ${ORG_NAME}/${repo}"
+    curl -s -X POST "http://localhost:3300/api/v1/orgs/${ORG_NAME}/repos" \
+      -H "$AUTH" -H "Content-Type: application/json" \
+      -d "{\"name\":\"${repo}\",\"private\":false,\"auto_init\":false}" > /dev/null 2>&1 || true
+  done
+
   # Register webhook
   WEBHOOK_SECRET=$(openssl rand -hex 16)
   curl -s -X POST "http://localhost:3300/api/v1/admin/hooks" \
