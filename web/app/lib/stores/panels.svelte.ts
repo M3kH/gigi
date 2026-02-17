@@ -83,11 +83,13 @@ const SIZES_KEY = 'gigi:panel-sizes'
 interface PanelSizes {
   kanbanHeight: number
   chatHeight: number
+  chatWidth: number
 }
 
 const DEFAULT_SIZES: PanelSizes = {
   kanbanHeight: 200,
   chatHeight: 300,
+  chatWidth: 420,
 }
 
 function loadSizes(): PanelSizes {
@@ -121,5 +123,14 @@ export function getChatHeight(): number {
 
 export function setChatHeight(h: number) {
   sizes = { ...sizes, chatHeight: Math.max(180, Math.min(h, window.innerHeight * 0.8)) }
+  saveSizes(sizes)
+}
+
+export function getChatWidth(): number {
+  return sizes.chatWidth
+}
+
+export function setChatWidth(w: number) {
+  sizes = { ...sizes, chatWidth: Math.max(280, Math.min(w, window.innerWidth * 0.6)) }
   saveSizes(sizes)
 }

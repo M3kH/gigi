@@ -18,6 +18,7 @@ import type {
   TokenUsage,
 } from '$lib/types/chat'
 import type { ServerMessage } from '$lib/types/protocol'
+import { fetchBoard } from '$lib/stores/kanban.svelte'
 import { applyEvent, answerSegment as applyAnswer } from '$lib/utils/segment-builder'
 import { getWSClient } from '$lib/stores/connection.svelte'
 import { getViewContext } from '$lib/stores/navigation.svelte'
@@ -230,6 +231,8 @@ export function handleServerEvent(event: ServerMessage): void {
         streamSegments = []
       }
       loadConversations()
+      // Refresh kanban board — agent may have changed issue labels/status
+      fetchBoard().catch(() => { /* ignore */ })
       break
     }
 
