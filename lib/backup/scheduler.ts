@@ -63,7 +63,8 @@ export const runBackup = async (config?: BackupConfig): Promise<MirrorRunResult[
   const results: MirrorRunResult[] = []
 
   try {
-    const giteaUrl = process.env.GITEA_URL || await getConfig('gitea_url') || 'http://localhost:3300'
+    // Always use the internal Gitea (AIO container runs its own instance on :3300)
+    const giteaUrl = 'http://localhost:3300'
     const giteaToken = process.env.GITEA_TOKEN || await getConfig('gitea_token') || ''
 
     if (!giteaToken) {
@@ -79,22 +80,6 @@ export const runBackup = async (config?: BackupConfig): Promise<MirrorRunResult[
     if (repos.length === 0) {
       console.warn('[backup:scheduler] no repos found, nothing to mirror')
       return []
-    }
-
-    // Rewrite clone URLs to use the internal Gitea address (the API returns
-    // external ROOT_URL which may not be resolvable inside the container)
-    for (const repo of repos) {
-      if (repo.cloneUrl) {
-        try {
-          const cloneUrl = new URL(repo.cloneUrl)
-          const internalUrl = new URL(giteaUrl)
-          cloneUrl.protocol = internalUrl.protocol
-          cloneUrl.host = internalUrl.host
-          repo.cloneUrl = cloneUrl.toString()
-        } catch {
-          // Leave clone URL as-is if parsing fails
-        }
-      }
     }
 
     // Mirror to each target
