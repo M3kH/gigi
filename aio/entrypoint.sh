@@ -270,7 +270,17 @@ elif [ "$ENABLE_GITEA" = "true" ]; then
   fi
 fi
 
-# ── 4. Build runner-worker image if Docker socket available ───────────
+# ── 4. Fix permissions & stale locks ───────────────────────────────────
+
+# Workspace bind mount comes in as root — ensure gigi can write
+if [ -d /workspace ]; then
+  chown -R gigi:gigi /workspace
+fi
+
+# Chrome profile lock from previous container prevents startup (exit 21)
+rm -f /data/chrome-profile/SingletonLock /data/chrome-profile/SingletonCookie /data/chrome-profile/SingletonSocket
+
+# ── 5. Build runner-worker image if Docker socket available ────────────
 
 if [ -S /var/run/docker.sock ] && [ -f /opt/runner-worker/Dockerfile ]; then
   if ! docker image inspect gigi/runner-worker:latest > /dev/null 2>&1; then
@@ -279,11 +289,11 @@ if [ -S /var/run/docker.sock ] && [ -f /opt/runner-worker/Dockerfile ]; then
   fi
 fi
 
-# ── 5. Export env vars for supervisord child processes ────────────────
+# ── 6. Export env vars for supervisord child processes ────────────────
 
 export GITEA_URL CHROME_CDP_URL BROWSER_MODE BROWSER_VIEW_URL
 
-# ── 6. Start supervisord ─────────────────────────────────────────────
+# ── 7. Start supervisord ─────────────────────────────────────────────
 
 echo "[aio] Starting supervisord..."
 exec /usr/bin/supervisord -c "$SUPERVISORD_CONF"
