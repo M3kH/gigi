@@ -17,7 +17,8 @@ backup:
       cert: ${BACKUP_MTLS_CERT:-/certs/backup/client-cert.pem}
       key: ${BACKUP_MTLS_KEY:-/certs/backup/client-key.pem}
       ca: ${BACKUP_MTLS_CA:-/certs/backup/ca-cert.pem}
-      # API token for creating repos on target Gitea (required for create_repos)
+      # Token for git push auth and API calls
+      token: ${BACKUP_GITEA_TOKEN}
       api_token: ${BACKUP_GITEA_TOKEN}
       create_repos: true
 
