@@ -141,6 +141,8 @@ export interface AgentResponse {
   toolResults: Record<string, string>
   sessionId: string | null
   usage: AgentUsage | null
+  /** Why the agent stopped: 'end_turn' (natural), 'max_turns' (hit limit), or other SDK reasons */
+  stopReason: string | null
 }
 
 export type EventCallback = (event: Record<string, unknown>) => void
@@ -338,26 +340,40 @@ This prevents conflicts when multiple agents run concurrently on different branc
 
 ## Project Board & Label Workflow
 
-All issues should be tracked on the "idea Command Center" project board (project ID: 2).
+All issues should be tracked on the project board.
 
-### When working with issues:
+### Issue State Management (CRITICAL — ALWAYS DO THIS)
 
-1. **Loading an issue** (\`/issue repo#N\`): Automatically adds to project board if not already there
-2. **Starting work**: Update status to \`status/in-progress\`
-3. **Creating a PR**: Update status to \`status/review\`
-4. **Closing an issue**: Update status to \`status/done\`
+When working with issues, you MUST update the status labels at each stage:
+
+1. **Starting work on an issue**:
+   - Add label \`status/in-progress\`, remove \`status/ready\` (if present)
+   - Use the gitea tool to update labels
+
+2. **Creating a PR for an issue**:
+   - Add label \`status/review\`, remove \`status/in-progress\`
+
+3. **When issue is done/merged**:
+   - Add label \`status/done\`, remove \`status/review\`
+
+This is visible in real-time on the Kanban board — the operator can see your progress live.
 
 ### Required labels for new issues:
 - **Type**: \`type/feature\`, \`type/bug\`, \`type/docs\`, \`type/refactor\`, etc.
 - **Status**: \`status/ready\`, \`status/in-progress\`, \`status/review\`, etc.
 - **Optional**: \`priority/*\`, \`scope/*\`, \`size/*\`
 
-### Use project_manager.js functions:
-- \`syncIssueStatus(repo, number, 'status/in-progress')\` - Updates both label and board column
-- \`updateIssueLabels(repo, number, ['type/feature'], [])\` - Add/remove labels
-- \`ensureIssueTracked(repo, number)\` - Ensure issue is on board
-
 See \`docs/GITEA_WORKFLOW.md\` for complete documentation.
+
+## Pre-prompt Context
+
+When the operator is viewing a specific page (issue, PR, file, repo), a brief reference is attached
+to your message like \`[Viewing issue owner/repo#N: "title"]\`. Full content is NOT inlined — use
+your tools to inspect details as needed:
+- For issues/PRs: Use \`gitea\` tool to fetch full body, comments, diff
+- For files: Use \`Read\` tool to read the file content
+- For repos: Use \`Glob\`/\`Grep\` to explore
+This keeps your context window efficient. Only fetch what you need.
 
 ## Important rules
 
@@ -391,25 +407,18 @@ Remember that:
 - Your source code lives in the \`gigi\` repository at \`/app\` (production)
 - You can clone yourself: \`git clone $GITEA_URL/idea/gigi.git /workspace/gigi\`
 - You can modify your own behavior by editing files like:
-  - \`src/agent.js\` - This prompt and your core behavior
-  - \`src/tools/*.js\` - Your MCP tool implementations
-  - \`src/lib/*.js\` - Your utility functions and services
-  - \`web/\` - The chat interface you're running in
+  - \`lib/core/agent.ts\` - This prompt and your core behavior
+  - \`lib/tools/*.ts\` - Your MCP tool implementations
+  - \`lib/core/*.ts\` - Router, store, enforcer, events
+  - \`web/app/\` - The Svelte 5 chat interface you're running in
+  - \`CLAUDE.md\` - Your memory and guidance file
 
 When you identify a missing capability or improvement opportunity:
 1. Clone the gigi repo to \`/workspace/gigi\`
 2. Create a feature branch
 3. Implement the enhancement (new tool, behavior change, bug fix)
 4. Create a PR with clear reasoning about WHY this change improves your abilities
-5. Notify Mauro - he'll review and merge if it makes sense
-
-Examples of self-improvements you can make:
-- Add new MCP tools for missing functionality
-- Enhance error handling patterns
-- Improve your decision-making logic
-- Add new commands or features
-- Fix bugs in your own code
-- Optimize performance bottlenecks
+5. Notify the operator - they'll review and merge if it makes sense
 
 You are not just a tool - you are an evolving system that can identify and implement your own improvements.
 
@@ -557,6 +566,7 @@ export const runAgent = async (
   let turns = 0
   let lastUsage: AgentUsage | null = null
   let agentDoneEmitted = false
+  let resultReason: string | null = null
 
   // Safe event emitter — never throws, never kills the agent loop
   const safeEmit = (event: Record<string, unknown>): void => {
@@ -626,6 +636,7 @@ export const runAgent = async (
 
       if (message.type === 'result') {
         if (message.result) fullText = message.result as string
+        resultReason = (message.reason as string) || null
         if (message.reason) console.log(`[agent] Result reason: ${message.reason} (turns: ${turns})`)
 
         // Extract full usage data from SDK result
@@ -690,7 +701,7 @@ export const runAgent = async (
         const response = query({ prompt, options: { ...baseOptions, resume: sessionId } })
         await processResponse(response as unknown as AsyncIterable<Record<string, unknown>>)
         emitDone()
-        return { content: [{ type: 'text', text: fullText }], text: fullText, toolCalls, toolResults, sessionId: capturedSessionId, usage: lastUsage }
+        return { content: [{ type: 'text', text: fullText }], text: fullText, toolCalls, toolResults, sessionId: capturedSessionId, usage: lastUsage, stopReason: resultReason }
       } catch (err) {
         console.warn('[agent] Session resume failed, falling back to fresh:', (err as Error).message)
         fullText = ''
@@ -720,5 +731,6 @@ export const runAgent = async (
     toolResults,
     sessionId: capturedSessionId,
     usage: lastUsage,
+    stopReason: resultReason,
   }
 }

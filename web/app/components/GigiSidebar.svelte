@@ -1,6 +1,6 @@
 <script lang="ts">
   /** Section B: Chat list / conversation sidebar */
-  import { getPanelState, type PanelState } from '$lib/stores/panels.svelte'
+  import { getPanelState, togglePanel, type PanelState } from '$lib/stores/panels.svelte'
   import { newConversation, loadConversations } from '$lib/stores/chat.svelte'
   import ChatList from '$components/chat/ChatList.svelte'
   import { onMount } from 'svelte'
@@ -14,12 +14,22 @@
   function handleNewChat() {
     newConversation()
   }
+
+  function handleCollapse() {
+    togglePanel('sidebar')
+  }
 </script>
 
 <aside class="gigi-sidebar">
   <header class="section-header">
     <span class="section-icon">💬</span>
     <h2>Chats</h2>
+    <div class="header-spacer"></div>
+    <button class="collapse-btn" onclick={handleCollapse} title="Collapse sidebar (Ctrl+B)">
+      <svg viewBox="0 0 24 24" fill="none" width="14" height="14">
+        <path d="M15 19l-7-7 7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </button>
   </header>
 
   <div class="section-body">
@@ -58,6 +68,29 @@
 
   .section-icon {
     font-size: var(--gigi-font-size-base);
+  }
+
+  .header-spacer {
+    flex: 1;
+  }
+
+  .collapse-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    color: var(--gigi-text-muted);
+    cursor: pointer;
+    padding: 2px;
+    border-radius: var(--gigi-radius-sm);
+    transition: all var(--gigi-transition-fast);
+    flex-shrink: 0;
+  }
+
+  .collapse-btn:hover {
+    color: var(--gigi-text-primary);
+    background: var(--gigi-bg-hover);
   }
 
   .section-body {

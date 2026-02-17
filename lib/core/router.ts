@@ -27,6 +27,10 @@ const getGiteaClient = async () => {
   return createGiteaClient(baseUrl, token)
 }
 
+/**
+ * Enrich message with a brief context reference — NOT full inline content.
+ * The agent can use its tools to fetch details as needed, keeping context lean.
+ */
 const enrichWithContext = async (text: string, context: ViewContext): Promise<string> => {
   try {
     const gitea = await getGiteaClient()
@@ -34,28 +38,24 @@ const enrichWithContext = async (text: string, context: ViewContext): Promise<st
 
     if (context.type === 'issue' && context.owner && context.repo && context.number) {
       const issue = await gitea.issues.get(context.owner, context.repo, context.number)
-      const body = issue.body ? `\n${issue.body.slice(0, 2000)}\n` : ''
-      return `[Viewing issue ${context.owner}/${context.repo}#${context.number}: "${issue.title}" (${issue.state})]${body}\n${text}`
+      return `[Viewing issue ${context.owner}/${context.repo}#${context.number}: "${issue.title}" (${issue.state})]\n${text}`
     }
 
     if (context.type === 'pull' && context.owner && context.repo && context.number) {
       const pr = await gitea.pulls.get(context.owner, context.repo, context.number)
-      const body = pr.body ? `\n${pr.body.slice(0, 2000)}\n` : ''
-      return `[Viewing PR ${context.owner}/${context.repo}#${context.number}: "${pr.title}" (${pr.state}) ${pr.head?.ref || ''} → ${pr.base?.ref || ''}]${body}\n${text}`
+      return `[Viewing PR ${context.owner}/${context.repo}#${context.number}: "${pr.title}" (${pr.state}) ${pr.head?.ref || ''} → ${pr.base?.ref || ''}]\n${text}`
     }
 
     if (context.type === 'file' && context.owner && context.repo && context.filepath) {
-      const file = await gitea.repos.getContents(context.owner, context.repo, context.filepath, context.branch)
-      const content = Buffer.from(file.content || '', 'base64').toString('utf-8')
-      return `[Viewing file ${context.owner}/${context.repo}/${context.filepath}]\n\`\`\`\n${content.slice(0, 4000)}\n\`\`\`\n\n${text}`
+      return `[Viewing file ${context.owner}/${context.repo}/${context.filepath}${context.branch ? ` (branch: ${context.branch})` : ''}]\n${text}`
     }
 
     if (context.type === 'commit' && context.owner && context.repo && context.commitSha) {
-      return `[Viewing commit ${context.owner}/${context.repo}@${context.commitSha.slice(0, 12)}]\n\n${text}`
+      return `[Viewing commit ${context.owner}/${context.repo}@${context.commitSha.slice(0, 12)}]\n${text}`
     }
 
     if (context.type === 'repo' && context.owner && context.repo) {
-      return `[Viewing repository ${context.owner}/${context.repo}]\n\n${text}`
+      return `[Viewing repository ${context.owner}/${context.repo}]\n${text}`
     }
   } catch (err) {
     console.warn('[router] Context enrichment failed:', (err as Error).message)
@@ -187,6 +187,36 @@ export const handleMessage = async (
     tool_outputs: Object.keys(response.toolResults).length ? response.toolResults : undefined,
     usage: response.usage || undefined,
   })
+
+  // MAXTURNS CONTINUATION: If the agent hit the turn limit, resume to let it finish
+  if (response.stopReason === 'max_turns' && response.sessionId) {
+    console.log(`[router] Agent hit maxTurns — continuing conversation to completion`)
+    const continuationSessionId = response.sessionId
+    try {
+      await store.setSessionId(convId, continuationSessionId)
+    } catch { /* ignore */ }
+
+    const continueMsg = '[SYSTEM] You hit the turn limit before completing your task. Please wrap up: summarize what you accomplished, what remains, and provide any final answers or PR links.'
+    await store.addMessage(convId, 'user', [{ type: 'text', text: continueMsg }])
+
+    const contMessages: AgentMessage[] = [{ role: 'user', content: [{ type: 'text', text: continueMsg }] }]
+    try {
+      const contResponse = await runAgent(contMessages, wrappedOnEvent, { sessionId: continuationSessionId, signal: abortController.signal })
+      if (contResponse.sessionId) {
+        try { await store.setSessionId(convId, contResponse.sessionId) } catch { /* ignore */ }
+      }
+      const contText = contResponse.text
+      await store.addMessage(convId, 'assistant', [{ type: 'text', text: contText }], {
+        tool_calls: contResponse.toolCalls.length ? contResponse.toolCalls : undefined,
+        tool_outputs: Object.keys(contResponse.toolResults).length ? contResponse.toolResults : undefined,
+        usage: contResponse.usage || undefined,
+      })
+      // Update the main response text with the continuation
+      storedText = storedText + '\n\n' + contText
+    } catch (err) {
+      console.warn('[router] maxTurns continuation failed:', (err as Error).message)
+    }
+  }
 
   // ENFORCE TASK COMPLETION
   const enforcement = await enforceCompletion(convId)

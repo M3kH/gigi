@@ -4,105 +4,142 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What Is Gigi
 
-Gigi is a persistent AI coordinator running 24/7 on a TuringPi cluster. She manages infrastructure, coordinates agents, and communicates with Mauro via Telegram and a web UI at `https://claude.cluster.local`.
+Gigi is a persistent AI coordinator running 24/7 on a compute cluster. It manages infrastructure, coordinates agents, tracks issues, and communicates with the operator via Telegram and a real-time web UI.
 
 ## Architecture
 
-- **Runtime**: Node.js 20, Docker Swarm, ARM64
-- **Framework**: Hono (HTTP), grammY (Telegram)
+- **Runtime**: Node.js 22, Docker Swarm, ARM64
+- **Language**: TypeScript (strict mode)
+- **Framework**: Hono (HTTP/WebSocket), grammY (Telegram)
 - **Agent**: Claude Agent SDK with MCP tools, OAuth token auth
-- **Database**: PostgreSQL (shared cluster DB) — config, conversations, messages
-- **Entry point**: `src/index.js` → starts HTTP server + Telegram bot
+- **Database**: PostgreSQL — config, conversations, messages, task context
+- **Frontend**: Svelte 5 (runes mode) + Vite
+- **Entry point**: `src/index.ts` → starts HTTP server + Telegram bot + backup scheduler
 
-### Key modules
+### Directory Structure
 
-| File | Purpose |
-|------|---------|
-| `src/agent.js` | Claude Agent SDK loop with system prompt |
-| `src/router.js` | Routes messages (telegram/web/webhook) to agent |
-| `src/telegram.js` | grammY bot — polling mode, chat ID lock |
-| `src/web.js` | Hono routes — health, setup, chat, webhooks |
-| `src/setup.js` | Bootstrap wizard (OAuth token, Telegram, Gitea) |
-| `src/store.js` | PostgreSQL store — config, conversations, messages |
-| `src/health.js` | Health check with phase detection |
-| `src/webhooks.js` | Gitea webhook handler with HMAC validation |
-| `src/mcp-server.js` | MCP server exposing tools to Claude Agent SDK |
-| `src/tools/*.js` | Tool implementations |
-| `src/issue_handler.js` | `/issue` command handler with project board integration |
-| `src/project_manager.js` | Project board and label management functions |
+```
+lib/                     # Core TypeScript modules
+├── core/                # Agent, router, store, protocol, events, enforcer
+├── api/                 # HTTP routes, webhooks, Telegram, Gitea proxy
+├── api-gitea/           # Typed Gitea API client
+├── domain/              # Business logic (issues, projects, setup)
+├── tools/               # MCP tool implementations
+└── backup/              # Repository backup/mirror system
 
-### Tools available to the agent
+web/app/                 # Svelte 5 frontend
+├── components/          # AppShell, panels, chat, dashboard, detail views
+├── lib/stores/          # Svelte 5 rune stores (chat, panels, navigation, kanban)
+├── lib/services/        # WebSocket client, chat API
+├── lib/utils/           # Formatting, markdown, link interception
+└── lib/types/           # TypeScript types
+
+src/                     # Server bootstrap
+├── index.ts             # Main entry: HTTP + Telegram + enforcer + backup
+└── server.ts            # WebSocket server management
+
+.agents/                 # Agent persona definitions
+tests/                   # Test suite
+docs/                    # Documentation
+```
+
+### Key Modules
+
+| Module | Purpose |
+|--------|---------|
+| `lib/core/agent.ts` | Claude Agent SDK loop with system prompt, MCP server config |
+| `lib/core/router.ts` | Routes messages (web/telegram/webhook) → agent, session management |
+| `lib/core/store.ts` | PostgreSQL persistence — config, conversations, messages |
+| `lib/core/enforcer.ts` | Task completion tracking — detects code changes, enforces PR loop |
+| `lib/core/protocol.ts` | Zod schemas for WebSocket client↔server messages |
+| `lib/core/events.ts` | Event bus for real-time UI updates |
+| `lib/core/mcp.ts` | MCP server bridging tool registry → Claude Agent SDK |
+| `lib/api/web.ts` | Hono HTTP routes — health, setup, conversations, webhooks |
+| `lib/api/webhookRouter.ts` | Gitea webhook → chat routing, @gigi mention handler |
+| `lib/api/telegram.ts` | grammY bot — polling mode, message routing |
+| `lib/domain/projects.ts` | Project board management, label sync |
+| `lib/tools/gitea.ts` | Gitea API tool (repos, issues, PRs, comments) |
+| `lib/tools/telegram.ts` | Telegram send tool |
+| `lib/tools/ask-user.ts` | Interactive question tool (blocks until answered) |
+
+### Tools Available to the Agent
+
+The agent runs via Claude Agent SDK with these MCP tools:
 
 | Tool | Description |
 |------|-------------|
-| `bash` | Sandboxed shell (30s timeout, blocked destructive patterns) |
-| `git` | Git operations with auto-configured Gitea credentials |
-| `gitea` | Gitea API — repos, issues, PRs, comments |
-| `read_file` | Read files under /projects, /workspace, /app |
-| `write_file` | Write files under /workspace |
-| `docker` | Read-only Docker inspection (services, logs, ps) |
-| `telegram_send` | Send messages to Mauro on Telegram |
+| `gitea` | Gitea API — repos, issues, PRs, comments, labels |
+| `ask_user` | Ask operator a question via web UI (blocks until answered) |
+| `telegram_send` | Send Telegram notifications |
+| `navigate_page` | Browser automation — navigate URLs |
+| `take_screenshot` | Capture browser page |
+| `evaluate_script` | Run JavaScript in browser page |
+| Plus standard | `Bash`, `Read`, `Write`, `Edit`, `Glob`, `Grep` |
 
 ## Commands
 
 ```bash
-npm start          # Start server
-npm run dev        # Start with --watch
+npm start          # Start server (production)
+npm run dev        # Start with --watch (development)
+npm test           # Run test suite
 ```
 
 ## CI/CD
 
 `.gitea/workflows/build.yml`:
-1. rsync source to cluster manager (192.168.1.110)
-2. `docker build` natively on ARM64
-3. Push to Gitea registry (192.168.1.80:3000)
-4. `docker stack deploy` or `docker service update`
+1. rsync source to cluster manager node
+2. `docker-compose build` natively on ARM64
+3. Push images to Gitea container registry
+4. `docker stack deploy` with docker-compose.yml
 5. Deploy Caddyfile via `deploy-site` action
 
-Secrets: `REGISTRY_TOKEN`, `DB_PASSWORD`, `SSH_PRIVATE_KEY`, `SSH_KNOWN_HOSTS`
+## Self-modification Workflow
 
-## Self-modification workflow
-
-Gigi can create PRs on her own repo:
-1. Clone to `/workspace/gigi` via git tool
-2. Create branch, edit files via write_file tool
-3. Commit and push via git tool (Gitea credentials auto-configured)
+Gigi can create PRs on its own repo:
+1. Clone to `/workspace/gigi` via git
+2. Create branch, edit files
+3. Commit and push (Gitea credentials auto-configured)
 4. Create PR via gitea tool (include "Closes #N" in body)
-5. Update issue status to `status/review` via project_manager
-6. Notify Mauro on Telegram with PR link
+5. Update issue status labels via Gitea API
+6. Notify operator on Telegram with PR link
 
 ## Project Board Workflow
 
-All issues are tracked on the **idea Command Center** project board (ID: 2).
+All issues are tracked on the project board.
 
-### Key behaviors:
-- `/issue repo#N` automatically adds issue to board if not present
-- New issues should have `type/*` and `status/*` labels
-- Use `syncIssueStatus()` to update both labels and board position
-- Always link PRs to issues with "Closes #N" in PR description
+### Issue State Management (CRITICAL)
 
-See `docs/GITEA_WORKFLOW.md` for complete workflow documentation.
+When working on issues, ALWAYS update the status:
+- **Starting work**: Add `status/in-progress` label, remove `status/ready`
+- **Creating a PR**: Add `status/review` label, remove `status/in-progress`
+- **Closing/merging**: Add `status/done` label, remove `status/review`
+
+Use the gitea tool to manage labels:
+```
+gitea({ action: "edit_issue", owner: "...", repo: "...", number: N, labels: [...] })
+```
+
+### Required Labels for New Issues
+- **Type**: `type/feature`, `type/bug`, `type/docs`, `type/refactor`
+- **Status**: `status/ready`, `status/in-progress`, `status/review`, `status/done`
+- **Optional**: `priority/*`, `scope/*`, `size/*`
+
+### Always Link PRs to Issues
+Include "Closes #N" in the PR description to auto-close the issue on merge.
 
 ## Infrastructure
 
-- **TuringPi v2**: 3 ARM64 nodes (worker-0: .110, worker-1: .111, worker-2: .112)
-- **VIP**: 192.168.1.50 (keepalived)
-- **Gitea**: http://192.168.1.80:3000 (repos, CI, registry)
-- **Caddy**: Reverse proxy, `*.cluster.local` internal domains
-- **Storage**: `/mnt/cluster-storage/`
-- **Docker service**: `idea-biancifiore-gigi_gigi`
+- Compute cluster with ARM64 nodes, Docker Swarm orchestration
+- Gitea for repositories, CI/CD, container registry
+- Caddy for reverse proxy with automatic TLS
+- PostgreSQL for persistent storage
+- Configurable via environment variables and database config
 
-## The Team
+## Conventions
 
-- **Gigi** (this service) — Coordinator, infra, deployment, comms
-- **Guglielmo** — org-press core developer (meticulous, pragmatic)
-- **Rugero** — Website maintainer (creative, design-focused)
-
-## Repositories (all on Gitea under idea/)
-
-- `gigi` — This service
-- `org-press` — Static site generator (Guglielmo)
-- `rugero-ideable` — Website (Rugero)
-- `biancifiore` — Infrastructure repo
-- `deploy-docker-compose` — CI action for Docker deployments
-- `deploy-site` — CI action for static site + Caddyfile deployments
+- All source files are TypeScript (strict mode)
+- Frontend uses Svelte 5 with runes (`$state`, `$derived`, `$effect`)
+- Stores are in `web/app/lib/stores/*.svelte.ts`
+- Components follow the panel layout: A (Kanban), B (Sidebar), C (Filters), D (Main), F (Chat)
+- MCP tools export `agentTools: AgentTool[]` arrays, collected by registry
+- WebSocket protocol uses Zod schemas in `lib/core/protocol.ts`

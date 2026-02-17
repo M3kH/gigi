@@ -1,9 +1,14 @@
 <script lang="ts">
   /**
-   * Chat text input with auto-resize and Enter-to-send
+   * Chat text input with auto-resize, Enter-to-send, and localStorage draft sync
    *
    * Fires `onsend` with the message string. Handles Shift+Enter for newlines.
+   * Persists draft text to localStorage so it survives page refreshes.
    */
+  import { onMount } from 'svelte'
+
+  const DRAFT_KEY = 'gigi:chat-draft'
+
   interface Props {
     onsend: (message: string) => void
     placeholder?: string
@@ -15,12 +20,43 @@
   let inputValue = $state('')
   let inputEl: HTMLTextAreaElement | undefined = $state()
 
+  // Restore draft from localStorage on mount
+  onMount(() => {
+    try {
+      const draft = localStorage.getItem(DRAFT_KEY)
+      if (draft) {
+        inputValue = draft
+        // Trigger auto-resize after restoring
+        requestAnimationFrame(() => {
+          if (inputEl) {
+            inputEl.style.height = 'auto'
+            inputEl.style.height = Math.min(inputEl.scrollHeight, 200) + 'px'
+          }
+        })
+      }
+    } catch { /* ignore */ }
+  })
+
+  // Sync draft to localStorage on change
+  function syncDraft() {
+    try {
+      if (inputValue.trim()) {
+        localStorage.setItem(DRAFT_KEY, inputValue)
+      } else {
+        localStorage.removeItem(DRAFT_KEY)
+      }
+    } catch { /* ignore */ }
+  }
+
   function handleSend() {
     const msg = inputValue.trim()
     if (!msg || disabled) return
 
     onsend(msg)
     inputValue = ''
+
+    // Clear draft from localStorage on send
+    try { localStorage.removeItem(DRAFT_KEY) } catch { /* ignore */ }
 
     if (inputEl) {
       inputEl.style.height = 'auto'
@@ -38,6 +74,7 @@
     const el = e.target as HTMLTextAreaElement
     el.style.height = 'auto'
     el.style.height = Math.min(el.scrollHeight, 200) + 'px'
+    syncDraft()
   }
 </script>
 

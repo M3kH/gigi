@@ -1,162 +1,152 @@
-# Gigi 🤖
+# Gigi
 
-Gigi is a persistent AI coordinator running 24/7 on a TuringPi cluster. She helps Mauro build, deploy, and maintain projects across the idea infrastructure.
+Persistent AI coordinator running 24/7 on a compute cluster. Manages infrastructure, coordinates agents, tracks issues, and communicates via Telegram and a real-time web UI.
 
-## What She Does
+## Features
 
-- **Infrastructure Management**: Monitors services, deploys updates, manages Docker Swarm
-- **Code Coordination**: Creates PRs, reviews code, coordinates with other agents (Guglielmo, Rugero)
-- **Communication**: Available via Telegram and web UI at `https://claude.cluster.local`
-- **CI/CD**: Orchestrates builds, deployments, and infrastructure updates
+- **AI Agent**: Claude Agent SDK with MCP tools, session persistence, task completion enforcement
+- **Real-time Web UI**: Svelte 5 dashboard with kanban board, chat overlay, Gitea integration, shared browser
+- **Issue Tracking**: Gitea webhook routing, automatic conversation creation, @mention handling
+- **Self-Modification**: Can create PRs on its own codebase to evolve capabilities
+- **Backup System**: Configurable repository mirroring between Gitea instances
+- **Multi-Channel**: Web UI + Telegram bot with consistent conversation management
 
 ## Tech Stack
 
-- **Runtime**: Node.js 20 on ARM64 (TuringPi cluster)
-- **Framework**: [Hono](https://hono.dev/) (HTTP), [grammY](https://grammy.dev/) (Telegram)
-- **Agent**: [Claude Agent SDK](https://github.com/anthropics/anthropic-agent-sdk) with MCP tools
-- **Database**: PostgreSQL (shared cluster DB)
-- **Deployment**: Docker Swarm with automated CI/CD via Gitea Actions
+| Component | Technology |
+|-----------|-----------|
+| Runtime | Node.js 22, ARM64 |
+| Language | TypeScript (strict) |
+| HTTP | [Hono](https://hono.dev/) |
+| Telegram | [grammY](https://grammy.dev/) |
+| Agent | [Claude Agent SDK](https://github.com/anthropics/anthropic-agent-sdk) |
+| Frontend | [Svelte 5](https://svelte.dev/) + [Vite](https://vitejs.dev/) |
+| Database | PostgreSQL |
+| Deployment | Docker Swarm, Gitea Actions CI/CD |
 
 ## Architecture
 
 ```
+lib/
+├── core/           # Agent loop, message router, store, events, enforcer
+├── api/            # HTTP routes, webhooks, Telegram bot, Gitea proxy
+├── api-gitea/      # Typed Gitea API client wrapper
+├── domain/         # Business logic (issues, projects, setup wizard)
+├── tools/          # MCP tools (gitea, telegram, ask-user, browser)
+└── backup/         # Repository backup/mirror system
+
+web/app/
+├── components/     # Svelte 5 UI (AppShell, panels, chat, kanban, dashboard)
+├── lib/stores/     # Reactive stores (chat, panels, navigation, kanban)
+├── lib/services/   # WebSocket client, chat API
+└── lib/utils/      # Formatting, markdown, link interception
+
 src/
-├── index.js          # Entry point: HTTP server + Telegram bot
-├── agent.js          # Claude Agent SDK loop with system prompt
-├── router.js         # Routes messages (telegram/web/webhook) to agent
-├── telegram.js       # grammY bot with polling mode
-├── web.js            # Hono routes: health, setup, chat, webhooks
-├── setup.js          # Bootstrap wizard (OAuth, Telegram, Gitea)
-├── store.js          # PostgreSQL store: config, conversations, messages
-├── health.js         # Health check with phase detection
-├── webhooks.js       # Gitea webhook handler with HMAC validation
-├── mcp-server.js     # MCP server exposing tools to Claude Agent SDK
-└── tools/            # Tool implementations (bash, git, gitea, etc.)
+├── index.ts        # Server bootstrap: HTTP + Telegram + enforcer + backup
+└── server.ts       # WebSocket server management
+```
+
+### UI Layout
+
+```
++-----------------------------------------------------------+
+| A: Kanban Board (full / compact / hidden)                 |
++----------+------------------------------------------------+
+| B: Chat  | C: Filters / View Tabs                        |
+| Sidebar  +------------------------------------------------+
+|          | D: Main View (Overview / Gitea / Browser)      |
+|          |                                                |
+|          |  +------------------------------------------+  |
+|          |  | F: Chat Overlay (expand / compact / hide) |  |
++----------+--+------------------------------------------+--+
 ```
 
 ## Quick Start
 
 ```bash
-# Development
+# Install dependencies
 npm install
+
+# Development (with hot reload)
 npm run dev
 
-# Production (Docker Compose)
-# Copy and configure environment variables
+# Production
+npm start
+
+# Run tests
+npm test
+```
+
+### Docker Compose
+
+```bash
 cp .env.example .env
 # Edit .env with your configuration
-
-# Run with docker-compose (includes Neko browser service)
 docker-compose up -d
-
-# Or run without Neko (headless mode only)
-docker build -t gigi .
-docker run -p 3000:3000 \
-  -e ANTHROPIC_API_KEY=... \
-  -e DATABASE_URL=... \
-  -e GITEA_TOKEN=... \
-  gigi
 ```
+
+Services:
+- `gigi` — Main AI coordinator
+- `gigi-neko` — Shared browser service (optional, for interactive browser tab)
 
 ## Configuration
 
-All configuration is stored in PostgreSQL and managed via the web UI at `/setup`:
+Configuration is stored in PostgreSQL and managed via the web UI setup wizard (`/setup`):
 
-- **Anthropic API**: OAuth token or API key
-- **Telegram**: Bot token and authorized chat ID
-- **Gitea**: API token for repo operations
+| Setting | Description |
+|---------|-------------|
+| Anthropic API | OAuth token or API key for Claude |
+| Telegram | Bot token and authorized chat ID |
+| Gitea | API token for repository operations |
 
-Environment variables:
-- `DATABASE_URL` — PostgreSQL connection string
-- `ANTHROPIC_API_KEY` — (optional) API key for Claude Agent SDK
-- `PORT` — HTTP server port (default: 3000)
-- `BROWSER_MODE` — Browser automation mode: `headless` (Playwright) or `neko` (remote browser)
-- `NEKO_HOST` — Neko service hostname (default: gigi-neko)
-- `NEKO_PASSWORD` — Password for Neko browser access
+### Environment Variables
 
-## Browser Modes
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `DATABASE_URL` | PostgreSQL connection string | required |
+| `PORT` | HTTP server port | `3000` |
+| `BROWSER_MODE` | `headless` (Playwright) or `neko` (shared browser) | `headless` |
+| `CHROME_CDP_URL` | Chrome DevTools Protocol URL | — |
+| `GITEA_URL` | Gitea base URL | — |
+| `GITEA_TOKEN` | Gitea API token | — |
 
-Gigi supports two browser automation modes:
+## MCP Tools
 
-1. **Headless Mode** (`BROWSER_MODE=headless`): Uses Playwright for fast, headless browser automation
-2. **Neko Mode** (`BROWSER_MODE=neko`): Uses a remote browser service (Neko) for interactive debugging
-
-The docker-compose setup includes both services:
-- `gigi`: Main AI agent service
-- `gigi-neko`: Remote browser service (accessible on port 8080)
-
-## Tools Available to Gigi
+The agent has access to these tools via MCP:
 
 | Tool | Description |
 |------|-------------|
-| `bash` | Sandboxed shell (30s timeout, blocked destructive patterns) |
-| `git` | Git operations with auto-configured Gitea credentials |
-| `gitea` | Gitea API for repos, issues, PRs, comments |
-| `read_file` | Read files under /projects, /workspace, /app |
-| `write_file` | Write files under /workspace |
-| `docker` | Read-only Docker inspection (services, logs, ps) |
-| `telegram_send` | Send messages to Mauro on Telegram |
+| `gitea` | Full Gitea API — repos, issues, PRs, comments, labels |
+| `ask_user` | Ask operator a question via web UI (blocks until answered) |
+| `telegram_send` | Send Markdown-formatted Telegram messages |
+| Chrome DevTools | `navigate_page`, `take_screenshot`, `evaluate_script`, `click`, `fill`, etc. |
 
-## Self-Modification Workflow
+## Webhook Integration
 
-Gigi can create PRs on her own codebase:
+Gitea webhooks are routed to conversations automatically:
+- **Issue opened/closed** → Creates/closes conversation, formatted system message
+- **PR opened/merged** → Same pattern with PR context
+- **Comments with @gigi** → Triggers agent response in the conversation
+- **Push events** → Commit summaries attached to repo conversation
 
-1. Clone to `/workspace/gigi` via git tool
-2. Create branch, edit files via write_file tool
-3. Commit and push (Gitea credentials auto-configured)
-4. Create PR via gitea tool
-5. Notify Mauro on Telegram with PR link
+## Self-Modification
 
-## Infrastructure
-
-- **TuringPi v2**: 3 ARM64 nodes (worker-0: .110, worker-1: .111, worker-2: .112)
-- **VIP**: 192.168.1.50 (keepalived)
-- **Gitea**: http://192.168.1.80:3000 (repos, CI, registry)
-- **Caddy**: Reverse proxy for `*.cluster.local` domains
-- **Storage**: `/mnt/cluster-storage/`
-- **Docker service**: `idea-biancifiore-gigi_gigi`
-
-## The Team
-
-- **Gigi** (this service) — Coordinator, infrastructure, deployment, communications
-- **Guglielmo** — org-press core developer (meticulous, pragmatic)
-- **Rugero** — Website maintainer (creative, design-focused)
-
-## Repositories
-
-All repositories are hosted on Gitea under the `idea/` organization:
-
-- `gigi` — This service
-- `org-press` — Static site generator (Guglielmo)
-- `rugero-ideable` — Website content (Rugero)
-- `biancifiore` — Infrastructure configuration
-- `deploy-docker-compose` — CI action for Docker deployments
-- `deploy-site` — CI action for static site + Caddyfile deployments
-
-## Health Checks
-
-```bash
-curl http://localhost:3000/health
-```
-
-Returns JSON with service status, phase (booting/healthy/degraded), and component health.
+Gigi can evolve its own capabilities:
+1. Clone its repo to `/workspace/gigi`
+2. Create a feature branch
+3. Implement changes (new tools, prompt updates, UI features, bug fixes)
+4. Create a PR via Gitea API
+5. Notify operator via Telegram
+6. Operator reviews and merges → CI/CD deploys automatically
 
 ## CI/CD
 
-Automated deployment via `.gitea/workflows/build.yml`:
-
-1. rsync source to cluster manager (192.168.1.110)
-2. `docker-compose build` for both services (gigi and gigi-neko) on ARM64
-3. Push images to Gitea registry:
-   - `${REGISTRY}/idea/gigi:${TAG}` — Main service
-   - `${REGISTRY}/idea/gigi-neko:${TAG}` — Neko browser service
-4. Deploy stack using `docker stack deploy` with docker-compose.yml
-5. Deploy Caddyfile via `deploy-site` action
+Automated via `.gitea/workflows/build.yml`:
+1. Build Docker images on ARM64
+2. Push to Gitea container registry
+3. Deploy stack via `docker stack deploy`
+4. Update Caddy reverse proxy config
 
 ## License
 
 GPL-2.0
-
----
-
-Built with ❤️ by Mauro and Gigi on the TuringPi cluster
