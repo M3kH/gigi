@@ -1,0 +1,26 @@
+# Gigi Configuration
+# Secrets go in env vars, structure goes here.
+# Supports env var interpolation: ${VAR_NAME} and ${VAR_NAME:-default}
+
+backup:
+  sources:
+    # Back up all repos in the "idea" org
+    - org: idea
+
+  targets:
+    # Git mirror to git.lab.local (secondary Gitea) with mTLS
+    - type: git-mirror
+      name: ${BACKUP_TARGET_NAME:-git-lab-mirror}
+      url: ${BACKUP_GITEA_URL:-https://git.lab.local}
+      auth: ${BACKUP_AUTH_METHOD:-mtls}
+      # mTLS client certificates (paths to PEM files mounted in container)
+      cert: ${BACKUP_MTLS_CERT:-/certs/backup/client-cert.pem}
+      key: ${BACKUP_MTLS_KEY:-/certs/backup/client-key.pem}
+      ca: ${BACKUP_MTLS_CA:-/certs/backup/ca-cert.pem}
+      # API token for creating repos on target Gitea (required for create_repos)
+      api_token: ${BACKUP_GITEA_TOKEN}
+      create_repos: true
+
+  schedule:
+    interval: ${BACKUP_INTERVAL:-6h}
+    before_deploy: true

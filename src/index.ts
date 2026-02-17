@@ -8,6 +8,7 @@ import { initEnforcer } from '../lib/core/enforcer'
 import { createApp } from '../lib/api/web'
 import { createWSServer } from './server'
 import { startTelegram, stopTelegram } from '../lib/api/telegram'
+import { initBackup, stopScheduler } from '../lib/backup'
 
 const PORT = parseInt(process.env.PORT || '3000', 10)
 const DATABASE_URL = process.env.DATABASE_URL
@@ -44,6 +45,9 @@ const main = async (): Promise<void> => {
     console.log('Telegram not started:', (err as Error).message)
   }
 
+  // Initialize backup system (if configured via gigi.config.yaml)
+  await initBackup()
+
   // Cleanup old action logs every 30 minutes
   setInterval(async () => {
     const count = await cleanupOldActions(1)
@@ -56,6 +60,7 @@ const main = async (): Promise<void> => {
 // Graceful shutdown
 const shutdown = async (): Promise<void> => {
   console.log('Shutting down...')
+  stopScheduler()
   stopTelegram()
   await disconnect()
   process.exit(0)

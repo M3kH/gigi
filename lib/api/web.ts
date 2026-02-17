@@ -11,6 +11,7 @@ import { readFile } from 'node:fs/promises'
 import { healthCheck } from '../core/health'
 import { getSetupStatus, setupStep } from '../domain/setup'
 import { handleMessage, newConversation, resumeConversation, stopAgent, getRunningAgents } from '../core/router'
+import { getBackupStatus, runBackup } from '../backup'
 import { handleWebhook } from './webhooks'
 import { createGiteaProxy } from './gitea-proxy'
 import { askUser } from '../core/ask-user'
@@ -224,6 +225,33 @@ export const createApp = (): Hono => {
 
     const answer = await askUser(questionId, question, options, conversationId)
     return c.json({ answer })
+  })
+
+  // Backup system status + manual trigger
+  app.get('/api/backup/status', (c) => {
+    const status = getBackupStatus()
+    return c.json({
+      running: status.running,
+      schedulerActive: status.schedulerActive,
+      lastRun: status.lastRun,
+      config: status.config ? {
+        sources: status.config.sources.length,
+        targets: status.config.targets.length,
+        interval: status.config.schedule.interval,
+      } : null,
+    })
+  })
+
+  app.post('/api/backup/trigger', async (c) => {
+    const status = getBackupStatus()
+    if (status.running) {
+      return c.json({ error: 'backup already in progress' }, 409)
+    }
+    // Fire and forget — runs in background
+    runBackup().catch(err => {
+      console.error('[api:backup] manual trigger failed:', err)
+    })
+    return c.json({ ok: true, message: 'backup started' })
   })
 
   // Gitea proxy endpoints (for frontend SPA)

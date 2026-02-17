@@ -55,11 +55,21 @@ services:
       NEKO_PASSWORD: ${NEKO_PASSWORD:-neko}
       WS_PORT: 3001
       DATABASE_URL: ${DATABASE_URL}
+      # Backup system — git mirror to git.lab.local
+      BACKUP_GITEA_URL: ${BACKUP_GITEA_URL:-https://git.lab.local}
+      BACKUP_AUTH_METHOD: ${BACKUP_AUTH_METHOD:-mtls}
+      BACKUP_GITEA_TOKEN: ${BACKUP_GITEA_TOKEN:-}
+      BACKUP_INTERVAL: ${BACKUP_INTERVAL:-6h}
+      BACKUP_MTLS_CERT: ${BACKUP_MTLS_CERT:-/certs/backup/client-cert.pem}
+      BACKUP_MTLS_KEY: ${BACKUP_MTLS_KEY:-/certs/backup/client-key.pem}
+      BACKUP_MTLS_CA: ${BACKUP_MTLS_CA:-/certs/backup/ca-cert.pem}
+      NODE_EXTRA_CA_CERTS: ${BACKUP_MTLS_CA:-/certs/backup/ca-cert.pem}
     ports:
       - "3100:3000"
       - "3101:3001"
     volumes:
       - workspace:/workspace
+      - ${BACKUP_CERTS_DIR:-./certs/backup}:/certs/backup:ro
     networks:
       - gigi-network
       - databases_default
