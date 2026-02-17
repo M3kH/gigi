@@ -225,10 +225,17 @@ export function handleServerEvent(event: ServerMessage): void {
       }
       if (isActive) {
         dialogState = 'idle'
+        // Await loadMessages before clearing streamSegments so stored
+        // messages are rendered before the live segments disappear.
+        // Without this, there's a gap where both are empty and the user
+        // sees "Send a message to get started" flash.
         if (activeConversationId) {
-          loadMessages(activeConversationId)
+          loadMessages(activeConversationId).then(() => {
+            streamSegments = []
+          })
+        } else {
+          streamSegments = []
         }
-        streamSegments = []
       }
       loadConversations()
       // Refresh kanban board — agent may have changed issue labels/status
@@ -245,9 +252,12 @@ export function handleServerEvent(event: ServerMessage): void {
       if (convId === activeConversationId) {
         dialogState = 'idle'
         if (activeConversationId) {
-          loadMessages(activeConversationId)
+          loadMessages(activeConversationId).then(() => {
+            streamSegments = []
+          })
+        } else {
+          streamSegments = []
         }
-        streamSegments = []
       }
       loadConversations()
       break
