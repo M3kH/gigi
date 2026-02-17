@@ -73,6 +73,8 @@ export const createGiteaProxy = (): Hono => {
             archived: repo.archived,
             default_branch: repo.default_branch,
             updated_at: repo.updated_at,
+            language: (repo as Record<string, unknown>).language || '',
+            size: (repo as Record<string, unknown>).size || 0,
             open_pr_count: pulls.status === 'fulfilled' ? pulls.value.length : 0,
           }
         })

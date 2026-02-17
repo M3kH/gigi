@@ -29,6 +29,8 @@
     default_branch: string
     updated_at: string
     open_pr_count: number
+    language: string
+    size: number
   }
 
   interface OverviewData {
@@ -107,6 +109,31 @@
   function handleConversationClick(convId: string): void {
     selectConversation(convId)
   }
+
+  /** Get a color for a programming language (GitHub-style) */
+  function getLanguageColor(lang: string): string {
+    const colors: Record<string, string> = {
+      'JavaScript': '#f1e05a', 'TypeScript': '#3178c6', 'Python': '#3572A5',
+      'Go': '#00ADD8', 'Rust': '#dea584', 'Java': '#b07219', 'C': '#555555',
+      'C++': '#f34b7d', 'Shell': '#89e051', 'HTML': '#e34c26', 'CSS': '#563d7c',
+      'Svelte': '#ff3e00', 'Vue': '#41b883', 'Ruby': '#701516', 'PHP': '#4F5D95',
+    }
+    return colors[lang] || '#8b949e'
+  }
+
+  /** Show a meaningful title instead of just "web" or channel name */
+  function getConversationDisplayTitle(conv: { topic: string; channel: string }): string {
+    const topic = conv.topic?.trim()
+    // If topic is meaningful (not just the channel name or 'Untitled'), use it
+    if (topic && topic !== conv.channel && topic !== 'Untitled' && topic.length > 1) {
+      return topic
+    }
+    // Fallback: capitalize channel or show 'New conversation'
+    if (conv.channel) {
+      return conv.channel.charAt(0).toUpperCase() + conv.channel.slice(1) + ' conversation'
+    }
+    return 'New conversation'
+  }
 </script>
 
 <div class="dashboard">
@@ -157,23 +184,31 @@
       </div>
     </div>
   {:else}
-    <!-- Quick Stats -->
+    <!-- Quick Stats + Quick Actions row -->
     <div class="stats-row">
-      <div class="stat-card">
+      <div class="stat-card stat-repos">
         <span class="stat-value">{userRepos.length}</span>
         <span class="stat-label">Repositories</span>
       </div>
-      <div class="stat-card">
+      <div class="stat-card stat-issues" class:stat-urgent={overview && overview.totalOpenIssues > 5}>
         <span class="stat-value">{overview?.totalOpenIssues ?? '—'}</span>
         <span class="stat-label">Open Issues</span>
       </div>
-      <div class="stat-card">
+      <div class="stat-card stat-prs">
         <span class="stat-value">{overview?.totalOpenPRs ?? '—'}</span>
         <span class="stat-label">Open PRs</span>
       </div>
-      <div class="stat-card">
+      <div class="stat-card stat-conversations">
         <span class="stat-value">{conversations.length}</span>
         <span class="stat-label">Conversations</span>
+      </div>
+      <div class="stat-actions">
+        <button class="action-chip" onclick={() => { newConversation(); setPanelState('chatOverlay', 'compact') }} title="Start a conversation with Gigi">
+          <span class="action-chip-icon">💬</span> Ask Gigi
+        </button>
+        <button class="action-chip" onclick={() => navigateToGitea('/gigi')} title="Open Gitea">
+          <span class="action-chip-icon">📦</span> Gitea
+        </button>
       </div>
     </div>
 
@@ -233,6 +268,20 @@
                   {#if repo.open_issues_count === 0 && repo.open_pr_count === 0}
                     <span class="badge badge-clean">All clear</span>
                   {/if}
+                  {#if repo.language}
+                    <span class="badge badge-lang" title="Primary language">
+                      <span class="lang-dot" style="background: {getLanguageColor(repo.language)}"></span>
+                      {repo.language}
+                    </span>
+                  {/if}
+                  {#if repo.default_branch && repo.default_branch !== 'main'}
+                    <span class="badge badge-branch" title="Default branch">
+                      <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+                        <path fill-rule="evenodd" d="M11.75 2.5a.75.75 0 100 1.5.75.75 0 000-1.5zm-2.25.75a2.25 2.25 0 113 2.122V6A2.5 2.5 0 0110 8.5H6a1 1 0 00-1 1v1.128a2.251 2.251 0 11-1.5 0V5.372a2.25 2.25 0 111.5 0v1.836A2.492 2.492 0 016 7h4a1 1 0 001-1v-.628A2.25 2.25 0 019.5 3.25zM4.25 12a.75.75 0 100 1.5.75.75 0 000-1.5zM3.5 3.25a.75.75 0 111.5 0 .75.75 0 01-1.5 0z"/>
+                      </svg>
+                      {repo.default_branch}
+                    </span>
+                  {/if}
                 </div>
               </button>
             {/each}
@@ -261,7 +310,7 @@
               onclick={() => handleConversationClick(conv.id)}
             >
               <div class="activity-header">
-                <span class="activity-title">{conv.topic}</span>
+                <span class="activity-title">{getConversationDisplayTitle(conv)}</span>
                 <span class="activity-channel">{conv.channel}</span>
               </div>
               <div class="activity-meta">
@@ -274,24 +323,6 @@
           {/each}
         </div>
       {/if}
-
-      <!-- Quick Actions -->
-      <h2 class="section-title" style="margin-top: var(--gigi-space-xl)">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-          <path fill-rule="evenodd" d="M7.429 1.525a3.5 3.5 0 011.142 0l.009.002.038.013a2.25 2.25 0 011.207.692 2.25 2.25 0 011.384.065l.036.015.009.004a3.5 3.5 0 01.808.808l.004.009.015.036a2.25 2.25 0 01.065 1.384c.292.342.497.753.592 1.207l.013.038.002.009a3.5 3.5 0 010 1.142l-.002.009-.013.038a2.25 2.25 0 01-.592 1.207 2.25 2.25 0 01-.065 1.384l-.015.036-.004.009a3.5 3.5 0 01-.808.808l-.009.004-.036.015a2.25 2.25 0 01-1.384.065 2.25 2.25 0 01-1.207.592l-.038.013-.009.002a3.5 3.5 0 01-1.142 0l-.009-.002-.038-.013a2.25 2.25 0 01-1.207-.592 2.25 2.25 0 01-1.384-.065l-.036-.015-.009-.004a3.5 3.5 0 01-.808-.808l-.004-.009-.015-.036a2.25 2.25 0 01-.065-1.384 2.25 2.25 0 01-.592-1.207l-.013-.038-.002-.009a3.5 3.5 0 010-1.142l.002-.009.013-.038a2.25 2.25 0 01.592-1.207 2.25 2.25 0 01.065-1.384l.015-.036.004-.009a3.5 3.5 0 01.808-.808l.009-.004.036-.015a2.25 2.25 0 011.384-.065 2.25 2.25 0 011.207-.592l.038-.013.009-.002zM8 12.5a4.5 4.5 0 100-9 4.5 4.5 0 000 9zm3.549-4.938L8.361 4.374a.5.5 0 00-.722 0L4.451 7.562a.5.5 0 00.361.848h1.688v3.09a.5.5 0 00.5.5h2a.5.5 0 00.5-.5v-3.09h1.688a.5.5 0 00.361-.848z"/>
-        </svg>
-        Quick Actions
-      </h2>
-      <div class="quick-actions">
-        <button class="action-btn" onclick={() => { /* chat overlay opens on new message */ }}>
-          <span class="action-icon">💬</span>
-          <span>Ask Gigi</span>
-        </button>
-        <button class="action-btn" onclick={() => navigateToGitea('/gigi')}>
-          <span class="action-icon">📦</span>
-          <span>Gitea</span>
-        </button>
-      </div>
     </section>
   </div>
   {/if}
@@ -308,9 +339,19 @@
 
   .stats-row {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    grid-template-columns: repeat(4, 1fr) auto;
     gap: var(--gigi-space-md);
     margin-bottom: var(--gigi-space-xl);
+    align-items: stretch;
+  }
+
+  @media (max-width: 900px) {
+    .stats-row {
+      grid-template-columns: repeat(2, 1fr);
+    }
+    .stat-actions {
+      grid-column: 1 / -1;
+    }
   }
 
   .stat-card {
@@ -321,7 +362,26 @@
     display: flex;
     flex-direction: column;
     gap: var(--gigi-space-xs);
+    border-top: 3px solid transparent;
   }
+
+  /* Color-coded stat cards for visual hierarchy */
+  .stat-repos   { border-top-color: var(--gigi-accent-blue); }
+  .stat-issues  { border-top-color: var(--gigi-accent-orange); }
+  .stat-prs     { border-top-color: var(--gigi-accent-purple); }
+  .stat-conversations { border-top-color: var(--gigi-accent-green); }
+
+  .stat-repos .stat-value   { color: var(--gigi-accent-blue); }
+  .stat-issues .stat-value  { color: var(--gigi-accent-orange); }
+  .stat-prs .stat-value     { color: var(--gigi-accent-purple); }
+  .stat-conversations .stat-value { color: var(--gigi-accent-green); }
+
+  /* Urgent state: pulse when issue count is high */
+  .stat-urgent {
+    border-top-color: var(--gigi-accent-red);
+    background: rgba(248, 81, 73, 0.05);
+  }
+  .stat-urgent .stat-value { color: var(--gigi-accent-red); }
 
   .stat-value {
     font-size: var(--gigi-font-size-xl);
@@ -335,6 +395,39 @@
     color: var(--gigi-text-muted);
     text-transform: uppercase;
     letter-spacing: 0.05em;
+  }
+
+  /* Quick Actions embedded in stats row */
+  .stat-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--gigi-space-sm);
+    justify-content: flex-end;
+  }
+
+  .action-chip {
+    display: flex;
+    align-items: center;
+    gap: var(--gigi-space-xs);
+    background: var(--gigi-bg-secondary);
+    border: var(--gigi-border-width) solid var(--gigi-border-default);
+    border-radius: var(--gigi-radius-full);
+    padding: var(--gigi-space-xs) var(--gigi-space-md);
+    cursor: pointer;
+    transition: all var(--gigi-transition-fast);
+    font-family: var(--gigi-font-sans);
+    font-size: var(--gigi-font-size-sm);
+    color: var(--gigi-text-primary);
+    white-space: nowrap;
+  }
+
+  .action-chip:hover {
+    border-color: var(--gigi-accent-green);
+    background: var(--gigi-bg-hover);
+  }
+
+  .action-chip-icon {
+    font-size: var(--gigi-font-size-base);
   }
 
   /* ── Grid ───────────────────────────────────────────────────────── */
@@ -453,6 +546,25 @@
     font-size: var(--gigi-font-size-xs);
   }
 
+  .badge-lang {
+    background: rgba(110, 118, 129, 0.1);
+    color: var(--gigi-text-secondary);
+    margin-left: auto;
+  }
+
+  .lang-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+    flex-shrink: 0;
+  }
+
+  .badge-branch {
+    background: rgba(110, 118, 129, 0.1);
+    color: var(--gigi-text-muted);
+  }
+
   /* ── Activity Feed ──────────────────────────────────────────────── */
 
   .activity-list {
@@ -526,37 +638,7 @@
     color: var(--gigi-text-muted);
   }
 
-  /* ── Quick Actions ──────────────────────────────────────────────── */
-
-  .quick-actions {
-    display: flex;
-    gap: var(--gigi-space-sm);
-    flex-wrap: wrap;
-  }
-
-  .action-btn {
-    display: flex;
-    align-items: center;
-    gap: var(--gigi-space-sm);
-    background: var(--gigi-bg-secondary);
-    border: var(--gigi-border-width) solid var(--gigi-border-default);
-    border-radius: var(--gigi-radius-md);
-    padding: var(--gigi-space-sm) var(--gigi-space-lg);
-    cursor: pointer;
-    transition: all var(--gigi-transition-fast);
-    font-family: var(--gigi-font-sans);
-    font-size: var(--gigi-font-size-sm);
-    color: var(--gigi-text-primary);
-  }
-
-  .action-btn:hover {
-    border-color: var(--gigi-accent-green);
-    background: var(--gigi-bg-hover);
-  }
-
-  .action-icon {
-    font-size: var(--gigi-font-size-lg);
-  }
+  /* Quick Actions moved to stats row — old styles removed */
 
   /* ── Loading / Error ────────────────────────────────────────────── */
 

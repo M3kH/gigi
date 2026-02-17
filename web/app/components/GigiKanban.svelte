@@ -38,9 +38,12 @@
   const drag = $derived(getDragState())
   const kanbanState: PanelState = $derived(getPanelState('kanban'))
 
-  // Non-empty columns (hide Done if empty)
+  // Show columns with cards + first column always. Empty columns collapsed.
   const visibleColumns = $derived(
-    columns.filter(col => col.cards.length > 0 || col.id !== 'done')
+    columns.filter(col => col.cards.length > 0)
+  )
+  const collapsedColumns = $derived(
+    columns.filter(col => col.cards.length === 0)
   )
 
   // ── Drag Tracking ───────────────────────────────────────────────────
@@ -257,6 +260,27 @@
         </div>
       {/each}
 
+      <!-- Collapsed empty columns shown as compact badges -->
+      {#if collapsedColumns.length > 0 && visibleColumns.length > 0}
+        <div class="collapsed-columns">
+          {#each collapsedColumns as col (col.id)}
+            <span class="collapsed-badge" title="{col.title}: no issues">{col.title} <span class="collapsed-count">0</span></span>
+          {/each}
+        </div>
+      {/if}
+
+      <!-- When all columns are empty, show a minimal board state -->
+      {#if visibleColumns.length === 0 && columns.length > 0 && !loading}
+        <div class="board-empty">
+          <span class="board-empty-text">All columns are empty — create issues or drag cards to get started</span>
+          <div class="collapsed-columns" style="flex-direction: row; padding-top: 0;">
+            {#each columns as col (col.id)}
+              <span class="collapsed-badge">{col.title}</span>
+            {/each}
+          </div>
+        </div>
+      {/if}
+
       {#if loading && columns.length === 0}
         {#each Array(4) as _}
           <div class="column skeleton-column">
@@ -427,6 +451,48 @@
     display: flex;
     flex-direction: column;
     gap: var(--gigi-space-xs);
+  }
+
+  /* ── Collapsed columns ─────────────────────────────────────────── */
+
+  .collapsed-columns {
+    display: flex;
+    flex-direction: column;
+    gap: var(--gigi-space-xs);
+    min-width: 90px;
+    padding-top: 28px; /* align with column bodies */
+  }
+
+  .collapsed-badge {
+    display: flex;
+    align-items: center;
+    gap: var(--gigi-space-xs);
+    font-size: var(--gigi-font-size-xs);
+    color: var(--gigi-text-muted);
+    background: var(--gigi-bg-secondary);
+    border: var(--gigi-border-width) solid var(--gigi-border-muted);
+    border-radius: var(--gigi-radius-sm);
+    padding: 2px var(--gigi-space-sm);
+    white-space: nowrap;
+  }
+
+  .collapsed-count {
+    opacity: 0.5;
+  }
+
+  .board-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--gigi-space-md);
+    padding: var(--gigi-space-lg);
+    width: 100%;
+    color: var(--gigi-text-muted);
+    font-size: var(--gigi-font-size-sm);
+  }
+
+  .board-empty-text {
+    text-align: center;
   }
 
   .column-empty {

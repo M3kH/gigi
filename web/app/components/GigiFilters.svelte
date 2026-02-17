@@ -117,9 +117,10 @@
     </div>
   </div>
 
-  <!-- Row 2: Repo filter chips -->
-  {#if repos.length > 0}
+  <!-- Row 2: Repo filter chips (hidden on Overview where they don't apply) -->
+  {#if repos.length > 0 && currentView.view !== 'overview'}
     <div class="filter-row chips-row" class:collapsed={!filtersExpanded}>
+      <span class="filter-label" title="Filter issues and activity by repository">Repos:</span>
       <button
         class="chip"
         class:active={selectedRepo === null}
@@ -252,6 +253,15 @@
   }
 
   /* ── Repo filter chips ───────────────────────────────────────── */
+
+  .filter-label {
+    font-size: var(--gigi-font-size-xs);
+    color: var(--gigi-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
 
   .chips-row {
     overflow-x: auto;
