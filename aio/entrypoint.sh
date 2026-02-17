@@ -178,6 +178,12 @@ EOINI
     -d "{\"name\":\"gigi-aio-${TOKEN_SUFFIX}\",\"scopes\":[\"all\"]}")
   GIGI_TOKEN=$(echo "$GIGI_TOKEN_RESP" | grep -oP '"sha1":"\K[^"]+' || echo "$GIGI_TOKEN_RESP" | grep -oP '"token":"\K[^"]+' || true)
 
+  # Write tokens to shared files (for runner auto-registration)
+  mkdir -p /data/runner
+  echo "$ADMIN_TOKEN" > /data/runner/admin-token
+  echo "$GIGI_TOKEN" > /data/runner/gigi-token
+  chown -R gigi:gigi /data/runner
+
   # Create org
   echo "[aio] Creating org: $ORG_NAME"
   curl -s -X POST "http://localhost:3300/api/v1/orgs" \
