@@ -8,6 +8,7 @@
 import * as store from '../core/store'
 import { runAgent } from '../core/agent'
 import { emit } from '../core/events'
+import { notifyWebhook } from './webhookNotifier'
 
 import type { AgentMessage } from '../core/agent'
 import type { WebhookPayload, WebhookResult } from './webhooks'
@@ -33,6 +34,11 @@ export const routeWebhook = async (event: string, payload: WebhookPayload): Prom
   await store.addMessage(conversation.id, 'system', [{ type: 'text', text: systemMessage }], {
     message_type: 'webhook',
   })
+
+  // Send Telegram notification for significant events (fire-and-forget)
+  notifyWebhook(event, payload).catch(err =>
+    console.warn('[webhookRouter] Telegram notification failed:', (err as Error).message)
+  )
 
   const shouldInvokeAgent = await checkAndInvokeAgent(event, payload, conversation.id, systemMessage)
 

@@ -6,7 +6,7 @@
    * Row 2 — Repo filter chips: fetched from /api/gitea/overview
    */
   import type { ConnectionState } from '$lib/services/ws-client'
-  import { getPanelState, togglePanel, type PanelState } from '$lib/stores/panels.svelte'
+  import { getPanelState, setPanelState, togglePanel, type PanelState } from '$lib/stores/panels.svelte'
   import { goHome, navigateToGitea, navigateToBrowser, getCurrentView } from '$lib/stores/navigation.svelte'
   import { onMount } from 'svelte'
 
@@ -31,6 +31,25 @@
   let selectedRepo = $state<string | null>(null)
   let filtersExpanded = $state(true)
   let browserAvailable = $state(false)
+  let mainExpanded = $state(false)
+  let showSettings = $state(false)
+
+  // Always Working Mode settings (persisted to localStorage)
+  const AWM_KEY = 'gigi:always-working-mode'
+  const AWM_INTERVAL_KEY = 'gigi:always-working-interval'
+
+  function loadAwm(): boolean {
+    try { return localStorage.getItem(AWM_KEY) === 'true' } catch { return false }
+  }
+  function loadAwmInterval(): number {
+    try { return parseInt(localStorage.getItem(AWM_INTERVAL_KEY) || '15', 10) } catch { return 15 }
+  }
+
+  let alwaysWorkingEnabled = $state(loadAwm())
+  let alwaysWorkingInterval = $state(loadAwmInterval())
+
+  const kanbanState: PanelState = $derived(getPanelState('kanban'))
+  const chatOverlayState: PanelState = $derived(getPanelState('chatOverlay'))
 
   onMount(async () => {
     try {
@@ -71,8 +90,61 @@
     selectedRepo = name
   }
 
+  // Saved panel states before expanding
+  let savedKanban: PanelState | null = null
+  let savedSidebar: PanelState | null = null
+  let savedChat: PanelState | null = null
+
+  function handleExpandMain() {
+    if (mainExpanded) {
+      // Restore previous states
+      if (savedKanban) setPanelState('kanban', savedKanban)
+      if (savedSidebar) setPanelState('sidebar', savedSidebar)
+      if (savedChat) setPanelState('chatOverlay', savedChat)
+      mainExpanded = false
+    } else {
+      // Save current states and collapse everything
+      savedKanban = getPanelState('kanban')
+      savedSidebar = getPanelState('sidebar')
+      savedChat = getPanelState('chatOverlay')
+      setPanelState('kanban', 'hidden')
+      setPanelState('sidebar', 'hidden')
+      setPanelState('chatOverlay', 'hidden')
+      mainExpanded = true
+    }
+  }
+
+  function handleToggleSettings() {
+    showSettings = !showSettings
+  }
+
+  function handleAlwaysWorkingToggle() {
+    try { localStorage.setItem(AWM_KEY, String(alwaysWorkingEnabled)) } catch { /* ignore */ }
+    // Notify server about the setting change
+    fetch('/api/config/always-working', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: alwaysWorkingEnabled, intervalMinutes: alwaysWorkingInterval }),
+    }).catch(() => { /* ignore — server may not support this yet */ })
+  }
+
+  function handleIntervalChange() {
+    try { localStorage.setItem(AWM_INTERVAL_KEY, String(alwaysWorkingInterval)) } catch { /* ignore */ }
+    if (alwaysWorkingEnabled) {
+      fetch('/api/config/always-working', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: alwaysWorkingEnabled, intervalMinutes: alwaysWorkingInterval }),
+      }).catch(() => { /* ignore */ })
+    }
+  }
+
   export function getSelectedRepo(): string | null {
     return selectedRepo
+  }
+
+  export function isSettingsOpen(): boolean {
+    return showSettings
   }
 </script>
 
@@ -117,6 +189,36 @@
         class:disconnected={connectionState === 'disconnected'}
       ></span>
     </div>
+
+    <!-- Expand/Collapse Section D -->
+    <button
+      class="menu-btn"
+      class:active={mainExpanded}
+      onclick={handleExpandMain}
+      title={mainExpanded ? 'Restore panels' : 'Expand main view (hide board & chat)'}
+    >
+      {#if mainExpanded}
+        <svg viewBox="0 0 24 24" fill="none" width="16" height="16">
+          <path d="M4 14h6v6H4v-6zm10-10h6v6h-6V4zM4 4h6v6H4V4zm10 10h6v6h-6v-6z" fill="currentColor" opacity="0.6"/>
+        </svg>
+      {:else}
+        <svg viewBox="0 0 24 24" fill="none" width="16" height="16">
+          <path d="M3 3h18v18H3V3zm2 2v14h14V5H5z" fill="currentColor"/>
+        </svg>
+      {/if}
+    </button>
+
+    <!-- Settings gear -->
+    <button
+      class="menu-btn"
+      class:active={showSettings}
+      onclick={handleToggleSettings}
+      title="Settings"
+    >
+      <svg viewBox="0 0 24 24" fill="none" width="16" height="16">
+        <path d="M12 15.5A3.5 3.5 0 1 0 12 8.5a3.5 3.5 0 0 0 0 7zm7.43-2.53c.04-.32.07-.64.07-.97s-.03-.65-.07-.97l2.11-1.65a.5.5 0 0 0 .12-.64l-2-3.46a.5.5 0 0 0-.61-.22l-2.49 1a7.4 7.4 0 0 0-1.67-.97l-.38-2.65A.49.49 0 0 0 14 2h-4a.49.49 0 0 0-.49.42l-.38 2.65c-.61.25-1.17.59-1.67.97l-2.49-1a.5.5 0 0 0-.61.22l-2 3.46a.49.49 0 0 0 .12.64l2.11 1.65c-.04.32-.07.65-.07.97s.03.65.07.97l-2.11 1.65a.5.5 0 0 0-.12.64l2 3.46a.5.5 0 0 0 .61.22l2.49-1c.5.38 1.06.72 1.67.97l.38 2.65c.05.24.26.42.49.42h4c.24 0 .44-.18.49-.42l.38-2.65c.61-.25 1.17-.59 1.67-.97l2.49 1a.5.5 0 0 0 .61-.22l2-3.46a.49.49 0 0 0-.12-.64l-2.11-1.65z" fill="currentColor"/>
+      </svg>
+    </button>
   </div>
 
   <!-- Row 2: Repo filter chips (hidden on Overview where they don't apply) -->
@@ -146,6 +248,40 @@
         onclick={() => filtersExpanded = !filtersExpanded}
         title={filtersExpanded ? 'Collapse filters' : 'Expand filters'}
       >{filtersExpanded ? '▲' : '▼'}</button>
+    </div>
+  {/if}
+
+  <!-- Settings Panel (F1) -->
+  {#if showSettings}
+    <div class="settings-panel">
+      <div class="settings-header">
+        <span class="settings-title">Settings</span>
+        <button class="settings-close" onclick={() => showSettings = false}>×</button>
+      </div>
+
+      <div class="settings-section">
+        <label class="settings-toggle">
+          <span class="toggle-label">Always Working Mode</span>
+          <input type="checkbox" bind:checked={alwaysWorkingEnabled} onchange={handleAlwaysWorkingToggle} />
+          <span class="toggle-slider"></span>
+        </label>
+        <p class="settings-hint">When enabled, Gigi checks for work periodically and picks up issues autonomously.</p>
+
+        {#if alwaysWorkingEnabled}
+          <div class="settings-field">
+            <label class="field-label" for="awm-interval">Check interval (minutes)</label>
+            <input
+              id="awm-interval"
+              type="number"
+              min="1"
+              max="120"
+              bind:value={alwaysWorkingInterval}
+              onchange={handleIntervalChange}
+              class="field-input"
+            />
+          </div>
+        {/if}
+      </div>
     </div>
   {/if}
 </div>
@@ -338,5 +474,145 @@
 
   .collapse-toggle:hover {
     color: var(--gigi-text-primary);
+  }
+
+  .menu-btn.active {
+    color: var(--gigi-accent-blue);
+    background: var(--gigi-bg-tertiary);
+  }
+
+  /* ── Settings Panel ──────────────────────────────────────────── */
+
+  .settings-panel {
+    padding: var(--gigi-space-md);
+    border-top: var(--gigi-border-width) solid var(--gigi-border-default);
+    background: var(--gigi-bg-tertiary);
+    animation: slide-down 150ms ease;
+  }
+
+  @keyframes slide-down {
+    from { opacity: 0; transform: translateY(-8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .settings-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--gigi-space-sm);
+  }
+
+  .settings-title {
+    font-size: var(--gigi-font-size-sm);
+    font-weight: 600;
+    color: var(--gigi-text-primary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .settings-close {
+    background: none;
+    border: none;
+    color: var(--gigi-text-muted);
+    cursor: pointer;
+    font-size: 18px;
+    line-height: 1;
+    padding: 2px 6px;
+    border-radius: var(--gigi-radius-sm);
+    transition: all var(--gigi-transition-fast);
+  }
+
+  .settings-close:hover {
+    color: var(--gigi-text-primary);
+    background: var(--gigi-bg-hover);
+  }
+
+  .settings-section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--gigi-space-sm);
+  }
+
+  .settings-toggle {
+    display: flex;
+    align-items: center;
+    gap: var(--gigi-space-sm);
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .toggle-label {
+    font-size: var(--gigi-font-size-sm);
+    color: var(--gigi-text-primary);
+    flex: 1;
+  }
+
+  .settings-toggle input[type="checkbox"] {
+    display: none;
+  }
+
+  .toggle-slider {
+    width: 36px;
+    height: 20px;
+    background: var(--gigi-border-default);
+    border-radius: 10px;
+    position: relative;
+    transition: background var(--gigi-transition-fast);
+    flex-shrink: 0;
+  }
+
+  .toggle-slider::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    background: white;
+    border-radius: 50%;
+    transition: transform var(--gigi-transition-fast);
+  }
+
+  .settings-toggle input:checked + .toggle-slider {
+    background: var(--gigi-accent-green);
+  }
+
+  .settings-toggle input:checked + .toggle-slider::after {
+    transform: translateX(16px);
+  }
+
+  .settings-hint {
+    font-size: var(--gigi-font-size-xs);
+    color: var(--gigi-text-muted);
+    margin: 0;
+    line-height: 1.4;
+  }
+
+  .settings-field {
+    display: flex;
+    align-items: center;
+    gap: var(--gigi-space-sm);
+  }
+
+  .field-label {
+    font-size: var(--gigi-font-size-xs);
+    color: var(--gigi-text-secondary);
+    white-space: nowrap;
+  }
+
+  .field-input {
+    width: 60px;
+    padding: 4px 8px;
+    background: var(--gigi-bg-secondary);
+    border: var(--gigi-border-width) solid var(--gigi-border-default);
+    border-radius: var(--gigi-radius-sm);
+    color: var(--gigi-text-primary);
+    font-size: var(--gigi-font-size-sm);
+    font-family: var(--gigi-font-mono, monospace);
+  }
+
+  .field-input:focus {
+    outline: none;
+    border-color: var(--gigi-accent-green);
   }
 </style>

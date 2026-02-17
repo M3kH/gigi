@@ -10,6 +10,7 @@ import { getConfig, setConfig } from '../core/store'
 import * as store from '../core/store'
 import { handleMessage, newConversation, resumeConversation, clearConversation } from '../core/router'
 import { setBotInstance } from '../tools/telegram'
+import { setNotifierBot } from './webhookNotifier'
 
 let bot: Bot | null = null
 
@@ -21,6 +22,7 @@ export const startTelegram = async (): Promise<Bot | null> => {
 
   bot = new Bot(token)
   setBotInstance(bot)
+  setNotifierBot(bot)
 
   // Verify token works before setting up handlers
   try {
