@@ -219,6 +219,39 @@ EOINI
       \"branch_filter\": \"*\"
     }" > /dev/null 2>&1 || true
 
+  # Create org-level Actions secrets for CI workflows
+  echo "[aio] Creating Actions secrets..."
+
+  create_secret() {
+    local name="$1" value="$2"
+    # Gitea API expects raw value in "data" field — use jq to safely encode
+    local payload
+    payload=$(printf '%s' "$value" | jq -Rs '{data: .}')
+    curl -s -X PUT "http://localhost:3300/api/v1/orgs/${ORG_NAME}/actions/secrets/${name}" \
+      -H "$AUTH" -H "Content-Type: application/json" \
+      -d "$payload" > /dev/null 2>&1 || true
+  }
+
+  # SSH key for deployments (from Docker secret)
+  for keyfile in /run/secrets/*_ssh_key; do
+    if [ -f "$keyfile" ]; then
+      create_secret "SSH_PRIVATE_KEY" "$(cat "$keyfile")"
+      echo "[aio] Set SSH_PRIVATE_KEY secret"
+      break
+    fi
+  done
+
+  # SSH known hosts (scan the deploy target)
+  KNOWN_HOSTS=$(ssh-keyscan -H 192.168.1.110 2>/dev/null || true)
+  if [ -n "$KNOWN_HOSTS" ]; then
+    create_secret "SSH_KNOWN_HOSTS" "$KNOWN_HOSTS"
+    echo "[aio] Set SSH_KNOWN_HOSTS secret"
+  fi
+
+  # Registry token (admin token doubles as registry auth)
+  create_secret "REGISTRY_TOKEN" "$ADMIN_TOKEN"
+  echo "[aio] Set REGISTRY_TOKEN secret"
+
   # Write config to Postgres
   if [ -n "$DATABASE_URL" ]; then
     echo "[aio] Writing config to Postgres..."
