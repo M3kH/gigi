@@ -324,15 +324,26 @@ if [ -S /var/run/docker.sock ] && [ -f /opt/runner-worker/Dockerfile ]; then
 fi
 
 # ── 6. Inject env vars into supervisord gigi program ──────────────────
-# supervisord doesn't inherit parent env for child processes — inject explicitly
+# supervisord doesn't inherit parent env for child processes.
+# Write a wrapper script that sources all env vars before starting gigi.
 
-GIGI_ENV_LINE="HOME=\"/home/gigi\""
-[ -n "$GITEA_URL" ] && GIGI_ENV_LINE="$GIGI_ENV_LINE,GITEA_URL=\"$GITEA_URL\""
-[ -n "$CHROME_CDP_URL" ] && GIGI_ENV_LINE="$GIGI_ENV_LINE,CHROME_CDP_URL=\"$CHROME_CDP_URL\""
-[ -n "$BROWSER_MODE" ] && GIGI_ENV_LINE="$GIGI_ENV_LINE,BROWSER_MODE=\"$BROWSER_MODE\""
-[ -n "$BROWSER_VIEW_URL" ] && GIGI_ENV_LINE="$GIGI_ENV_LINE,BROWSER_VIEW_URL=\"$BROWSER_VIEW_URL\""
+cat > /app/start-gigi.sh << 'WRAPPER_EOF'
+#!/bin/bash
+# Source env vars written by entrypoint
+[ -f /app/.env.sh ] && source /app/.env.sh
+exec node --import tsx src/index.ts
+WRAPPER_EOF
+chmod +x /app/start-gigi.sh
 
-sed -i "/\[program:gigi\]/,/^\[/{s|environment=HOME=\"/home/gigi\"|environment=$GIGI_ENV_LINE|}" "$SUPERVISORD_CONF"
+# Dump all relevant env vars for the gigi process
+{
+  env | grep -E '^(DATABASE_URL|GITEA_|CHROME_|BROWSER_|BACKUP_|PORT|GIGI_|WORKSPACE_|ADMIN_|ORG_|TELEGRAM_|CLAUDE_|NODE_)=' | while IFS='=' read -r key value; do
+    printf 'export %s=%q\n' "$key" "$value"
+  done
+} > /app/.env.sh
+
+# Update supervisord to use wrapper instead of direct node command
+sed -i "/\[program:gigi\]/,/^\[/{s|command=node --import tsx src/index.ts|command=/app/start-gigi.sh|}" "$SUPERVISORD_CONF"
 
 # ── 7. Start supervisord ─────────────────────────────────────────────
 

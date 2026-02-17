@@ -8,18 +8,13 @@ backup:
     - org: idea
 
   targets:
-    # Git mirror to git.lab.local (secondary Gitea) with mTLS
+    # Git mirror to git.lab.local (secondary Gitea)
     - type: git-mirror
-      name: ${BACKUP_TARGET_NAME:-git-lab-mirror}
-      url: ${BACKUP_GITEA_URL:-https://git.lab.local}
-      auth: ${BACKUP_AUTH_METHOD:-mtls}
-      # mTLS client certificates (paths to PEM files mounted in container)
-      cert: ${BACKUP_MTLS_CERT:-/certs/backup/client-cert.pem}
-      key: ${BACKUP_MTLS_KEY:-/certs/backup/client-key.pem}
-      ca: ${BACKUP_MTLS_CA:-/certs/backup/ca-cert.pem}
-      # Token for git push auth and API calls
-      token: ${BACKUP_GITEA_TOKEN}
-      api_token: ${BACKUP_GITEA_TOKEN}
+      name: git-lab-mirror
+      url: ${MIRROR_GIT_URL:-http://git.lab.local:3000}
+      auth: token
+      token: ${MIRROR_GIT_TOKEN}
+      api_token: ${MIRROR_GIT_TOKEN}
       create_repos: true
 
   schedule:

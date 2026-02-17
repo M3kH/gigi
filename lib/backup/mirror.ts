@@ -96,30 +96,34 @@ const readCertValue = async (value: string): Promise<string> => {
 }
 
 /**
- * Build an HTTPS agent with mTLS client certificates for fetch() calls.
- * Returns undefined if auth is not mTLS or certs are unavailable.
+ * Build an HTTPS agent for fetch() calls.
+ * For mTLS: loads client certs. For HTTPS targets: skips self-signed cert verification.
+ * Returns undefined for plain HTTP targets.
  */
-const buildMtlsAgent = async (target: MirrorTarget): Promise<https.Agent | undefined> => {
-  if (target.auth !== 'mtls') return undefined
+const buildHttpsAgent = async (target: MirrorTarget): Promise<https.Agent | undefined> => {
+  if (!target.url.startsWith('https')) return undefined
 
-  const agentOpts: https.AgentOptions = { rejectUnauthorized: true }
+  const agentOpts: https.AgentOptions = { rejectUnauthorized: false }
 
-  try {
-    if (target.cert) agentOpts.cert = await readCertValue(target.cert)
-    if (target.key) agentOpts.key = await readCertValue(target.key)
-    if (target.ca) agentOpts.ca = await readCertValue(target.ca)
-
-    return new https.Agent(agentOpts)
-  } catch (err) {
-    console.warn('[backup:mirror] failed to build mTLS agent for fetch:', err)
-    return undefined
+  if (target.auth === 'mtls') {
+    try {
+      if (target.cert) agentOpts.cert = await readCertValue(target.cert)
+      if (target.key) agentOpts.key = await readCertValue(target.key)
+      if (target.ca) {
+        agentOpts.ca = await readCertValue(target.ca)
+        agentOpts.rejectUnauthorized = true
+      }
+    } catch (err) {
+      console.warn('[backup:mirror] failed to load mTLS certs for fetch:', err)
+    }
   }
+
+  return new https.Agent(agentOpts)
 }
 
 /**
- * Perform a fetch request with optional mTLS support.
- * Node.js fetch() doesn't natively support custom TLS agents,
- * so we use the undici dispatcher approach via Node.js https module.
+ * Perform a fetch request with optional custom HTTPS agent.
+ * Uses the undici dispatcher approach for Node.js fetch.
  */
 const mtlsFetch = async (
   url: string,
@@ -149,7 +153,7 @@ const ensureTargetRepo = async (
   if (!apiToken) return
 
   const baseUrl = target.url.replace(/\/+$/, '')
-  const agent = await buildMtlsAgent(target)
+  const agent = await buildHttpsAgent(target)
 
   // Check if repo exists
   try {
@@ -260,11 +264,14 @@ const ensureTargetOrg = async (
  * Setup mTLS certificates for git operations and return git env vars.
  * Handles both file paths (pass through) and inline PEM (write to temp).
  */
-const setupMtlsEnv = async (
+const setupGitSslEnv = async (
   target: MirrorTarget,
   workDir: string,
 ): Promise<Record<string, string>> => {
-  if (target.auth !== 'mtls') return {}
+  // For non-mTLS HTTPS targets, skip cert verification (self-signed certs)
+  if (target.auth !== 'mtls') {
+    return target.url.startsWith('https') ? { GIT_SSL_NO_VERIFY: 'true' } : {}
+  }
 
   const env: Record<string, string> = {}
 
@@ -343,7 +350,7 @@ export const mirrorRepo = async (
     workDir = await mkdtemp(join(tmpdir(), `gigi-mirror-${repo.name}-`))
 
     // Setup mTLS if needed
-    const mtlsEnv = await setupMtlsEnv(target, workDir)
+    const gitSslEnv = await setupGitSslEnv(target, workDir)
 
     // Ensure target repo exists
     await ensureTargetRepo(target, repo.owner, repo.name, repo.description)
@@ -354,13 +361,13 @@ export const mirrorRepo = async (
 
     await gitExec(['clone', '--mirror', sourceUrl, mirrorDir], workDir, undefined, 300_000)
 
-    // Push --mirror to target
+    // Push all refs except refs/pull/* (Gitea rejects pushes to PR refs)
     const targetUrl = buildTargetUrl(target, repo.owner, repo.name)
 
     await gitExec(
-      ['push', '--mirror', '--force', targetUrl],
+      ['push', '--force', targetUrl, 'refs/heads/*:refs/heads/*', 'refs/tags/*:refs/tags/*'],
       mirrorDir,
-      mtlsEnv,
+      gitSslEnv,
       300_000,
     )
 
