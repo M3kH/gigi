@@ -32,6 +32,42 @@ const getOrg = async (): Promise<string> => {
   return orgName
 }
 
+// ─── Status label definitions ────────────────────────────────────────
+
+const STATUS_LABELS = [
+  { name: 'status/ready',       color: '#0075ca', description: 'Ready to be picked up' },
+  { name: 'status/in-progress', color: '#e4e669', description: 'Work in progress' },
+  { name: 'status/review',      color: '#a2eeef', description: 'In review' },
+  { name: 'status/blocked',     color: '#d73a4a', description: 'Blocked by dependency or question' },
+  { name: 'status/done',        color: '#0e8a16', description: 'Completed' },
+]
+
+/** Cache of repos where labels have been verified/created (per process lifetime) */
+const labelReadyRepos = new Set<string>()
+
+/**
+ * Ensure all required status/ labels exist in a repo, creating any missing ones.
+ * Cached per repo so we only check once per process lifetime.
+ */
+async function ensureStatusLabels(gitea: GiteaClient, owner: string, repo: string): Promise<void> {
+  const key = `${owner}/${repo}`
+  if (labelReadyRepos.has(key)) return
+
+  try {
+    const existing = await gitea.repos.listLabels(owner, repo)
+    const existingNames = new Set(existing.map(l => l.name))
+
+    await Promise.all(
+      STATUS_LABELS
+        .filter(l => !existingNames.has(l.name))
+        .map(l => gitea.repos.createLabel(owner, repo, l))
+    )
+    labelReadyRepos.add(key)
+  } catch (err) {
+    console.error(`[gitea-proxy] Failed to ensure labels for ${key}:`, (err as Error).message)
+  }
+}
+
 // ─── Routes ─────────────────────────────────────────────────────────
 
 export const createGiteaProxy = (): Hono => {
@@ -313,6 +349,10 @@ export const createGiteaProxy = (): Hono => {
       if (newStatus === undefined) {
         return c.json({ error: `Invalid column: ${targetColumn}` }, 400)
       }
+
+      // Ensure status labels exist in the repo (Gitea silently ignores
+      // unknown label names in PUT /labels, so we must create them first)
+      await ensureStatusLabels(gitea, owner, repo)
 
       // Fetch current labels
       const issue = await gitea.issues.get(owner, repo, issueNumber)

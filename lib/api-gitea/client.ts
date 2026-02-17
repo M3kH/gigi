@@ -138,6 +138,10 @@ export const createGiteaClient = (baseUrl: string, token: string) => {
       /** List labels for a repo */
       listLabels: (owner: string, name: string) =>
         req({ method: 'GET', path: `/repos/${owner}/${name}/labels`, schema: z.array(Label) }),
+
+      /** Create a label for a repo */
+      createLabel: (owner: string, name: string, opts: { name: string; color: string; description?: string; exclusive?: boolean }) =>
+        req({ method: 'POST', path: `/repos/${owner}/${name}/labels`, body: opts, schema: Label }),
     },
 
     // ─── Issues ────────────────────────────────────────────────
