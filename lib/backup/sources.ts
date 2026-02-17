@@ -27,6 +27,7 @@ export const resolveRepos = async (
   giteaToken: string,
 ): Promise<RepoInfo[]> => {
   const gitea = createGiteaClient(giteaUrl, giteaToken)
+  const baseCloneUrl = giteaUrl.replace(/\/+$/, '')
   const allRepos: RepoInfo[] = []
   const seen = new Set<string>()
 
@@ -34,9 +35,9 @@ export const resolveRepos = async (
     let repos: RepoInfo[]
 
     if ('org' in source) {
-      repos = await resolveOrgSource(gitea, source.org)
+      repos = await resolveOrgSource(gitea, source.org, baseCloneUrl)
     } else if ('repo' in source) {
-      repos = await resolveRepoSource(gitea, source.repo)
+      repos = await resolveRepoSource(gitea, source.repo, baseCloneUrl)
     } else if ('match' in source) {
       // v2: glob pattern matching
       console.warn(`[backup:sources] 'match' source not yet implemented: ${source.match}`)
@@ -59,7 +60,7 @@ export const resolveRepos = async (
 /**
  * List all repos in a Gitea org, paginating through all results.
  */
-const resolveOrgSource = async (gitea: GiteaClient, orgName: string): Promise<RepoInfo[]> => {
+const resolveOrgSource = async (gitea: GiteaClient, orgName: string, baseCloneUrl: string): Promise<RepoInfo[]> => {
   const repos: RepoInfo[] = []
   let page = 1
   const limit = 50
@@ -71,7 +72,7 @@ const resolveOrgSource = async (gitea: GiteaClient, orgName: string): Promise<Re
       repos.push({
         owner: orgName,
         name: repo.name,
-        cloneUrl: repo.clone_url || '',
+        cloneUrl: `${baseCloneUrl}/${orgName}/${repo.name}.git`,
         description: repo.description || '',
         fullName: `${orgName}/${repo.name}`,
       })
@@ -87,7 +88,7 @@ const resolveOrgSource = async (gitea: GiteaClient, orgName: string): Promise<Re
 /**
  * Resolve a single repo source like "idea/gigi".
  */
-const resolveRepoSource = async (gitea: GiteaClient, repoSpec: string): Promise<RepoInfo[]> => {
+const resolveRepoSource = async (gitea: GiteaClient, repoSpec: string, baseCloneUrl: string): Promise<RepoInfo[]> => {
   const [owner, name] = repoSpec.split('/')
   if (!owner || !name) {
     console.warn(`[backup:sources] invalid repo spec: ${repoSpec} (expected "owner/name")`)
@@ -99,7 +100,7 @@ const resolveRepoSource = async (gitea: GiteaClient, repoSpec: string): Promise<
     return [{
       owner,
       name: repo.name,
-      cloneUrl: repo.clone_url || '',
+      cloneUrl: `${baseCloneUrl}/${owner}/${repo.name}.git`,
       description: repo.description || '',
       fullName: `${owner}/${repo.name}`,
     }]
