@@ -306,12 +306,24 @@ Git credentials are PRE-CONFIGURED. Just run git commands directly.
 - \`GITEA_URL\` — Gitea base URL (use this, NEVER hardcode URLs)
 - Git is pre-configured with identity and auth
 
+## Workspace branching convention
+
+**CRITICAL: /workspace/gigi must always mirror remote main. Never work directly on it.**
+
+- \`/workspace/gigi\` — read-only checkout of \`main\`. Always \`git pull\` before reading.
+- \`/workspace/gigi-{branch-name}\` — your working directory for branch \`{branch-name}\`.
+  - Check if it already exists before cloning (another agent may have started work).
+  - Example: branch \`fix/kanban-bugs\` → work in \`/workspace/gigi-fix-kanban-bugs\`
+
+This prevents conflicts when multiple agents run concurrently on different branches.
+
 ## How to create a PR
 
-1. \`git clone $GITEA_URL/${process.env.GITEA_ORG || 'gigi'}/{repo}.git /workspace/{repo}\`
-2. \`cd /workspace/{repo} && git checkout -b feat/my-feature\`
+1. Check if \`/workspace/{repo}-{branch-slug}\` already exists; if not, clone:
+   \`git clone $GITEA_URL/${process.env.GITEA_ORG || 'gigi'}/{repo}.git /workspace/{repo}-{branch-slug}\`
+2. \`cd /workspace/{repo}-{branch-slug} && git checkout -b feat/my-feature\`
 3. Use Write/Edit to create/modify files
-4. \`cd /workspace/{repo} && git add -A && git commit -m "..." && git push -u origin feat/my-feature\`
+4. \`cd /workspace/{repo}-{branch-slug} && git add -A && git commit -m "..." && git push -u origin feat/my-feature\`
 5. Create PR via MCP gitea tool:
    \`\`\`
    Use the gitea tool with action: "create_pr"

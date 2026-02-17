@@ -27,6 +27,7 @@
   }
 
   let repos = $state<RepoSummary[]>([])
+  let orgName = $state<string>('idea')
   let selectedRepo = $state<string | null>(null)
   let filtersExpanded = $state(true)
   let browserAvailable = $state(false)
@@ -37,6 +38,7 @@
       if (res.ok) {
         const data = await res.json()
         repos = data.repos ?? []
+        if (data.org?.name) orgName = data.org.name
       }
     } catch { /* ignore */ }
 
@@ -54,7 +56,7 @@
   }
 
   function handleRepositories() {
-    navigateToGitea('/gigi')
+    navigateToGitea(`/${orgName}`)
   }
 
   function handleBrowser() {

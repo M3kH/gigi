@@ -4,7 +4,7 @@
    *
    * Full-width kanban board synced with Gitea issues via status/ labels.
    * Features: columns, issue cards, drag-and-drop between columns,
-   * label badges, assignee avatars, repo indicators.
+   * label badges, assignee avatars, repo indicators, context menu.
    */
 
   import { onMount } from 'svelte'
@@ -38,7 +38,7 @@
   const drag = $derived(getDragState())
   const kanbanState: PanelState = $derived(getPanelState('kanban'))
 
-  // Show columns with cards + first column always. Empty columns collapsed.
+  // Show columns with cards. Empty columns collapsed.
   const visibleColumns = $derived(
     columns.filter(col => col.cards.length > 0)
   )
@@ -49,6 +49,8 @@
   // ── Drag Tracking ───────────────────────────────────────────────────
 
   let dragOverColumnId = $state<string | null>(null)
+  let expandingColumnId = $state<string | null>(null)
+  let expandTimer: ReturnType<typeof setTimeout> | null = null
 
   function handleDragStart(e: DragEvent, card: KanbanCard, columnId: string): void {
     if (!e.dataTransfer) return
@@ -75,6 +77,7 @@
   function handleDrop(e: DragEvent, targetColumnId: string): void {
     e.preventDefault()
     dragOverColumnId = null
+    clearExpandTimer()
 
     if (drag.card && drag.sourceColumnId) {
       moveCard(drag.card, drag.sourceColumnId, targetColumnId)
@@ -84,8 +87,92 @@
 
   function handleDragEnd(): void {
     dragOverColumnId = null
+    clearExpandTimer()
+    expandingColumnId = null
     endDrag()
   }
+
+  // ── Collapsed column drag handlers ────────────────────────────────
+
+  function clearExpandTimer(): void {
+    if (expandTimer) {
+      clearTimeout(expandTimer)
+      expandTimer = null
+    }
+  }
+
+  function handleCollapsedDragOver(e: DragEvent, columnId: string): void {
+    e.preventDefault()
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'
+    dragOverColumnId = columnId
+
+    if (expandingColumnId !== columnId) {
+      clearExpandTimer()
+      expandingColumnId = columnId
+    }
+  }
+
+  function handleCollapsedDragLeave(e: DragEvent, columnId: string): void {
+    const related = e.relatedTarget as HTMLElement | null
+    const badge = (e.currentTarget as HTMLElement)
+    if (!related || !badge.contains(related)) {
+      if (dragOverColumnId === columnId) dragOverColumnId = null
+      if (expandingColumnId === columnId) {
+        clearExpandTimer()
+        expandingColumnId = null
+      }
+    }
+  }
+
+  function handleCollapsedDrop(e: DragEvent, targetColumnId: string): void {
+    e.preventDefault()
+    dragOverColumnId = null
+    clearExpandTimer()
+    expandingColumnId = null
+
+    if (drag.card && drag.sourceColumnId) {
+      moveCard(drag.card, drag.sourceColumnId, targetColumnId)
+    }
+    endDrag()
+  }
+
+  // ── Context Menu ──────────────────────────────────────────────────
+
+  interface ContextMenuState {
+    visible: boolean
+    x: number
+    y: number
+    card: KanbanCard | null
+    sourceColumnId: string | null
+  }
+
+  let contextMenu = $state<ContextMenuState>({
+    visible: false, x: 0, y: 0, card: null, sourceColumnId: null,
+  })
+
+  const contextMenuTargets = $derived(
+    contextMenu.sourceColumnId
+      ? columns.filter(col => col.id !== contextMenu.sourceColumnId)
+      : []
+  )
+
+  function handleCardContextMenu(e: MouseEvent, card: KanbanCard, columnId: string): void {
+    e.preventDefault()
+    contextMenu = { visible: true, x: e.clientX, y: e.clientY, card, sourceColumnId: columnId }
+  }
+
+  function handleContextMenuMove(targetColumnId: string): void {
+    if (contextMenu.card && contextMenu.sourceColumnId) {
+      moveCard(contextMenu.card, contextMenu.sourceColumnId, targetColumnId)
+    }
+    closeContextMenu()
+  }
+
+  function closeContextMenu(): void {
+    contextMenu = { visible: false, x: 0, y: 0, card: null, sourceColumnId: null }
+  }
+
+  // ── Card interaction ──────────────────────────────────────────────
 
   function handleCardClick(card: KanbanCard): void {
     navigateToIssue(getOrgName(), card.repo, card.number)
@@ -128,7 +215,18 @@
       }
     }, 60_000)
 
-    return () => clearInterval(interval)
+    // Close context menu on click outside or Escape
+    function handleGlobalClick() { if (contextMenu.visible) closeContextMenu() }
+    function handleGlobalKeydown(e: KeyboardEvent) { if (e.key === 'Escape' && contextMenu.visible) closeContextMenu() }
+    document.addEventListener('click', handleGlobalClick)
+    document.addEventListener('keydown', handleGlobalKeydown)
+
+    return () => {
+      clearInterval(interval)
+      clearExpandTimer()
+      document.removeEventListener('click', handleGlobalClick)
+      document.removeEventListener('keydown', handleGlobalKeydown)
+    }
   })
 </script>
 
@@ -186,6 +284,7 @@
                 ondragstart={(e) => handleDragStart(e, card, column.id)}
                 ondragend={handleDragEnd}
                 onclick={() => handleCardClick(card)}
+                oncontextmenu={(e) => handleCardContextMenu(e, card, column.id)}
                 role="button"
                 tabindex="0"
                 onkeydown={(e) => { if (e.key === 'Enter') handleCardClick(card) }}
@@ -260,11 +359,20 @@
         </div>
       {/each}
 
-      <!-- Collapsed empty columns shown as compact badges -->
+      <!-- Collapsed empty columns: now valid drop targets -->
       {#if collapsedColumns.length > 0 && visibleColumns.length > 0}
         <div class="collapsed-columns">
           {#each collapsedColumns as col (col.id)}
-            <span class="collapsed-badge" title="{col.title}: no issues">{col.title} <span class="collapsed-count">0</span></span>
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <span
+              class="collapsed-badge"
+              class:drag-target={dragOverColumnId === col.id}
+              class:has-drag={drag.card !== null}
+              title="{col.title}: no issues{drag.card ? ' — drop here to move' : ''}"
+              ondragover={(e) => handleCollapsedDragOver(e, col.id)}
+              ondragleave={(e) => handleCollapsedDragLeave(e, col.id)}
+              ondrop={(e) => handleCollapsedDrop(e, col.id)}
+            >{col.title} <span class="collapsed-count">0</span></span>
           {/each}
         </div>
       {/if}
@@ -275,7 +383,15 @@
           <span class="board-empty-text">All columns are empty — create issues or drag cards to get started</span>
           <div class="collapsed-columns" style="flex-direction: row; padding-top: 0;">
             {#each columns as col (col.id)}
-              <span class="collapsed-badge">{col.title}</span>
+              <!-- svelte-ignore a11y_no_static_element_interactions -->
+              <span
+                class="collapsed-badge"
+                class:drag-target={dragOverColumnId === col.id}
+                class:has-drag={drag.card !== null}
+                ondragover={(e) => handleCollapsedDragOver(e, col.id)}
+                ondragleave={(e) => handleCollapsedDragLeave(e, col.id)}
+                ondrop={(e) => handleCollapsedDrop(e, col.id)}
+              >{col.title}</span>
             {/each}
           </div>
         </div>
@@ -298,6 +414,26 @@
     </div>
   {/if}
 </section>
+
+<!-- Context menu for moving cards between columns -->
+{#if contextMenu.visible}
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div
+    class="context-menu"
+    style="left: {contextMenu.x}px; top: {contextMenu.y}px;"
+    onclick={(e) => e.stopPropagation()}
+  >
+    <div class="context-menu-header">Move to...</div>
+    {#each contextMenuTargets as col (col.id)}
+      <button class="context-menu-item" onclick={() => handleContextMenuMove(col.id)}>
+        {col.title}
+        {#if col.cards.length > 0}
+          <span class="context-menu-count">{col.cards.length}</span>
+        {/if}
+      </button>
+    {/each}
+  </div>
+{/if}
 
 <style>
   .gigi-kanban {
@@ -474,6 +610,25 @@
     border-radius: var(--gigi-radius-sm);
     padding: 2px var(--gigi-space-sm);
     white-space: nowrap;
+    transition: all var(--gigi-transition-fast);
+    cursor: default;
+  }
+
+  /* When a card is being dragged, badges become obvious drop targets */
+  .collapsed-badge.has-drag {
+    cursor: pointer;
+    border-style: dashed;
+    border-color: var(--gigi-accent-blue);
+    opacity: 0.8;
+  }
+
+  .collapsed-badge.has-drag:hover,
+  .collapsed-badge.drag-target {
+    background: var(--gigi-bg-hover);
+    border-color: var(--gigi-accent-green);
+    color: var(--gigi-text-primary);
+    opacity: 1;
+    transform: scale(1.05);
   }
 
   .collapsed-count {
@@ -627,6 +782,64 @@
     height: 20px;
     border-radius: 50%;
     border: 1px solid var(--gigi-border-default);
+  }
+
+  /* ── Context Menu ──────────────────────────────────────────────── */
+
+  .context-menu {
+    position: fixed;
+    z-index: 1000;
+    min-width: 160px;
+    background: var(--gigi-bg-secondary);
+    border: var(--gigi-border-width) solid var(--gigi-border-default);
+    border-radius: var(--gigi-radius-md);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+    padding: var(--gigi-space-xs) 0;
+    animation: context-menu-in 100ms ease-out;
+  }
+
+  @keyframes context-menu-in {
+    from { opacity: 0; transform: scale(0.95); }
+    to { opacity: 1; transform: scale(1); }
+  }
+
+  .context-menu-header {
+    padding: var(--gigi-space-xs) var(--gigi-space-md);
+    font-size: var(--gigi-font-size-xs);
+    color: var(--gigi-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-weight: 600;
+  }
+
+  .context-menu-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: var(--gigi-space-xs) var(--gigi-space-md);
+    background: none;
+    border: none;
+    color: var(--gigi-text-primary);
+    font-size: var(--gigi-font-size-sm);
+    font-family: var(--gigi-font-sans);
+    cursor: pointer;
+    text-align: left;
+    transition: background var(--gigi-transition-fast);
+  }
+
+  .context-menu-item:hover {
+    background: var(--gigi-bg-hover);
+  }
+
+  .context-menu-count {
+    font-size: var(--gigi-font-size-xs);
+    color: var(--gigi-text-muted);
+    background: var(--gigi-bg-tertiary, var(--gigi-bg-secondary));
+    padding: 0 5px;
+    border-radius: var(--gigi-radius-full);
+    min-width: 16px;
+    text-align: center;
   }
 
   /* ── Error State ─────────────────────────────────────────────────── */
