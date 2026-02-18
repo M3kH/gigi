@@ -571,3 +571,126 @@ export const checkBudget = async (budgetUSD: number, periodDays: number = 7): Pr
     percentUsed: budgetUSD > 0 ? (periodSpend / budgetUSD) * 100 : 0,
   }
 }
+
+// ─── Conversation Analysis (Strategy 5) ─────────────────────────────
+
+export interface ConversationAnalysis {
+  conversationId: string
+  totalCost: number
+  totalInputTokens: number
+  totalOutputTokens: number
+  totalCacheReadTokens: number
+  messageCount: number
+  toolBreakdown: Array<{
+    toolName: string
+    callCount: number
+    /** Estimated cost contribution based on proportion of messages */
+    estimatedCost: number
+  }>
+  messageTimeline: Array<{
+    role: string
+    costUSD: number
+    inputTokens: number
+    outputTokens: number
+    cacheReadTokens: number
+    createdAt: string
+    toolsUsed: string[]
+  }>
+  optimization_hints: string[]
+}
+
+/**
+ * Analyze a conversation's token usage patterns and identify optimization opportunities.
+ * Strategy 5: Conversation Analysis & Pattern Mining.
+ */
+export const getConversationAnalysis = async (conversationId: string): Promise<ConversationAnalysis> => {
+  // Get all messages with usage data
+  const { rows: messages } = await pool.query(`
+    SELECT role, content, tool_calls, usage, created_at
+    FROM messages
+    WHERE conversation_id = $1
+    ORDER BY created_at ASC
+  `, [conversationId])
+
+  let totalCost = 0, totalInput = 0, totalOutput = 0, totalCacheRead = 0
+  const toolCounts = new Map<string, number>()
+  const timeline: ConversationAnalysis['messageTimeline'] = []
+
+  for (const msg of messages) {
+    const usage = msg.usage as Record<string, number> | null
+    const cost = parseFloat(String(usage?.costUSD || 0))
+    const input = parseInt(String(usage?.inputTokens || 0))
+    const output = parseInt(String(usage?.outputTokens || 0))
+    const cacheRead = parseInt(String(usage?.cacheReadInputTokens || 0))
+
+    totalCost += cost
+    totalInput += input
+    totalOutput += output
+    totalCacheRead += cacheRead
+
+    // Track tool usage
+    const toolsUsed: string[] = []
+    if (msg.tool_calls && Array.isArray(msg.tool_calls)) {
+      for (const tc of msg.tool_calls as Array<{ name: string }>) {
+        toolsUsed.push(tc.name)
+        toolCounts.set(tc.name, (toolCounts.get(tc.name) || 0) + 1)
+      }
+    }
+
+    if (msg.role === 'assistant' && usage) {
+      timeline.push({
+        role: msg.role,
+        costUSD: cost,
+        inputTokens: input,
+        outputTokens: output,
+        cacheReadTokens: cacheRead,
+        createdAt: msg.created_at,
+        toolsUsed,
+      })
+    }
+  }
+
+  // Build tool breakdown with estimated cost proportions
+  const toolBreakdown = Array.from(toolCounts.entries())
+    .map(([toolName, callCount]) => ({
+      toolName,
+      callCount,
+      estimatedCost: totalCost * (callCount / Math.max(1, timeline.length)),
+    }))
+    .sort((a, b) => b.callCount - a.callCount)
+
+  // Generate optimization hints
+  const hints: string[] = []
+  if (totalCacheRead > 5_000_000) {
+    hints.push(`High cache read tokens (${(totalCacheRead / 1_000_000).toFixed(1)}M) — knowledge base could reduce exploratory reads`)
+  }
+  const grepGlobCalls = (toolCounts.get('Grep') || 0) + (toolCounts.get('Glob') || 0)
+  if (grepGlobCalls > 10) {
+    hints.push(`${grepGlobCalls} search tool calls — better knowledge base would reduce codebase exploration`)
+  }
+  const readCalls = toolCounts.get('Read') || 0
+  if (readCalls > 15) {
+    hints.push(`${readCalls} file reads — codebase map in knowledge would help`)
+  }
+  if (timeline.length > 0) {
+    const avgCostPerTurn = totalCost / timeline.length
+    if (avgCostPerTurn > 2) {
+      hints.push(`High avg cost per turn ($${avgCostPerTurn.toFixed(2)}) — consider if task could use Haiku for some steps`)
+    }
+  }
+  if (messages.length > 20) {
+    hints.push(`Long conversation (${messages.length} messages) — sliding window would help reduce context`)
+  }
+
+  return {
+    conversationId,
+    totalCost,
+    totalInputTokens: totalInput,
+    totalOutputTokens: totalOutput,
+    totalCacheReadTokens: totalCacheRead,
+    messageCount: messages.length,
+    toolBreakdown,
+    messageTimeline: timeline,
+    optimization_hints: hints,
+  }
+}

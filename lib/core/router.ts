@@ -16,6 +16,18 @@ import { classifyMessage, type RoutingDecision } from './llm-router'
 // Active conversations per channel key (e.g. "telegram:12345", "web:uuid")
 const active = new Map<string, string>()
 
+// Helper to extract plain text from JSONB message content
+const extractMessageText = (content: unknown): string => {
+  if (typeof content === 'string') return content
+  if (Array.isArray(content)) {
+    return (content as Array<{ type: string; text?: string }>)
+      .filter(b => b.type === 'text' && b.text)
+      .map(b => b.text!)
+      .join('')
+  }
+  return ''
+}
+
 // Track running agent processes by conversation ID
 const runningAgents = new Map<string, AbortController>()
 
@@ -131,15 +143,38 @@ export const handleMessage = async (
   }
 
   // Build messages for agent
+  // Strategy 3: Sliding window — for long conversations without a session,
+  // send only the last N messages + a summary of earlier ones to reduce context size.
+  const HISTORY_WINDOW_SIZE = 10 // Keep last N messages in full detail
   let messages: AgentMessage[]
   if (sessionId) {
     messages = [{ role: 'user', content: [{ type: 'text', text: enrichedText }] }]
   } else {
     const history = await store.getMessages(convId)
-    messages = history.map((m) => ({
-      role: (m.role === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
-      content: m.content as AgentMessage['content'],
-    }))
+    if (history.length > HISTORY_WINDOW_SIZE) {
+      // Summarize older messages to save tokens
+      const older = history.slice(0, -HISTORY_WINDOW_SIZE)
+      const recent = history.slice(-HISTORY_WINDOW_SIZE)
+      const summaryParts: string[] = []
+      for (const m of older) {
+        const text = extractMessageText(m.content)
+        if (text) summaryParts.push(`[${m.role}]: ${text.slice(0, 120)}`)
+      }
+      const summaryText = `[CONVERSATION SUMMARY — ${older.length} earlier messages condensed]\n${summaryParts.join('\n')}`
+      messages = [
+        { role: 'user', content: [{ type: 'text', text: summaryText }] },
+        ...recent.map((m) => ({
+          role: (m.role === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
+          content: m.content as AgentMessage['content'],
+        })),
+      ]
+      console.log(`[router] History: ${history.length} msgs → summarized ${older.length} + ${recent.length} recent`)
+    } else {
+      messages = history.map((m) => ({
+        role: (m.role === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
+        content: m.content as AgentMessage['content'],
+      }))
+    }
   }
 
   // Wrap onEvent to inject conversationId and broadcast to event bus

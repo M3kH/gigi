@@ -130,6 +130,13 @@ export const createApp = (): Hono => {
     return c.json({ ok: true })
   })
 
+  // Conversation analysis — tool usage breakdown for a specific conversation
+  app.get('/api/conversations/:id/analysis', async (c) => {
+    const convId = c.req.param('id')
+    const analysis = await store.getConversationAnalysis(convId)
+    return c.json(analysis)
+  })
+
   // Stop a running agent
   app.post('/api/conversations/:id/stop', async (c) => {
     const convId = c.req.param('id')

@@ -14,6 +14,7 @@
   import { navigateToRepo, navigateToGitea } from '$lib/stores/navigation.svelte'
   import { setPanelState } from '$lib/stores/panels.svelte'
   import { formatRelativeTime } from '$lib/utils/format'
+  import CostWidget from '$components/dashboard/CostWidget.svelte'
 
   // ── Types ──────────────────────────────────────────────────────────
 
@@ -270,6 +271,11 @@
       </div>
     </div>
 
+    <!-- Cost monitoring widget -->
+    <div class="cost-section">
+      <CostWidget />
+    </div>
+
     <!-- Main grid: repos + activity -->
     <div class="dashboard-grid">
       <!-- Repositories -->
@@ -432,7 +438,7 @@
     display: grid;
     grid-template-columns: auto repeat(4, 1fr);
     gap: var(--gigi-space-md);
-    margin-bottom: var(--gigi-space-xl);
+    margin-bottom: var(--gigi-space-md);
     align-items: stretch;
   }
 
@@ -579,6 +585,12 @@
   .action-chip svg {
     opacity: 0.8;
     flex-shrink: 0;
+  }
+
+  /* ── Cost Section ─────────────────────────────────────────────── */
+
+  .cost-section {
+    margin-bottom: var(--gigi-space-xl);
   }
 
   /* ── Grid ───────────────────────────────────────────────────────── */
