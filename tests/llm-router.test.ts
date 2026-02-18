@@ -18,7 +18,7 @@ describe('classifyMessage — simple messages', () => {
     for (const msg of greetings) {
       const result = classifyMessage(msg)
       assert.equal(result.complexity, 'simple', `"${msg}" should be simple, got ${result.complexity}`)
-      assert.equal(result.model, 'claude-3-5-haiku-latest', `"${msg}" should use haiku`)
+      assert.equal(result.model, 'claude-haiku-4-5', `"${msg}" should use haiku`)
       assert.equal(result.includeTools, false, `"${msg}" should not include tools`)
       assert.equal(result.useMinimalPrompt, true, `"${msg}" should use minimal prompt`)
     }
@@ -29,7 +29,7 @@ describe('classifyMessage — simple messages', () => {
     for (const msg of thanks) {
       const result = classifyMessage(msg)
       assert.equal(result.complexity, 'simple', `"${msg}" should be simple, got ${result.complexity}: ${result.reason}`)
-      assert.equal(result.model, 'claude-3-5-haiku-latest')
+      assert.equal(result.model, 'claude-haiku-4-5')
     }
   })
 
@@ -111,7 +111,7 @@ describe('classifyMessage — tool-simple messages', () => {
     for (const msg of msgs) {
       const result = classifyMessage(msg)
       assert.equal(result.complexity, 'tool-simple', `"${msg}" should be tool-simple, got ${result.complexity}: ${result.reason}`)
-      assert.equal(result.model, 'claude-3-5-haiku-latest')
+      assert.equal(result.model, 'claude-haiku-4-5')
       assert.equal(result.includeTools, true, 'tool-simple should include tools')
       assert.equal(result.maxTurns, 5, 'tool-simple should have limited turns')
     }
