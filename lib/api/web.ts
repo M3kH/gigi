@@ -105,6 +105,31 @@ export const createApp = (): Hono => {
     return c.json(usage)
   })
 
+  // Global usage analytics (for cost monitoring dashboard)
+  app.get('/api/usage/stats', async (c) => {
+    const days = parseInt(c.req.query('days') || '30')
+    const stats = await store.getGlobalUsage(days)
+    return c.json(stats)
+  })
+
+  // Budget check endpoint
+  app.get('/api/usage/budget', async (c) => {
+    const budgetStr = await store.getConfig('budget_usd') || '100'
+    const periodStr = await store.getConfig('budget_period_days') || '7'
+    const budget = parseFloat(budgetStr)
+    const period = parseInt(periodStr)
+    const check = await store.checkBudget(budget, period)
+    return c.json(check)
+  })
+
+  // Set budget configuration
+  app.post('/api/usage/budget', async (c) => {
+    const { budgetUSD, periodDays } = await c.req.json()
+    if (budgetUSD !== undefined) await store.setConfig('budget_usd', String(budgetUSD))
+    if (periodDays !== undefined) await store.setConfig('budget_period_days', String(periodDays))
+    return c.json({ ok: true })
+  })
+
   // Stop a running agent
   app.post('/api/conversations/:id/stop', async (c) => {
     const convId = c.req.param('id')

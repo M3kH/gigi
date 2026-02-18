@@ -11,6 +11,7 @@ import * as store from './store'
 import { enforceCompletion, startTask, markNotified } from './enforcer'
 import type { ViewContext } from './protocol'
 import { createGiteaClient } from '../api-gitea'
+import { classifyMessage, type RoutingDecision } from './llm-router'
 
 // Active conversations per channel key (e.g. "telegram:12345", "web:uuid")
 const active = new Map<string, string>()
@@ -103,10 +104,28 @@ export const handleMessage = async (
   // Store user message
   await store.addMessage(convId, 'user', [{ type: 'text', text: enrichedText }])
 
+  // ── LLM Routing: classify message complexity ──────────────────
+  // /issue commands always get complex routing (they trigger task tracking)
+  const routing: RoutingDecision = issueMatch
+    ? { complexity: 'complex', model: 'claude-opus-4-6', reason: '/issue command', includeTools: true, maxTurns: 50, useMinimalPrompt: false }
+    : classifyMessage(text)
+
+  console.log(`[router] Message classified: ${routing.complexity} (${routing.model}) — ${routing.reason}`)
+
   // Try to get existing session ID for resume
+  // Note: if we have an existing session, we MUST use the same model that created it
   let sessionId: string | null = null
   try {
     sessionId = await store.getSessionId(convId)
+    if (sessionId) {
+      // Existing session → always use Opus (session was created with Opus)
+      // Don't downgrade mid-conversation — it would lose context
+      routing.model = 'claude-opus-4-6'
+      routing.useMinimalPrompt = false
+      routing.includeTools = true
+      routing.maxTurns = 50
+      console.log(`[router] Existing session detected — upgrading to Opus for session continuity`)
+    }
   } catch (err) {
     console.warn('[router] getSessionId failed:', (err as Error).message)
   }
@@ -134,6 +153,23 @@ export const handleMessage = async (
     }
   }
 
+  // ── Budget check (non-blocking warning) ────────────────────────
+  try {
+    const budgetStr = await store.getConfig('budget_usd')
+    if (budgetStr) {
+      const periodStr = await store.getConfig('budget_period_days') || '7'
+      const check = await store.checkBudget(parseFloat(budgetStr), parseInt(periodStr))
+      if (check.overBudget) {
+        console.warn(`[router] ⚠️ OVER BUDGET: $${check.periodSpend.toFixed(2)} / $${check.budgetUSD} (${check.percentUsed.toFixed(0)}%)`)
+        // Emit a budget warning event to the UI
+        const budgetEvent = { type: 'budget_warning', conversationId: convId, ...check } as import('./events').AgentEvent
+        try { emit(budgetEvent) } catch { /* ignore */ }
+      }
+    }
+  } catch (err) {
+    console.warn('[router] Budget check failed:', (err as Error).message)
+  }
+
   // Emit agent_start
   wrappedOnEvent({ type: 'agent_start', conversationId: convId })
 
@@ -143,7 +179,7 @@ export const handleMessage = async (
 
   let response
   try {
-    response = await runAgent(messages, wrappedOnEvent, { sessionId, signal: abortController.signal })
+    response = await runAgent(messages, wrappedOnEvent, { sessionId, signal: abortController.signal, routing })
   } catch (err) {
     runningAgents.delete(convId)
     if ((err as Error).name === 'AbortError') {

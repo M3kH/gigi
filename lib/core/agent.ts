@@ -12,6 +12,8 @@ import { createRequire } from 'node:module'
 import { execSync } from 'node:child_process'
 import { existsSync, readFileSync, mkdirSync, writeFileSync, chmodSync } from 'node:fs'
 import { homedir } from 'node:os'
+import { getKnowledge } from './knowledge'
+import { classifyMessage, MINIMAL_SYSTEM_PROMPT, type RoutingDecision } from './llm-router'
 
 // Increase UV thread pool for concurrent TLS handshakes (ARM64 needs this for MCP tool token counting)
 if (!process.env.UV_THREADPOOL_SIZE) process.env.UV_THREADPOOL_SIZE = '64'
@@ -117,6 +119,7 @@ export interface MessageContent {
 export interface AgentOptions {
   sessionId?: string | null
   signal?: AbortSignal | null
+  routing?: RoutingDecision | null
 }
 
 export interface AgentUsage {
@@ -548,7 +551,7 @@ export const resetClient = (): void => {
 export const runAgent = async (
   messages: AgentMessage[],
   onEvent: EventCallback | null,
-  { sessionId = null, signal = null }: AgentOptions = {}
+  { sessionId = null, signal = null, routing = null }: AgentOptions = {}
 ): Promise<AgentResponse> => {
   await ensureReady()
   const env = await getAgentEnv()
@@ -601,6 +604,7 @@ export const runAgent = async (
       turns,
       isError: !!opts.isError,
       usage: opts.usage ?? lastUsage ?? null,
+      routing: routing ? { complexity: routing.complexity, model: routing.model } : null,
     })
   }
 
@@ -683,17 +687,42 @@ export const runAgent = async (
     console.log('[agent] MCP servers config:', JSON.stringify(mcpServers, null, 2))
   }
 
+  // ── Routing & Model Selection ──────────────────────────────────
+  const route = routing ?? { complexity: 'complex', model: 'claude-opus-4-6', includeTools: true, maxTurns: 50, useMinimalPrompt: false, reason: 'default' } as RoutingDecision
+
+  // Build system prompt: minimal for simple messages, full + knowledge for complex
+  let systemPrompt: string
+  if (route.useMinimalPrompt) {
+    systemPrompt = MINIMAL_SYSTEM_PROMPT
+    console.log(`[agent] Using MINIMAL prompt (${route.complexity}): ${route.reason}`)
+  } else {
+    // Load knowledge and inject into full prompt
+    let knowledge = ''
+    try {
+      knowledge = await getKnowledge()
+    } catch (err) {
+      console.warn('[agent] Failed to load knowledge:', (err as Error).message)
+    }
+    systemPrompt = knowledge
+      ? SYSTEM_PROMPT + '\n\n## Knowledge Base\n\n' + knowledge
+      : SYSTEM_PROMPT
+    console.log(`[agent] Using FULL prompt + knowledge (${route.complexity}): ${route.reason}`)
+  }
+
+  // Only include MCP tools if the route requires them
+  const effectiveMcpServers = route.includeTools ? mcpServers : {} as Record<string, never>
+
   const baseOptions = {
-    systemPrompt: SYSTEM_PROMPT,
-    model: 'claude-opus-4-6',
+    systemPrompt,
+    model: route.model,
     executable: process.execPath as 'node' | 'bun' | 'deno',
     env,
     cwd: process.env.WORKSPACE_DIR || '/workspace',
-    maxTurns: 50,
+    maxTurns: route.maxTurns,
     permissionMode: 'bypassPermissions' as const,
     allowDangerouslySkipPermissions: true,
     persistSession: true,
-    mcpServers,
+    mcpServers: effectiveMcpServers,
     stderr: (data: string) => console.error('[claude-code]', data.trim()),
     hooks: {
       PreToolUse: [{
@@ -728,7 +757,7 @@ export const runAgent = async (
     }
 
     const prompt = formatMessages(messages)
-    console.log('[agent] prompt:', prompt.length, 'chars, model:', baseOptions.model)
+    console.log(`[agent] prompt: ${prompt.length} chars, model: ${baseOptions.model}, complexity: ${route.complexity}, maxTurns: ${route.maxTurns}`)
     const response = query({ prompt, options: baseOptions })
     await processResponse(response as unknown as AsyncIterable<Record<string, unknown>>)
     emitDone()

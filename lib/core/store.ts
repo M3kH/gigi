@@ -431,3 +431,143 @@ export const getConversationUsage = async (conversationId: string): Promise<Toke
   `, [conversationId])
   return rows[0]
 }
+
+// ─── Global Usage Analytics ─────────────────────────────────────────
+
+export interface GlobalUsageStats {
+  total_cost: number
+  total_conversations: number
+  total_messages: number
+  total_input_tokens: number
+  total_output_tokens: number
+  total_cache_read_tokens: number
+  avg_cost_per_conversation: number
+  top_conversations: Array<{
+    id: string
+    topic: string | null
+    cost: number
+    input_tokens: number
+    output_tokens: number
+    cache_read_tokens: number
+    message_count: number
+  }>
+  daily_costs: Array<{
+    date: string
+    cost: number
+    conversations: number
+    messages: number
+  }>
+}
+
+/**
+ * Get global usage statistics across all conversations.
+ * Supports date range filtering for cost monitoring dashboards.
+ */
+export const getGlobalUsage = async (daysBack: number = 30): Promise<GlobalUsageStats> => {
+  // Overall totals
+  const { rows: totals } = await pool.query(`
+    SELECT
+      COALESCE(SUM((usage->>'costUSD')::numeric), 0) AS total_cost,
+      COALESCE(SUM((usage->>'inputTokens')::int), 0) AS total_input_tokens,
+      COALESCE(SUM((usage->>'outputTokens')::int), 0) AS total_output_tokens,
+      COALESCE(SUM((usage->>'cacheReadInputTokens')::int), 0) AS total_cache_read_tokens,
+      COUNT(*) AS total_messages
+    FROM messages
+    WHERE usage IS NOT NULL
+      AND created_at > now() - make_interval(days => $1)
+  `, [daysBack])
+
+  const { rows: convCount } = await pool.query(`
+    SELECT COUNT(DISTINCT conversation_id) AS total_conversations
+    FROM messages
+    WHERE usage IS NOT NULL
+      AND created_at > now() - make_interval(days => $1)
+  `, [daysBack])
+
+  // Top conversations by cost
+  const { rows: topConvs } = await pool.query(`
+    SELECT
+      c.id,
+      c.topic,
+      COALESCE(SUM((m.usage->>'costUSD')::numeric), 0) AS cost,
+      COALESCE(SUM((m.usage->>'inputTokens')::int), 0) AS input_tokens,
+      COALESCE(SUM((m.usage->>'outputTokens')::int), 0) AS output_tokens,
+      COALESCE(SUM((m.usage->>'cacheReadInputTokens')::int), 0) AS cache_read_tokens,
+      COUNT(*) AS message_count
+    FROM messages m
+    JOIN conversations c ON c.id = m.conversation_id
+    WHERE m.usage IS NOT NULL
+      AND m.created_at > now() - make_interval(days => $1)
+    GROUP BY c.id, c.topic
+    ORDER BY cost DESC
+    LIMIT 10
+  `, [daysBack])
+
+  // Daily cost breakdown
+  const { rows: daily } = await pool.query(`
+    SELECT
+      DATE(created_at) AS date,
+      COALESCE(SUM((usage->>'costUSD')::numeric), 0) AS cost,
+      COUNT(DISTINCT conversation_id) AS conversations,
+      COUNT(*) AS messages
+    FROM messages
+    WHERE usage IS NOT NULL
+      AND created_at > now() - make_interval(days => $1)
+    GROUP BY DATE(created_at)
+    ORDER BY date DESC
+  `, [daysBack])
+
+  const totalCost = parseFloat(totals[0]?.total_cost || '0')
+  const totalConversations = parseInt(convCount[0]?.total_conversations || '0')
+
+  return {
+    total_cost: totalCost,
+    total_conversations: totalConversations,
+    total_messages: parseInt(totals[0]?.total_messages || '0'),
+    total_input_tokens: parseInt(totals[0]?.total_input_tokens || '0'),
+    total_output_tokens: parseInt(totals[0]?.total_output_tokens || '0'),
+    total_cache_read_tokens: parseInt(totals[0]?.total_cache_read_tokens || '0'),
+    avg_cost_per_conversation: totalConversations > 0 ? totalCost / totalConversations : 0,
+    top_conversations: topConvs.map(r => ({
+      id: r.id,
+      topic: r.topic,
+      cost: parseFloat(r.cost),
+      input_tokens: parseInt(r.input_tokens),
+      output_tokens: parseInt(r.output_tokens),
+      cache_read_tokens: parseInt(r.cache_read_tokens),
+      message_count: parseInt(r.message_count),
+    })),
+    daily_costs: daily.map(r => ({
+      date: r.date,
+      cost: parseFloat(r.cost),
+      conversations: parseInt(r.conversations),
+      messages: parseInt(r.messages),
+    })),
+  }
+}
+
+/**
+ * Check if spending exceeds a budget threshold.
+ * Returns the current period spend and whether it's over budget.
+ */
+export const checkBudget = async (budgetUSD: number, periodDays: number = 7): Promise<{
+  periodSpend: number
+  budgetUSD: number
+  overBudget: boolean
+  percentUsed: number
+}> => {
+  const { rows } = await pool.query(`
+    SELECT COALESCE(SUM((usage->>'costUSD')::numeric), 0) AS period_spend
+    FROM messages
+    WHERE usage IS NOT NULL
+      AND created_at > now() - make_interval(days => $1)
+  `, [periodDays])
+
+  const periodSpend = parseFloat(rows[0]?.period_spend || '0')
+  return {
+    periodSpend,
+    budgetUSD,
+    overBudget: periodSpend > budgetUSD,
+    percentUsed: budgetUSD > 0 ? (periodSpend / budgetUSD) * 100 : 0,
+  }
+}
