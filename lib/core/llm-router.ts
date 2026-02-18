@@ -144,7 +144,7 @@ export const classifyMessage = (
     if (pattern.test(trimmed)) {
       return {
         complexity: 'tool-simple',
-        model: 'claude-haiku-3-5',
+        model: 'claude-3-5-haiku-latest',
         reason: `matches tool-simple pattern: ${pattern.source.slice(0, 40)}`,
         includeTools: true,
         maxTurns: 5,
@@ -159,7 +159,7 @@ export const classifyMessage = (
       if (pattern.test(trimmed)) {
         return {
           complexity: 'simple',
-          model: 'claude-haiku-3-5',
+          model: 'claude-3-5-haiku-latest',
           reason: `matches simple pattern: ${pattern.source.slice(0, 40)}`,
           includeTools: false,
           maxTurns: 1,
@@ -173,7 +173,7 @@ export const classifyMessage = (
   if (wordCount <= 5 && !hasSessionId) {
     return {
       complexity: 'simple',
-      model: 'claude-haiku-3-5',
+      model: 'claude-3-5-haiku-latest',
       reason: 'very short message, no active session',
       includeTools: false,
       maxTurns: 1,
