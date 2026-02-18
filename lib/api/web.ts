@@ -15,6 +15,7 @@ import { getBackupStatus, runBackup } from '../backup'
 import { handleWebhook } from './webhooks'
 import { createGiteaProxy } from './gitea-proxy'
 import { askUser } from '../core/ask-user'
+import { startAwmScheduler, stopAwmScheduler, getAwmStatus } from '../core/awm-scheduler'
 import * as store from '../core/store'
 
 export const createApp = (): Hono => {
@@ -291,6 +292,27 @@ export const createApp = (): Hono => {
       console.error('[api:backup] manual trigger failed:', err)
     })
     return c.json({ ok: true, message: 'backup started' })
+  })
+
+  // Always Working Mode (AWM) — autonomous issue picker
+  app.get('/api/config/always-working', async (c) => {
+    const enabled = (await store.getConfig('awm_enabled')) === 'true'
+    const status = getAwmStatus()
+    return c.json({ enabled, ...status })
+  })
+
+  app.post('/api/config/always-working', async (c) => {
+    const { enabled, intervalMinutes } = await c.req.json()
+    await store.setConfig('awm_enabled', String(!!enabled))
+    await store.setConfig('awm_interval_minutes', String(intervalMinutes || 15))
+
+    if (enabled) {
+      startAwmScheduler(intervalMinutes || 15)
+    } else {
+      stopAwmScheduler()
+    }
+
+    return c.json({ ok: true, ...getAwmStatus() })
   })
 
   // Gitea proxy endpoints (for frontend SPA)

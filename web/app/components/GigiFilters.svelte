@@ -37,7 +37,7 @@
   let mainExpanded = $state(false)
   let showSettings = $state(false)
 
-  // Always Working Mode settings (persisted to localStorage)
+  // Always Working Mode settings — server is source of truth, localStorage is fallback
   const AWM_KEY = 'gigi:always-working-mode'
   const AWM_INTERVAL_KEY = 'gigi:always-working-interval'
 
@@ -50,6 +50,8 @@
 
   let alwaysWorkingEnabled = $state(loadAwm())
   let alwaysWorkingInterval = $state(loadAwmInterval())
+  let awmAgentBusy = $state(false)
+  let awmLastCheck = $state<string | null>(null)
 
   const currentTheme: Theme = $derived(getTheme())
 
@@ -73,6 +75,21 @@
         browserAvailable = data.available
       }
     } catch { /* ignore */ }
+
+    // Sync AWM state from server (source of truth)
+    try {
+      const res = await fetch('/api/config/always-working')
+      if (res.ok) {
+        const data = await res.json()
+        alwaysWorkingEnabled = data.enabled
+        alwaysWorkingInterval = data.intervalMinutes
+        awmAgentBusy = data.agentBusy
+        awmLastCheck = data.lastCheck
+        // Keep localStorage in sync
+        try { localStorage.setItem(AWM_KEY, String(data.enabled)) } catch { /* ignore */ }
+        try { localStorage.setItem(AWM_INTERVAL_KEY, String(data.intervalMinutes)) } catch { /* ignore */ }
+      }
+    } catch { /* ignore — server may not support this yet */ }
   })
 
   function handleOverview() {
@@ -365,6 +382,12 @@
               class="field-input"
             />
           </div>
+          <p class="settings-hint awm-status">
+            Agent: <span class={awmAgentBusy ? 'status-busy' : 'status-idle'}>{awmAgentBusy ? 'busy' : 'idle'}</span>
+            {#if awmLastCheck}
+              · Last check: {new Date(awmLastCheck).toLocaleTimeString()}
+            {/if}
+          </p>
         {/if}
       </div>
     </div>
@@ -770,5 +793,21 @@
 
   .chat-status-dot.closed {
     background: var(--gigi-text-muted);
+  }
+
+  /* ── AWM status ────────────────────────────────────────────────── */
+
+  .awm-status {
+    font-family: var(--gigi-font-mono, monospace);
+  }
+
+  .status-busy {
+    color: var(--gigi-accent-orange);
+    font-weight: 600;
+  }
+
+  .status-idle {
+    color: var(--gigi-accent-green);
+    font-weight: 600;
   }
 </style>

@@ -9,6 +9,8 @@ import { createApp } from '../lib/api/web'
 import { createWSServer } from './server'
 import { startTelegram, stopTelegram } from '../lib/api/telegram'
 import { initBackup, stopScheduler } from '../lib/backup'
+import { startAwmScheduler, stopAwmScheduler } from '../lib/core/awm-scheduler'
+import { getConfig } from '../lib/core/store'
 
 const PORT = parseInt(process.env.PORT || '3000', 10)
 const DATABASE_URL = process.env.DATABASE_URL
@@ -48,6 +50,17 @@ const main = async (): Promise<void> => {
   // Initialize backup system (if configured via gigi.config.yaml)
   await initBackup()
 
+  // Initialize Always Working Mode (if previously enabled)
+  try {
+    const awmEnabled = await getConfig('awm_enabled')
+    const awmInterval = await getConfig('awm_interval_minutes')
+    if (awmEnabled === 'true') {
+      startAwmScheduler(parseInt(awmInterval || '15', 10))
+    }
+  } catch (err) {
+    console.log('AWM not started:', (err as Error).message)
+  }
+
   // Cleanup old action logs every 30 minutes
   setInterval(async () => {
     const count = await cleanupOldActions(1)
@@ -60,6 +73,7 @@ const main = async (): Promise<void> => {
 // Graceful shutdown
 const shutdown = async (): Promise<void> => {
   console.log('Shutting down...')
+  stopAwmScheduler()
   stopScheduler()
   stopTelegram()
   await disconnect()
