@@ -395,38 +395,23 @@ export const createApp = (): Hono => {
       let html = await resp.text()
 
       // Inject theme bridge script into all Gitea HTML pages.
-      // Listens for gigi:theme postMessages from parent and toggles Gitea's
-      // theme class. Also reads initial theme from parent's localStorage.
+      // Swaps Gitea's own theme CSS file + data-theme attribute to match
+      // the parent Gigi app's theme. This uses Gitea's built-in theme
+      // system (theme-gitea-dark.css / theme-gitea-light.css) instead of
+      // trying to override individual CSS variables.
       if (html.includes('<!DOCTYPE html')) {
         const themeBridge = `
 <script>
 (function() {
   function applyGiteaTheme(theme) {
+    var giteaTheme = theme === 'light' ? 'gitea-light' : 'gitea-dark';
     var html = document.documentElement;
-    if (theme === 'light') {
-      html.setAttribute('data-theme', 'gitea-auto');
-      html.classList.remove('is-fullhidden');
-    } else {
-      html.setAttribute('data-theme', 'gitea-auto');
-    }
-    // Gitea uses a theme attribute on <html>. Override with CSS.
-    var id = 'gigi-theme-override';
-    var existing = document.getElementById(id);
-    if (existing) existing.remove();
-    if (theme === 'light') {
-      var style = document.createElement('style');
-      style.id = id;
-      style.textContent = ':root { color-scheme: light !important; }' +
-        ':root, body { --color-primary: #4183c4; --color-body: #f6f8fa; --color-box-body: #fff; ' +
-        '--color-text: #1f2328; --color-text-light: #656d76; --color-text-dark: #1f2328; ' +
-        '--color-secondary-bg: #f6f8fa; --color-hover: #eaeef2; ' +
-        '--color-card: #fff; --color-header: #f6f8fa; --color-nav-bg: #25292e; ' +
-        '--color-input-background: #fff; --color-input-border: #d0d7de; ' +
-        '--color-shadow: rgba(0,0,0,0.08); }' +
-        'body { background: #fff !important; color: #1f2328 !important; }' +
-        '.ui.segment, .ui.attached.segment { background: #fff !important; border-color: #d0d7de !important; }' +
-        '.ui.secondary.menu { background: #f6f8fa !important; }';
-      document.head.appendChild(style);
+    html.setAttribute('data-theme', giteaTheme);
+
+    // Swap the theme CSS <link> to the correct Gitea theme file
+    var themeLink = document.querySelector('link[href*="theme-gitea-"]');
+    if (themeLink) {
+      themeLink.href = themeLink.href.replace(/theme-gitea-[^.]+\\.css/, 'theme-' + giteaTheme + '.css');
     }
   }
   // Read initial theme from parent localStorage
