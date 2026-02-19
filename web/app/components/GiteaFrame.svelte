@@ -11,6 +11,7 @@
 
   import { onMount } from 'svelte'
   import { parseGiteaPath, setViewContext } from '$lib/stores/navigation.svelte'
+  import { getTheme, type Theme } from '$lib/stores/theme.svelte'
 
   interface Props {
     src: string
@@ -20,6 +21,21 @@
 
   let iframe: HTMLIFrameElement
   let loading = $state(true)
+  const currentTheme: Theme = $derived(getTheme())
+
+  /** Push theme into the Gitea iframe via postMessage */
+  function syncThemeToIframe() {
+    try {
+      iframe?.contentWindow?.postMessage({ type: 'gigi:theme', theme: currentTheme }, '*')
+    } catch { /* cross-origin or iframe not ready */ }
+  }
+
+  // React to theme changes — push to iframe
+  $effect(() => {
+    if (currentTheme && iframe) {
+      syncThemeToIframe()
+    }
+  })
 
   onMount(() => {
     const handleMessage = (e: MessageEvent) => {
@@ -54,6 +70,8 @@
 
   function onIframeLoad() {
     loading = false
+    // Sync theme immediately on iframe load
+    syncThemeToIframe()
     // Also sync view context on full page load
     try {
       const path = iframe?.contentWindow?.location?.pathname

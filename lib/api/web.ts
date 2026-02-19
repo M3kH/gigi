@@ -385,7 +385,61 @@ export const createApp = (): Hono => {
     // the missing script tag so Vue components (Actions log viewer etc.) work.
     const contentType = resp.headers.get('content-type') || ''
     if (contentType.includes('text/html') && c.req.method === 'GET') {
-      const html = await resp.text()
+      let html = await resp.text()
+
+      // Inject theme bridge script into all Gitea HTML pages.
+      // Listens for gigi:theme postMessages from parent and toggles Gitea's
+      // theme class. Also reads initial theme from parent's localStorage.
+      if (html.includes('<!DOCTYPE html')) {
+        const themeBridge = `
+<script>
+(function() {
+  function applyGiteaTheme(theme) {
+    var html = document.documentElement;
+    if (theme === 'light') {
+      html.setAttribute('data-theme', 'gitea-auto');
+      html.classList.remove('is-fullhidden');
+    } else {
+      html.setAttribute('data-theme', 'gitea-auto');
+    }
+    // Gitea uses a theme attribute on <html>. Override with CSS.
+    var id = 'gigi-theme-override';
+    var existing = document.getElementById(id);
+    if (existing) existing.remove();
+    if (theme === 'light') {
+      var style = document.createElement('style');
+      style.id = id;
+      style.textContent = ':root { color-scheme: light !important; }' +
+        ':root, body { --color-primary: #4183c4; --color-body: #f6f8fa; --color-box-body: #fff; ' +
+        '--color-text: #1f2328; --color-text-light: #656d76; --color-text-dark: #1f2328; ' +
+        '--color-secondary-bg: #f6f8fa; --color-hover: #eaeef2; ' +
+        '--color-card: #fff; --color-header: #f6f8fa; --color-nav-bg: #25292e; ' +
+        '--color-input-background: #fff; --color-input-border: #d0d7de; ' +
+        '--color-shadow: rgba(0,0,0,0.08); }' +
+        'body { background: #fff !important; color: #1f2328 !important; }' +
+        '.ui.segment, .ui.attached.segment { background: #fff !important; border-color: #d0d7de !important; }' +
+        '.ui.secondary.menu { background: #f6f8fa !important; }';
+      document.head.appendChild(style);
+    }
+  }
+  // Read initial theme from parent localStorage
+  try {
+    var stored = window.parent.localStorage.getItem('gigi:theme');
+    if (stored) applyGiteaTheme(stored);
+  } catch(e) {}
+  // Listen for theme changes from parent frame
+  window.addEventListener('message', function(e) {
+    if (e.data && e.data.type === 'gigi:theme') {
+      applyGiteaTheme(e.data.theme);
+    }
+  });
+})();
+</script>`
+
+        // Inject after <head> for earliest execution
+        html = html.replace('<head>', '<head>' + themeBridge)
+      }
+
       if (!html.includes('/js/index.js') && html.includes('<!DOCTYPE html')) {
         // Extract asset version from the page (e.g. from webcomponents.js?v=1.24.7)
         const versionMatch = html.match(/assets\/js\/webcomponents\.js\?v=([^"&]+)/)
@@ -398,6 +452,7 @@ export const createApp = (): Hono => {
           headers: respHeaders,
         })
       }
+      respHeaders.delete('content-length')
       return new Response(html, { status: resp.status, headers: respHeaders })
     }
 

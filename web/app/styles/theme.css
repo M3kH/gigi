@@ -46,6 +46,19 @@
   --gigi-z-overlay: 100;
   --gigi-z-modal: 200;
   --gigi-z-toast: 300;
+
+  /* ── Shoelace overrides (reference gigi tokens, auto-switch with theme) */
+  --sl-color-primary-600: var(--gigi-accent-green);
+  --sl-color-neutral-0: var(--gigi-bg-primary);
+  --sl-color-neutral-100: var(--gigi-bg-secondary);
+  --sl-color-neutral-200: var(--gigi-bg-tertiary);
+  --sl-color-neutral-700: var(--gigi-text-secondary);
+  --sl-color-neutral-1000: var(--gigi-text-primary);
+  --sl-panel-background-color: var(--gigi-bg-secondary);
+  --sl-panel-border-color: var(--gigi-border-default);
+  --sl-font-sans: var(--gigi-font-sans);
+  --sl-font-mono: var(--gigi-font-mono);
+  --sl-font-size-medium: var(--gigi-font-size-base);
 }
 
 /* ─── Dark Theme (default) ────────────────────────────────────────── */
@@ -77,19 +90,6 @@
   --gigi-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
   --gigi-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
   --gigi-shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
-
-  /* ── Shoelace overrides ─────────────────────────────────────────── */
-  --sl-color-primary-600: var(--gigi-accent-green);
-  --sl-color-neutral-0: var(--gigi-bg-primary);
-  --sl-color-neutral-100: var(--gigi-bg-secondary);
-  --sl-color-neutral-200: var(--gigi-bg-tertiary);
-  --sl-color-neutral-700: var(--gigi-text-secondary);
-  --sl-color-neutral-1000: var(--gigi-text-primary);
-  --sl-panel-background-color: var(--gigi-bg-secondary);
-  --sl-panel-border-color: var(--gigi-border-default);
-  --sl-font-sans: var(--gigi-font-sans);
-  --sl-font-mono: var(--gigi-font-mono);
-  --sl-font-size-medium: var(--gigi-font-size-base);
 }
 
 /* ─── Light Theme ─────────────────────────────────────────────────── */

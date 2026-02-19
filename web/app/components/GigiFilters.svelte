@@ -7,6 +7,7 @@
    */
   import type { ConnectionState } from '$lib/services/ws-client'
   import { getPanelState, setPanelState, togglePanel, type PanelState } from '$lib/stores/panels.svelte'
+  import { getTheme, toggleTheme, type Theme } from '$lib/stores/theme.svelte'
   import { goHome, navigateToGitea, navigateToBrowser, getCurrentView } from '$lib/stores/navigation.svelte'
   import { onMount } from 'svelte'
 
@@ -47,6 +48,8 @@
 
   let alwaysWorkingEnabled = $state(loadAwm())
   let alwaysWorkingInterval = $state(loadAwmInterval())
+
+  const currentTheme: Theme = $derived(getTheme())
 
   const kanbanState: PanelState = $derived(getPanelState('kanban'))
   const chatOverlayState: PanelState = $derived(getPanelState('chatOverlay'))
@@ -257,6 +260,15 @@
       <div class="settings-header">
         <span class="settings-title">Settings</span>
         <button class="settings-close" onclick={() => showSettings = false}>×</button>
+      </div>
+
+      <div class="settings-section">
+        <label class="settings-toggle">
+          <span class="toggle-label">Dark Mode</span>
+          <input type="checkbox" checked={currentTheme === 'dark'} onchange={toggleTheme} />
+          <span class="toggle-slider"></span>
+        </label>
+        <p class="settings-hint">Toggle between dark and light theme. Also applies to Gitea.</p>
       </div>
 
       <div class="settings-section">

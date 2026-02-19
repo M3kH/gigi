@@ -20,6 +20,10 @@ setBasePath('/shoelace')
 import { mount } from 'svelte'
 import App from './App.svelte'
 
+// Watch OS preference changes (auto-switch when no explicit choice)
+import { watchSystemPreference } from '$lib/stores/theme.svelte'
+watchSystemPreference()
+
 const target = document.getElementById('app')
 
 if (target) {

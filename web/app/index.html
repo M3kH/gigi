@@ -1,10 +1,22 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark" class="sl-theme-dark">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="color-scheme" content="dark light">
   <title>Gigi</title>
+  <script>
+    // Apply theme before first paint to prevent flash
+    (function() {
+      var stored = null;
+      try { stored = localStorage.getItem('gigi:theme'); } catch(e) {}
+      var theme = (stored === 'dark' || stored === 'light')
+        ? stored
+        : (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+      document.documentElement.setAttribute('data-theme', theme);
+      document.documentElement.className = theme === 'dark' ? 'sl-theme-dark' : 'sl-theme-light';
+    })();
+  </script>
 </head>
 <body>
   <div id="app"></div>
