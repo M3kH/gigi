@@ -9,6 +9,7 @@ import { runAgent, type AgentMessage, type EventCallback } from './agent'
 import { emit } from './events'
 import * as store from './store'
 import { enforceCompletion, startTask, markNotified } from './enforcer'
+import { detectUnfinishedWork } from './completion-detector'
 import type { ViewContext } from './protocol'
 import { createGiteaClient } from '../api-gitea'
 import { classifyMessage, type RoutingDecision } from './llm-router'
@@ -358,6 +359,47 @@ export const handleMessage = async (
       })
 
       await markNotified(convId, enforcement.repo, enforcement.issueNumber)
+    }
+  }
+
+  // HEURISTIC COMPLETION CHECK — catches unfinished work the enforcer misses
+  // (e.g. agent described intent but didn't follow through, or no /issue tracking was set up)
+  if (!enforcement) {
+    const detection = detectUnfinishedWork(storedText, response.toolCalls.length > 0)
+    if (detection.hasUnfinishedWork && detection.followUpPrompt) {
+      console.log(`[router] Unfinished work detected:`, detection.signals)
+
+      const followUp = `[SYSTEM — Completion Check] ${detection.followUpPrompt}`
+      await store.addMessage(convId, 'user', [{ type: 'text', text: followUp }])
+
+      let completionSessionId = response.sessionId
+      try {
+        completionSessionId = await store.getSessionId(convId) || completionSessionId
+      } catch { /* ignore */ }
+
+      const completionMessages: AgentMessage[] = completionSessionId
+        ? [{ role: 'user', content: [{ type: 'text', text: followUp }] }]
+        : (await store.getMessages(convId)).map((m) => ({
+            role: (m.role === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
+            content: m.content as AgentMessage['content'],
+          }))
+
+      try {
+        const completionResponse = await runAgent(completionMessages, wrappedOnEvent, { sessionId: completionSessionId })
+        if (completionResponse.sessionId) {
+          try { await store.setSessionId(convId, completionResponse.sessionId) } catch { /* ignore */ }
+        }
+        const completionText = completionResponse.text
+        await store.addMessage(convId, 'assistant', [{ type: 'text', text: completionText }], {
+          tool_calls: completionResponse.toolCalls.length ? completionResponse.toolCalls : undefined,
+          tool_outputs: Object.keys(completionResponse.toolResults).length ? completionResponse.toolResults : undefined,
+          usage: completionResponse.usage || undefined,
+        })
+        storedText = storedText + '\n\n' + completionText
+        console.log(`[router] Completion follow-up finished`)
+      } catch (err) {
+        console.warn('[router] Completion follow-up failed:', (err as Error).message)
+      }
     }
   }
 
