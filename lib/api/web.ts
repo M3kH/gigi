@@ -48,6 +48,13 @@ export const createApp = (): Hono => {
     return c.json(convs)
   })
 
+  // Find conversations linked to a specific issue/PR by tag (e.g. repo#42)
+  app.get('/api/conversations/by-tag/:tag', async (c) => {
+    const tag = c.req.param('tag')
+    const convs = await store.findByTag(tag)
+    return c.json(convs)
+  })
+
   app.get('/api/conversations/:id/messages', async (c) => {
     const messages = await store.getMessages(c.req.param('id'))
     return c.json(messages)

@@ -8,6 +8,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto'
 import { getConfig, checkRecentAction } from '../core/store'
 import { handleMessage } from '../core/router'
 import { routeWebhook } from './webhookRouter'
+import { notifyWebhook } from './webhookNotifier'
 import { emit } from '../core/events'
 
 import type { Context } from 'hono'
@@ -89,6 +90,11 @@ export const handleWebhook = async (c: Context): Promise<Response> => {
         tags: result.tags,
       })
     }
+
+    // Telegram notification for unrouted events (routed events are notified inside webhookRouter)
+    notifyWebhook(event, payload).catch(err =>
+      console.warn('[webhook] Telegram notification failed:', (err as Error).message)
+    )
 
     const summary = summarizeEvent(event, payload)
     if (!summary) return c.json({ ok: true, skipped: true })

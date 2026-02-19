@@ -350,11 +350,15 @@ All issues should be tracked on the project board.
 
 ### Issue State Management (CRITICAL — ALWAYS DO THIS)
 
-When working with issues, you MUST update the status labels at each stage:
+**BLOCKING REQUIREMENT**: Before writing ANY code for an issue, you MUST update the issue's status labels.
+This is the FIRST thing you do, before even reading the code. The operator monitors the Kanban board live.
 
-1. **Starting work on an issue**:
+When working with issues, update the status labels at EACH stage using the Gitea API:
+
+1. **Starting work on an issue** (FIRST action before any code):
    - Add label \`status/in-progress\`, remove \`status/ready\` (if present)
-   - Use the gitea tool to update labels
+   - Use: \`gitea({ action: "edit_issue_labels", owner, repo, number, labels: ["status/in-progress", ...keep_other_labels] })\`
+   - Or use Bash: \`curl -X PATCH "$GITEA_URL/api/v1/repos/{owner}/{repo}/issues/{number}/labels" ...\`
 
 2. **Creating a PR for an issue**:
    - Add label \`status/review\`, remove \`status/in-progress\`
@@ -362,12 +366,28 @@ When working with issues, you MUST update the status labels at each stage:
 3. **When issue is done/merged**:
    - Add label \`status/done\`, remove \`status/review\`
 
-This is visible in real-time on the Kanban board — the operator can see your progress live.
+**How to update labels via Gitea API (Bash):**
+\`\`\`bash
+# Get current labels
+curl -s -H "Authorization: token $GITEA_TOKEN" "$GITEA_URL/api/v1/repos/{owner}/{repo}/issues/{number}" | jq '.labels[].name'
+
+# Replace labels (PUT replaces all labels)
+curl -X PUT -H "Authorization: token $GITEA_TOKEN" -H "Content-Type: application/json" \\
+  "$GITEA_URL/api/v1/repos/{owner}/{repo}/issues/{number}/labels" \\
+  -d '{"labels": [label_id_1, label_id_2]}'
+
+# Or add a single label by ID
+curl -X POST -H "Authorization: token $GITEA_TOKEN" -H "Content-Type: application/json" \\
+  "$GITEA_URL/api/v1/repos/{owner}/{repo}/issues/{number}/labels" \\
+  -d '{"labels": [label_id]}'
+\`\`\`
 
 ### Required labels for new issues:
 - **Type**: \`type/feature\`, \`type/bug\`, \`type/docs\`, \`type/refactor\`, etc.
 - **Status**: \`status/ready\`, \`status/in-progress\`, \`status/review\`, etc.
 - **Optional**: \`priority/*\`, \`scope/*\`, \`size/*\`
+
+This is visible in real-time on the Kanban board — the operator can see your progress live.
 
 See \`docs/GITEA_WORKFLOW.md\` for complete documentation.
 
@@ -435,10 +455,12 @@ When Mauro asks you to do something, ALWAYS complete the loop:
 2. **If it's a question** → Just answer directly
 3. **Never stop mid-task** → If you find yourself explaining what you'll do, STOP and DO it instead
 
-Checklist for every code task:
+Checklist for every code task (working on an issue):
+- [ ] Updated issue label to \`status/in-progress\` FIRST
 - [ ] Made changes to files
 - [ ] Committed and pushed to feature branch
-- [ ] Created PR via gitea tool
+- [ ] Created PR via gitea tool (include "Closes #N" in body)
+- [ ] Updated issue label to \`status/review\`
 - [ ] (Optional) Sent Telegram notification if TELEGRAM_BOT_TOKEN is set
 
 If you realize you haven't completed the checklist, continue immediately.

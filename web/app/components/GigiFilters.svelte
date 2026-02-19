@@ -6,9 +6,11 @@
    * Row 2 — Repo filter chips: fetched from /api/gitea/overview
    */
   import type { ConnectionState } from '$lib/services/ws-client'
+  import type { Conversation } from '$lib/types/chat'
   import { getPanelState, setPanelState, togglePanel, type PanelState } from '$lib/stores/panels.svelte'
   import { getTheme, toggleTheme, type Theme } from '$lib/stores/theme.svelte'
-  import { goHome, navigateToGitea, navigateToBrowser, getCurrentView } from '$lib/stores/navigation.svelte'
+  import { goHome, navigateToGitea, navigateToBrowser, getCurrentView, getViewContext } from '$lib/stores/navigation.svelte'
+  import { selectConversation } from '$lib/stores/chat.svelte'
   import { onMount } from 'svelte'
 
   interface Props {
@@ -142,6 +144,47 @@
     }
   }
 
+  // ── Linked conversations for current issue/PR ──────────────────────
+  const viewCtx = $derived(getViewContext())
+  const isIssuePrView = $derived(viewCtx.type === 'issue' || viewCtx.type === 'pull')
+
+  // Build a tag like "reponame#42" to query linked conversations
+  const contextTag = $derived(
+    isIssuePrView && viewCtx.repo && viewCtx.number
+      ? `${viewCtx.repo}#${viewCtx.number}`
+      : null
+  )
+
+  let linkedChats = $state<Conversation[]>([])
+  let linkedChatsLoading = $state(false)
+  let lastFetchedTag = $state<string | null>(null)
+
+  // Fetch linked conversations when the context tag changes
+  $effect(() => {
+    const tag = contextTag
+    if (tag && tag !== lastFetchedTag) {
+      lastFetchedTag = tag
+      linkedChatsLoading = true
+      fetch(`/api/conversations/by-tag/${encodeURIComponent(tag)}`)
+        .then(r => r.ok ? r.json() : [])
+        .then((convs: Conversation[]) => { linkedChats = convs })
+        .catch(() => { linkedChats = [] })
+        .finally(() => { linkedChatsLoading = false })
+    } else if (!tag) {
+      linkedChats = []
+      lastFetchedTag = null
+    }
+  })
+
+  function handleOpenChat(convId: string) {
+    // Open chat panel if hidden, then select the conversation
+    const chatState = getPanelState('chatOverlay')
+    if (chatState === 'hidden') {
+      setPanelState('chatOverlay', 'compact')
+    }
+    selectConversation(convId)
+  }
+
   export function getSelectedRepo(): string | null {
     return selectedRepo
   }
@@ -251,6 +294,36 @@
         onclick={() => filtersExpanded = !filtersExpanded}
         title={filtersExpanded ? 'Collapse filters' : 'Expand filters'}
       >{filtersExpanded ? '▲' : '▼'}</button>
+    </div>
+  {/if}
+
+  <!-- Row 3: Context bar — linked chats for current issue/PR -->
+  {#if isIssuePrView}
+    <div class="filter-row context-row">
+      <span class="context-label">
+        {viewCtx.type === 'issue' ? '📋' : '🔀'}
+        {viewCtx.repo}#{viewCtx.number}
+      </span>
+      <div class="context-spacer"></div>
+      {#if linkedChatsLoading}
+        <span class="context-hint">Loading...</span>
+      {:else if linkedChats.length > 0}
+        {#each linkedChats as chat}
+          <button
+            class="context-chat-btn"
+            onclick={() => handleOpenChat(chat.id)}
+            title="Open conversation: {chat.topic}"
+          >
+            <svg viewBox="0 0 24 24" fill="none" width="12" height="12">
+              <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z" fill="currentColor"/>
+            </svg>
+            {chat.topic || 'Chat'}
+            <span class="chat-status-dot" class:open={chat.status === 'open' || chat.status === 'active'} class:closed={chat.status === 'closed'}></span>
+          </button>
+        {/each}
+      {:else}
+        <span class="context-hint">No linked chats</span>
+      {/if}
     </div>
   {/if}
 
@@ -626,5 +699,76 @@
   .field-input:focus {
     outline: none;
     border-color: var(--gigi-accent-green);
+  }
+
+  /* ── Context bar (issue/PR linked chats) ──────────────────────── */
+
+  .context-row {
+    background: var(--gigi-bg-tertiary);
+    border-top: var(--gigi-border-width) solid var(--gigi-border-muted);
+    gap: var(--gigi-space-sm);
+    padding: var(--gigi-space-xs) var(--gigi-space-md);
+    min-height: 28px;
+  }
+
+  .context-label {
+    font-size: var(--gigi-font-size-xs);
+    font-weight: 600;
+    color: var(--gigi-text-primary);
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .context-spacer {
+    flex: 1;
+  }
+
+  .context-hint {
+    font-size: var(--gigi-font-size-xs);
+    color: var(--gigi-text-muted);
+    font-style: italic;
+  }
+
+  .context-chat-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    background: var(--gigi-accent-blue);
+    border: none;
+    border-radius: var(--gigi-radius-full);
+    color: #fff;
+    font-size: var(--gigi-font-size-xs);
+    font-family: var(--gigi-font-sans);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all var(--gigi-transition-fast);
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .context-chat-btn:hover {
+    filter: brightness(1.1);
+  }
+
+  .context-chat-btn svg {
+    flex-shrink: 0;
+  }
+
+  .chat-status-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .chat-status-dot.open {
+    background: var(--gigi-accent-green);
+  }
+
+  .chat-status-dot.closed {
+    background: var(--gigi-text-muted);
   }
 </style>

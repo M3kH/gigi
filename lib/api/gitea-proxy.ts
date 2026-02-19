@@ -266,13 +266,18 @@ export const createGiteaProxy = (): Hono => {
         }
       }
 
-      // Fetch conversations for chat cross-reference
+      // Fetch conversations for chat cross-reference (issue-specific via tags)
       let chatLinks = new Map<string, number>()
       try {
-        const convs = await listConversations(null, 100)
+        const convs = await listConversations(null, 200)
         for (const conv of convs) {
-          if (conv.repo) {
-            chatLinks.set(conv.repo, (chatLinks.get(conv.repo) ?? 0) + 1)
+          if (conv.tags?.length) {
+            for (const tag of conv.tags) {
+              // Tags like "reponame#42" link to specific issues
+              if (tag.includes('#')) {
+                chatLinks.set(tag, (chatLinks.get(tag) ?? 0) + 1)
+              }
+            }
           }
         }
       } catch { /* ignore */ }
@@ -306,7 +311,7 @@ export const createGiteaProxy = (): Hono => {
           milestone: issue.milestone ? { title: issue.milestone.title } : null,
           comments: issue.comments ?? 0,
           linked_prs: prLinks.get(`${issue._repo}#${issue.number}`) ?? 0,
-          linked_chats: chatLinks.get(issue._repo) ?? 0,
+          linked_chats: chatLinks.get(`${issue._repo}#${issue.number}`) ?? 0,
           created_at: issue.created_at,
           updated_at: issue.updated_at,
           html_url: issue.html_url,

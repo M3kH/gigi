@@ -21,6 +21,7 @@ interface WebhookPayload {
   pull_request?: { number?: number; title?: string; html_url?: string; user?: { login?: string }; merged?: boolean; head?: { ref?: string }; base?: { ref?: string } }
   number?: number
   comment?: { body?: string; user?: { login?: string }; html_url?: string }
+  review?: { body?: string; user?: { login?: string } }
   pusher?: { login?: string }
   ref?: string
   commits?: Array<{ message: string }>
@@ -42,8 +43,10 @@ const shouldNotify = (event: string, payload: WebhookPayload): boolean => {
     case 'pull_request':
       return payload.action === 'opened' || payload.pull_request?.merged === true || payload.action === 'closed'
     case 'issue_comment':
-      // Only notify for @gigi mentions (the rest is handled by the agent)
-      return payload.action === 'created' && /@gigi\b/i.test(payload.comment?.body || '')
+      // Notify for all new comments (not just @gigi mentions)
+      return payload.action === 'created'
+    case 'pull_request_review_comment':
+      return payload.action === 'created'
     case 'push':
       // Only notify for pushes to main/master
       return payload.ref === 'refs/heads/main' || payload.ref === 'refs/heads/master'
@@ -87,7 +90,16 @@ const formatNotification = (event: string, payload: WebhookPayload): string => {
 
     case 'issue_comment': {
       const { issue, comment } = payload
-      return `💬 *@gigi mentioned* on issue #${issue?.number} in \`${repo}\`\nby @${comment?.user?.login}\n${comment?.html_url}`
+      const preview = (comment?.body || '').slice(0, 100)
+      const ellipsis = (comment?.body || '').length > 100 ? '...' : ''
+      return `💬 *Comment* on #${issue?.number} in \`${repo}\`\nby @${comment?.user?.login}: ${escapeMarkdown(preview)}${ellipsis}\n${comment?.html_url}`
+    }
+
+    case 'pull_request_review_comment': {
+      const { pull_request, comment } = payload
+      const preview = (comment?.body || '').slice(0, 100)
+      const ellipsis = (comment?.body || '').length > 100 ? '...' : ''
+      return `💬 *Review comment* on PR #${pull_request?.number} in \`${repo}\`\nby @${comment?.user?.login}: ${escapeMarkdown(preview)}${ellipsis}\n${comment?.html_url}`
     }
 
     case 'push': {
@@ -114,11 +126,20 @@ const escapeMarkdown = (text: string): string => {
  * Returns true if notification was sent, false if skipped.
  */
 export const notifyWebhook = async (event: string, payload: WebhookPayload): Promise<boolean> => {
-  if (!bot) return false
-  if (!shouldNotify(event, payload)) return false
+  if (!bot) {
+    console.log(`[webhookNotifier] Skipping ${event}: no bot instance`)
+    return false
+  }
+  if (!shouldNotify(event, payload)) {
+    console.log(`[webhookNotifier] Skipping ${event}/${payload.action}: filtered out`)
+    return false
+  }
 
   const chatId = await getConfig('telegram_chat_id')
-  if (!chatId) return false
+  if (!chatId) {
+    console.log(`[webhookNotifier] Skipping ${event}: no telegram_chat_id configured`)
+    return false
+  }
 
   const message = formatNotification(event, payload)
 
