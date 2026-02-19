@@ -71,11 +71,15 @@
 <style>
   .message {
     margin-bottom: var(--gigi-space-lg);
-    max-width: 720px;
+    max-width: 80%;
   }
 
   .message.user {
     margin-left: auto;
+  }
+
+  .message.user .meta {
+    justify-content: flex-end;
   }
 
   .meta {
@@ -97,20 +101,22 @@
 
   .content {
     padding: var(--gigi-space-sm) var(--gigi-space-md);
-    border-radius: var(--gigi-radius-md);
+    border-radius: var(--gigi-radius-lg);
     font-size: var(--gigi-font-size-sm);
     line-height: 1.6;
   }
 
   .user-content {
-    background: #1a3a2a;
+    background: var(--gigi-bubble-user);
+    border-radius: var(--gigi-radius-lg) var(--gigi-radius-lg) var(--gigi-radius-sm) var(--gigi-radius-lg);
     white-space: pre-wrap;
     word-break: break-word;
   }
 
   .message.assistant .content {
-    background: var(--gigi-bg-tertiary);
+    background: var(--gigi-bubble-assistant);
     border: 1px solid var(--gigi-border-muted);
+    border-radius: var(--gigi-radius-lg) var(--gigi-radius-lg) var(--gigi-radius-lg) var(--gigi-radius-sm);
   }
 
   /* Markdown styling */

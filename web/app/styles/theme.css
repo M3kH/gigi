@@ -87,6 +87,9 @@
   --gigi-accent-orange: #d29922;
   --gigi-accent-red: #f85149;
 
+  --gigi-bubble-user: #1a3a2a;
+  --gigi-bubble-assistant: #161b22;
+
   --gigi-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
   --gigi-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
   --gigi-shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
@@ -116,6 +119,9 @@
   --gigi-accent-purple: #8250df;
   --gigi-accent-orange: #bf8700;
   --gigi-accent-red: #cf222e;
+
+  --gigi-bubble-user: #dafbe1;
+  --gigi-bubble-assistant: #f6f8fa;
 
   --gigi-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.08);
   --gigi-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.1);

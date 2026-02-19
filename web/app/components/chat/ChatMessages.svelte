@@ -135,7 +135,7 @@
 
   .message {
     margin-bottom: var(--gigi-space-lg);
-    max-width: 720px;
+    max-width: 80%;
   }
 
   .meta {
@@ -153,10 +153,10 @@
 
   .content {
     padding: var(--gigi-space-sm) var(--gigi-space-md);
-    border-radius: var(--gigi-radius-md);
+    border-radius: var(--gigi-radius-lg) var(--gigi-radius-lg) var(--gigi-radius-lg) var(--gigi-radius-sm);
     font-size: var(--gigi-font-size-sm);
     line-height: 1.6;
-    background: var(--gigi-bg-tertiary);
+    background: var(--gigi-bubble-assistant);
     border: 1px solid var(--gigi-border-muted);
   }
 
@@ -185,7 +185,7 @@
   .content :global(a:hover) { text-decoration: underline; }
 
   .live-tool {
-    max-width: 720px;
+    max-width: 80%;
     margin-bottom: var(--gigi-space-xs);
   }
 
