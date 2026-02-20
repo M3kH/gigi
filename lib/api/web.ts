@@ -45,7 +45,9 @@ export const createApp = (): Hono => {
     const channel = c.req.query('channel') || null
     const status = c.req.query('status') || undefined
     const tag = c.req.query('tag') || undefined
-    const convs = await store.listConversations(channel, 20, { status, tag })
+    const archivedParam = c.req.query('archived')
+    const archived = archivedParam === 'true' ? true : archivedParam === 'false' ? false : undefined
+    const convs = await store.listConversations(channel, 50, { status, tag, archived })
     return c.json(convs)
   })
 
@@ -98,6 +100,37 @@ export const createApp = (): Hono => {
   app.delete('/api/conversations/:id', async (c) => {
     await store.deleteConversation(c.req.param('id'))
     return c.json({ ok: true })
+  })
+
+  app.post('/api/conversations/:id/archive', async (c) => {
+    await store.archiveConversation(c.req.param('id'))
+    return c.json({ ok: true })
+  })
+
+  app.post('/api/conversations/:id/unarchive', async (c) => {
+    await store.unarchiveConversation(c.req.param('id'))
+    return c.json({ ok: true })
+  })
+
+  // Auto-archive config
+  app.get('/api/config/auto-archive', async (c) => {
+    const enabled = (await store.getConfig('auto_archive_enabled')) === 'true'
+    const days = parseInt(await store.getConfig('auto_archive_days') || '7')
+    return c.json({ enabled, days })
+  })
+
+  app.post('/api/config/auto-archive', async (c) => {
+    const { enabled, days } = await c.req.json()
+    if (enabled !== undefined) await store.setConfig('auto_archive_enabled', String(!!enabled))
+    if (days !== undefined) await store.setConfig('auto_archive_days', String(days))
+    return c.json({ ok: true })
+  })
+
+  // Manual trigger: archive stale conversations now
+  app.post('/api/conversations/archive-stale', async (c) => {
+    const days = parseInt(c.req.query('days') || await store.getConfig('auto_archive_days') || '7')
+    const count = await store.autoArchiveStale(days)
+    return c.json({ ok: true, archived: count })
   })
 
   app.post('/api/conversations/new', async () => {

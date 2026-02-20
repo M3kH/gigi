@@ -3,7 +3,7 @@
  */
 
 import { serve } from '@hono/node-server'
-import { connect, disconnect, cleanupOldActions } from '../lib/core/store'
+import { connect, disconnect, cleanupOldActions, autoArchiveStale } from '../lib/core/store'
 import { initEnforcer } from '../lib/core/enforcer'
 import { createApp } from '../lib/api/web'
 import { createWSServer } from './server'
@@ -66,6 +66,22 @@ const main = async (): Promise<void> => {
     const count = await cleanupOldActions(1)
     if (count > 0) console.log(`Cleaned up ${count} old action logs`)
   }, 30 * 60 * 1000)
+
+  // Auto-archive stale conversations (runs every 6 hours)
+  const runAutoArchive = async () => {
+    try {
+      const enabled = await getConfig('auto_archive_enabled')
+      if (enabled !== 'true') return
+      const days = parseInt(await getConfig('auto_archive_days') || '7')
+      const count = await autoArchiveStale(days)
+      if (count > 0) console.log(`Auto-archived ${count} stale conversations (>${days} days)`)
+    } catch (err) {
+      console.error('Auto-archive failed:', (err as Error).message)
+    }
+  }
+  // Run once on startup, then every 6 hours
+  runAutoArchive()
+  setInterval(runAutoArchive, 6 * 60 * 60 * 1000)
 
   console.log('Gigi is alive!')
 }

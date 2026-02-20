@@ -21,6 +21,7 @@ export interface Conversation {
   created_at: string
   updated_at: string
   closed_at: string | null
+  archived_at: string | null
 }
 
 export interface ConversationWithPreview extends Conversation {
@@ -69,6 +70,7 @@ export interface MessageExtras {
 export interface ListFilters {
   status?: string
   tag?: string
+  archived?: boolean  // true = only archived, false = only non-archived, undefined = all
 }
 
 export interface ConversationUpdate {
@@ -152,6 +154,9 @@ const migrate = async (): Promise<void> => {
     CREATE INDEX IF NOT EXISTS idx_conversations_session ON conversations(session_id) WHERE session_id IS NOT NULL;
     CREATE INDEX IF NOT EXISTS idx_conversations_status ON conversations(status);
     CREATE INDEX IF NOT EXISTS idx_conversations_tags ON conversations USING GIN(tags);
+
+    ALTER TABLE conversations ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ;
+    CREATE INDEX IF NOT EXISTS idx_conversations_archived ON conversations(archived_at) WHERE archived_at IS NOT NULL;
   `)
 }
 
@@ -222,6 +227,11 @@ export const listConversations = async (
     conditions.push(`$${i} = ANY(c.tags)`)
     params.push(filters.tag)
     i++
+  }
+  if (filters.archived === true) {
+    conditions.push(`c.archived_at IS NOT NULL`)
+  } else if (filters.archived === false) {
+    conditions.push(`c.archived_at IS NULL`)
   }
 
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''
@@ -388,6 +398,37 @@ export const closeConversation = async (id: string): Promise<void> => {
 
 export const deleteConversation = async (id: string): Promise<void> => {
   await pool.query('DELETE FROM conversations WHERE id = $1', [id])
+}
+
+export const archiveConversation = async (id: string): Promise<void> => {
+  await pool.query(
+    `UPDATE conversations SET archived_at = now(), updated_at = now() WHERE id = $1`,
+    [id]
+  )
+}
+
+export const unarchiveConversation = async (id: string): Promise<void> => {
+  await pool.query(
+    `UPDATE conversations SET archived_at = NULL, updated_at = now() WHERE id = $1`,
+    [id]
+  )
+}
+
+/**
+ * Auto-archive conversations that have been inactive for the given number of days.
+ * Only archives non-archived, non-active conversations.
+ * Returns the number of conversations archived.
+ */
+export const autoArchiveStale = async (staleDays: number = 7): Promise<number> => {
+  const { rowCount } = await pool.query(
+    `UPDATE conversations
+     SET archived_at = now(), updated_at = now()
+     WHERE archived_at IS NULL
+       AND status NOT IN ('active')
+       AND updated_at < now() - make_interval(days => $1)`,
+    [staleDays]
+  )
+  return rowCount ?? 0
 }
 
 export const addTags = async (convId: string, tags: string[]): Promise<void> => {

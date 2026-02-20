@@ -2,24 +2,31 @@
   /**
    * Conversation list with enriched data:
    * channel icon, activity dot, linked issues, time, preview, cost.
-   * Supports filtering errors, auto-generated titles, and delete functionality.
+   * Supports filtering errors, auto-generated titles, archive, and delete.
    */
   import {
     getConversations,
+    getArchivedConversations,
     getActiveConversationId,
     isAgentRunning,
     selectConversation,
     loadConversations,
+    archiveConversation,
+    unarchiveConversation,
+    deleteConversation,
   } from '$lib/stores/chat.svelte'
   import { getPanelState, setPanelState } from '$lib/stores/panels.svelte'
   import { formatRelativeTime, formatCost, formatTokens } from '$lib/utils/format'
   import type { Conversation } from '$lib/types/chat'
 
   const conversations = $derived(getConversations())
+  const archived = $derived(getArchivedConversations())
   const activeId = $derived(getActiveConversationId())
 
   // Filter state: hide error-only conversations
   let hideErrors = $state(false)
+  // Show/hide archived section
+  let showArchived = $state(false)
 
   // Detect error/timeout conversations
   function isErrorConversation(conv: Conversation): boolean {
@@ -64,15 +71,20 @@
     }
   }
 
+  async function handleArchive(e: MouseEvent, conv: Conversation) {
+    e.stopPropagation()
+    await archiveConversation(conv.id)
+  }
+
+  async function handleUnarchive(e: MouseEvent, conv: Conversation) {
+    e.stopPropagation()
+    await unarchiveConversation(conv.id)
+  }
+
   async function handleDelete(e: MouseEvent, conv: Conversation) {
     e.stopPropagation()
-    if (!confirm(`Delete conversation "${displayTitle(conv)}"?`)) return
-    try {
-      await fetch(`/api/conversations/${conv.id}`, { method: 'DELETE' })
-      await loadConversations()
-    } catch (err) {
-      console.error('[chat] Delete failed:', err)
-    }
+    if (!confirm(`Permanently delete "${displayTitle(conv)}"?`)) return
+    await deleteConversation(conv.id)
   }
 
   function statusClass(conv: Conversation): string {
@@ -105,19 +117,30 @@
       class:error-conv={isErrorConversation(conv)}
       onclick={() => handleSelect(conv)}
     >
-      <!-- Row 1: channel icon + title + spinner + delete -->
+      <!-- Row 1: channel icon + title + spinner + actions -->
       <div class="chat-item-header">
         <span class="channel-icon" title={conv.channel}>{channelIcon(conv.channel)}</span>
         <span class="status-badge {statusClass(conv)}"></span>
         <span class="chat-title">{displayTitle(conv)}</span>
         {#if isAgentRunning(conv.id)}
-          <span class="spinner">⟳</span>
+          <span class="spinner">&#x27F3;</span>
         {/if}
-        <button
-          class="delete-btn"
-          title="Delete conversation"
-          onclick={(e) => handleDelete(e, conv)}
-        >×</button>
+        <div class="action-btns">
+          <button
+            class="action-btn archive-btn"
+            title="Archive conversation"
+            onclick={(e) => handleArchive(e, conv)}
+          >
+            <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor">
+              <path d="M1.75 2.5a.25.25 0 0 0-.25.25v1.5c0 .138.112.25.25.25h12.5a.25.25 0 0 0 .25-.25v-1.5a.25.25 0 0 0-.25-.25Zm0-1.5h12.5A1.75 1.75 0 0 1 16 2.75v1.5A1.75 1.75 0 0 1 14.25 6H1.75A1.75 1.75 0 0 1 0 4.25v-1.5A1.75 1.75 0 0 1 1.75 1ZM1.5 7.75v6.5c0 .138.112.25.25.25h12.5a.25.25 0 0 0 .25-.25v-6.5a.25.25 0 0 0-.25-.25H1.75a.25.25 0 0 0-.25.25ZM1.75 6A1.75 1.75 0 0 0 0 7.75v6.5C0 15.216.784 16 1.75 16h12.5A1.75 1.75 0 0 0 16 14.25v-6.5A1.75 1.75 0 0 0 14.25 6Zm4.75 3.5h3a.75.75 0 0 1 0 1.5h-3a.75.75 0 0 1 0-1.5Z"/>
+            </svg>
+          </button>
+          <button
+            class="action-btn delete-btn"
+            title="Delete conversation"
+            onclick={(e) => handleDelete(e, conv)}
+          >&times;</button>
+        </div>
       </div>
 
       <!-- Row 2: preview -->
@@ -149,6 +172,59 @@
       <span class="empty-text">{hideErrors ? 'No non-error conversations' : 'No conversations yet'}</span>
     </div>
   {/each}
+
+  <!-- Archived section -->
+  {#if archived.length > 0}
+    <button class="archive-toggle" onclick={() => showArchived = !showArchived}>
+      <svg class="archive-chevron" class:open={showArchived} viewBox="0 0 16 16" width="10" height="10" fill="currentColor">
+        <path d="M6.22 3.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042L9.94 8 6.22 4.28a.75.75 0 0 1 0-1.06Z"/>
+      </svg>
+      Archived ({archived.length})
+    </button>
+
+    {#if showArchived}
+      {#each archived as conv (conv.id)}
+        <button
+          class="chat-item archived"
+          class:active={conv.id === activeId}
+          onclick={() => handleSelect(conv)}
+        >
+          <div class="chat-item-header">
+            <span class="channel-icon" title={conv.channel}>{channelIcon(conv.channel)}</span>
+            <span class="chat-title">{displayTitle(conv)}</span>
+            <div class="action-btns">
+              <button
+                class="action-btn unarchive-btn"
+                title="Unarchive"
+                onclick={(e) => handleUnarchive(e, conv)}
+              >
+                <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor">
+                  <path d="M3.5 6.5a.5.5 0 0 1 .5-.5h8a.5.5 0 0 1 0 1h-8a.5.5 0 0 1-.5-.5Zm4-4.5a.5.5 0 0 1 .5.5v5.793l1.146-1.147a.5.5 0 1 1 .708.708l-2 2a.5.5 0 0 1-.708 0l-2-2a.5.5 0 0 1 .708-.708L7.5 8.293V2.5a.5.5 0 0 1 .5-.5Z"/>
+                </svg>
+              </button>
+              <button
+                class="action-btn delete-btn"
+                title="Delete permanently"
+                onclick={(e) => handleDelete(e, conv)}
+              >&times;</button>
+            </div>
+          </div>
+          {#if conv.lastMessagePreview}
+            <div class="chat-preview">{conv.lastMessagePreview}</div>
+          {/if}
+          <div class="chat-meta">
+            {#if conv.createdAt}
+              <span class="meta-time">{formatRelativeTime(conv.createdAt)}</span>
+            {/if}
+            <span class="meta-spacer"></span>
+            {#if conv.usageCost}
+              <span class="meta-cost">{formatCost(conv.usageCost)}</span>
+            {/if}
+          </div>
+        </button>
+      {/each}
+    {/if}
+  {/if}
 </div>
 
 <style>
@@ -200,6 +276,10 @@
 
   .chat-item.error-conv {
     opacity: 0.6;
+  }
+
+  .chat-item.archived {
+    opacity: 0.65;
   }
 
   /* ── Header row ──────────────────────────────────────────────── */
@@ -267,25 +347,81 @@
     to { transform: rotate(360deg); }
   }
 
-  .delete-btn {
+  /* ── Action buttons ─────────────────────────────────────────── */
+
+  .action-btns {
     display: none;
+    align-items: center;
+    gap: 2px;
     flex-shrink: 0;
+  }
+
+  .chat-item:hover .action-btns {
+    display: flex;
+  }
+
+  .action-btn {
     background: none;
     border: none;
     color: var(--gigi-text-muted);
-    font-size: 1rem;
     cursor: pointer;
-    padding: 0 2px;
+    padding: 2px;
     line-height: 1;
     font-family: var(--gigi-font-sans);
+    border-radius: var(--gigi-radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .action-btn:hover {
+    background: var(--gigi-bg-tertiary);
+  }
+
+  .archive-btn:hover {
+    color: var(--gigi-accent-blue);
+  }
+
+  .unarchive-btn:hover {
+    color: var(--gigi-accent-green);
+  }
+
+  .delete-btn {
+    font-size: 1rem;
   }
 
   .delete-btn:hover {
     color: var(--gigi-accent-red);
   }
 
-  .chat-item:hover .delete-btn {
-    display: block;
+  /* ── Archive toggle ─────────────────────────────────────────── */
+
+  .archive-toggle {
+    display: flex;
+    align-items: center;
+    gap: var(--gigi-space-xs);
+    width: 100%;
+    padding: var(--gigi-space-xs) var(--gigi-space-md);
+    background: var(--gigi-bg-tertiary);
+    border: none;
+    border-bottom: var(--gigi-border-width) solid var(--gigi-border-muted);
+    color: var(--gigi-text-muted);
+    font-size: var(--gigi-font-size-xs);
+    cursor: pointer;
+    font-family: var(--gigi-font-sans);
+  }
+
+  .archive-toggle:hover {
+    background: var(--gigi-bg-hover);
+    color: var(--gigi-text-secondary);
+  }
+
+  .archive-chevron {
+    transition: transform var(--gigi-transition-fast);
+  }
+
+  .archive-chevron.open {
+    transform: rotate(90deg);
   }
 
   /* ── Preview ─────────────────────────────────────────────────── */

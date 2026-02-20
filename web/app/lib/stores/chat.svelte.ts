@@ -26,6 +26,7 @@ import { getViewContext } from '$lib/stores/navigation.svelte'
 // ── State ─────────────────────────────────────────────────────────────
 
 let conversations = $state<Conversation[]>([])
+let archivedConversations = $state<Conversation[]>([])
 let activeConversationId = $state<string | null>(null)
 let messages = $state<ChatMessage[]>([])
 let dialogState = $state<DialogState>('idle')
@@ -52,8 +53,12 @@ async function apiFetch<T>(path: string, opts?: RequestInit): Promise<T> {
 
 export async function loadConversations(): Promise<void> {
   try {
-    const raw = await apiFetch<any[]>('/api/conversations')
-    conversations = raw.map(mapConversation)
+    const [active, archived] = await Promise.all([
+      apiFetch<any[]>('/api/conversations?archived=false'),
+      apiFetch<any[]>('/api/conversations?archived=true'),
+    ])
+    conversations = active.map(mapConversation)
+    archivedConversations = archived.map(mapConversation)
   } catch (err) {
     console.error('[chat] Failed to load conversations:', err)
   }
@@ -158,6 +163,44 @@ export async function sendMessage(text: string): Promise<void> {
 
   // Refresh sidebar shortly to catch new conversation
   setTimeout(() => loadConversations(), 500)
+}
+
+export async function archiveConversation(convId: string): Promise<void> {
+  try {
+    await fetch(`/api/conversations/${convId}/archive`, { method: 'POST' })
+    await loadConversations()
+    // If we archived the active conversation, deselect it
+    if (activeConversationId === convId) {
+      activeConversationId = null
+      messages = []
+      streamSegments = []
+    }
+  } catch (err) {
+    console.error('[chat] Archive failed:', err)
+  }
+}
+
+export async function unarchiveConversation(convId: string): Promise<void> {
+  try {
+    await fetch(`/api/conversations/${convId}/unarchive`, { method: 'POST' })
+    await loadConversations()
+  } catch (err) {
+    console.error('[chat] Unarchive failed:', err)
+  }
+}
+
+export async function deleteConversation(convId: string): Promise<void> {
+  try {
+    await fetch(`/api/conversations/${convId}`, { method: 'DELETE' })
+    await loadConversations()
+    if (activeConversationId === convId) {
+      activeConversationId = null
+      messages = []
+      streamSegments = []
+    }
+  } catch (err) {
+    console.error('[chat] Delete failed:', err)
+  }
 }
 
 export async function stopAgent(): Promise<void> {
@@ -301,6 +344,10 @@ export function getConversations(): Conversation[] {
   return conversations
 }
 
+export function getArchivedConversations(): Conversation[] {
+  return archivedConversations
+}
+
 export function getActiveConversationId(): string | null {
   return activeConversationId
 }
@@ -364,6 +411,7 @@ function mapConversation(raw: any): Conversation {
     repo: raw.repo,
     createdAt: raw.created_at || raw.createdAt || '',
     updatedAt: raw.updated_at || raw.updatedAt || '',
+    archivedAt: raw.archived_at || raw.archivedAt || null,
     lastMessagePreview: raw.last_message_preview || undefined,
     usageCost: raw.usage_cost ? Number(raw.usage_cost) : undefined,
     usageInputTokens: raw.usage_input_tokens ? Number(raw.usage_input_tokens) : undefined,
