@@ -110,12 +110,17 @@
     </button>
   {/if}
 
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
   {#each filteredConversations as conv (conv.id)}
-    <button
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div
       class="chat-item"
       class:active={conv.id === activeId}
       class:error-conv={isErrorConversation(conv)}
       onclick={() => handleSelect(conv)}
+      onkeydown={(e) => e.key === 'Enter' && handleSelect(conv)}
+      tabindex="0"
+      role="button"
     >
       <!-- Row 1: channel icon + title + spinner + actions -->
       <div class="chat-item-header">
@@ -166,7 +171,7 @@
           </span>
         {/if}
       </div>
-    </button>
+    </div>
   {:else}
     <div class="empty-list">
       <span class="empty-text">{hideErrors ? 'No non-error conversations' : 'No conversations yet'}</span>
@@ -184,10 +189,14 @@
 
     {#if showArchived}
       {#each archived as conv (conv.id)}
-        <button
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <div
           class="chat-item archived"
           class:active={conv.id === activeId}
           onclick={() => handleSelect(conv)}
+          onkeydown={(e) => e.key === 'Enter' && handleSelect(conv)}
+          tabindex="0"
+          role="button"
         >
           <div class="chat-item-header">
             <span class="channel-icon" title={conv.channel}>{channelIcon(conv.channel)}</span>
@@ -221,7 +230,7 @@
               <span class="meta-cost">{formatCost(conv.usageCost)}</span>
             {/if}
           </div>
-        </button>
+        </div>
       {/each}
     {/if}
   {/if}
