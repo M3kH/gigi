@@ -17,7 +17,7 @@ import { createGiteaClient } from '../api-gitea'
 
 // ─── State ──────────────────────────────────────────────────────────
 
-let timer: ReturnType<typeof setInterval> | null = null
+let timer: ReturnType<typeof setTimeout> | null = null
 let lastCheck: Date | null = null
 let lastTrigger: Date | null = null
 let checking = false
@@ -198,7 +198,27 @@ const checkForWork = async (): Promise<void> => {
 // ─── Scheduler Lifecycle ────────────────────────────────────────────
 
 /**
+ * Schedule the next tick using setTimeout. This ensures the next check
+ * only fires AFTER the current one completes — no piling up, no stuck intervals.
+ */
+const scheduleNextTick = (intervalMs: number): void => {
+  timer = setTimeout(async () => {
+    try {
+      await checkForWork()
+    } catch (err) {
+      console.error('[awm] scheduled check failed:', err)
+    }
+    // Only reschedule if we haven't been stopped during the check
+    if (timer !== null) {
+      scheduleNextTick(intervalMs)
+    }
+  }, intervalMs)
+}
+
+/**
  * Start the AWM scheduler. Idempotent — stops existing timer first.
+ * Uses self-rescheduling setTimeout (not setInterval) so that the next
+ * tick waits for the current check to finish — can never pile up or get stuck.
  */
 export const startAwmScheduler = (intervalMinutes: number): void => {
   stopAwmScheduler()
@@ -211,11 +231,7 @@ export const startAwmScheduler = (intervalMinutes: number): void => {
 
   // Don't run immediately on start — wait for the first interval
   // (the agent may have just booted and needs time to settle)
-  timer = setInterval(() => {
-    checkForWork().catch((err) => {
-      console.error('[awm] scheduled check failed:', err)
-    })
-  }, intervalMs)
+  scheduleNextTick(intervalMs)
 
   console.log('[awm] scheduler started')
 }
@@ -225,7 +241,7 @@ export const startAwmScheduler = (intervalMinutes: number): void => {
  */
 export const stopAwmScheduler = (): void => {
   if (timer) {
-    clearInterval(timer)
+    clearTimeout(timer)
     timer = null
     console.log('[awm] scheduler stopped')
     emit({ type: 'awm_check', status: 'stopped' })
