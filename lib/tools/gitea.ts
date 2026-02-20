@@ -44,14 +44,14 @@ export interface GiteaInput {
 
 export const giteaTool = {
   name: 'gitea',
-  description: 'Interact with Gitea API. Create repos, PRs, issues, comments. Read issues and PR details.',
+  description: 'Interact with Gitea API. Create repos, PRs, issues, comments. Read issues, PR details, and comments.',
   input_schema: {
     type: 'object',
     properties: {
       action: {
         type: 'string',
         enum: ['list_repos', 'create_repo', 'get_issue', 'list_issues', 'create_issue',
-               'comment_issue', 'create_pr', 'list_prs', 'get_pr', 'get_pr_diff'],
+               'comment_issue', 'list_comments', 'create_pr', 'list_prs', 'get_pr', 'get_pr_diff'],
         description: 'The Gitea action to perform',
       },
       owner: { type: 'string', description: 'Repository owner' },
@@ -104,6 +104,10 @@ export const runGitea = async (input: GiteaInput): Promise<unknown> => {
       }
       return result
 
+    case 'list_comments':
+      // Works for both issues and PRs (Gitea uses the issues endpoint for both)
+      return request('GET', `/repos/${owner}/${repo}/issues/${number}/comments`)
+
     case 'list_prs':
       return request('GET', `/repos/${owner}/${repo}/pulls?state=open&limit=20`)
 
@@ -130,7 +134,7 @@ export const runGitea = async (input: GiteaInput): Promise<unknown> => {
 const GiteaActionSchema = z.object({
   action: z.enum([
     'list_repos', 'create_repo', 'get_issue', 'list_issues', 'create_issue',
-    'comment_issue', 'create_pr', 'list_prs', 'get_pr', 'get_pr_diff',
+    'comment_issue', 'list_comments', 'create_pr', 'list_prs', 'get_pr', 'get_pr_diff',
   ]).describe('The Gitea action to perform'),
   owner: z.string().optional().describe('Repository owner'),
   repo: z.string().optional().describe('Repository name'),

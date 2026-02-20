@@ -18,7 +18,7 @@ import type { Context } from 'hono'
 export interface WebhookPayload {
   repository?: { name: string; full_name: string; html_url?: string }
   action?: string // e.g. 'created', 'deleted', 'opened', 'closed'
-  issue?: { number: number; title: string; body: string; html_url: string; user?: { login: string } }
+  issue?: { number: number; title: string; body: string; html_url: string; user?: { login: string }; pull_request?: unknown }
   pull_request?: { title: string; number: number; head?: { ref: string }; base?: { ref: string }; merged: boolean; user?: { login: string }; html_url: string }
   number?: number
   comment?: { body: string; user?: { login: string }; html_url: string }

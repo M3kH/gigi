@@ -64,7 +64,11 @@ const extractTags = (event: string, payload: WebhookPayload): string[] => {
       if (payload.issue?.number) tags.push(`${repo}#${payload.issue.number}`)
       break
     case 'issue_comment':
-      if (payload.issue?.number) tags.push(`${repo}#${payload.issue.number}`)
+      if (payload.issue?.number) {
+        tags.push(`${repo}#${payload.issue.number}`)
+        // PR comments arrive as issue_comment — also tag with pr# for lookup
+        if (payload.issue?.pull_request) tags.push(`pr#${payload.issue.number}`)
+      }
       break
     case 'pull_request': {
       const prNum = payload.number || payload.pull_request?.number
@@ -215,10 +219,12 @@ const checkAndInvokeAgent = async (
   conversationId: string,
   systemMessage: string
 ): Promise<boolean> => {
+  // In Gitea, comments on PRs arrive as 'issue_comment' (PRs are issues internally).
+  // 'pull_request_review_comment' covers inline code review comments.
+  // Note: 'pull_request' event never has action='commented' — that was dead code.
   const isComment = (
     (event === 'issue_comment' && payload.action === 'created') ||
-    (event === 'pull_request_review_comment' && payload.action === 'created') ||
-    (event === 'pull_request' && payload.action === 'commented')
+    (event === 'pull_request_review_comment' && payload.action === 'created')
   )
 
   if (!isComment) return false
