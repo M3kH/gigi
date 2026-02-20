@@ -24,7 +24,7 @@ const extractMessageText = (content: unknown): string => {
     return (content as Array<{ type: string; text?: string }>)
       .filter(b => b.type === 'text' && b.text)
       .map(b => b.text!)
-      .join('')
+      .join('\n\n')
   }
   return ''
 }
@@ -252,8 +252,17 @@ export const handleMessage = async (
     }
   }
 
-  // Store assistant response with structured tool data and usage
-  const storedContent = [{ type: 'text', text: storedText }]
+  // Store assistant response with interleaved content (text + tool_use blocks in order)
+  // This preserves the text/tool interleaving so reload matches live rendering.
+  // Strip the [title:] tag from the first text block if present.
+  const storedContent = response.interleavedContent.length > 0
+    ? response.interleavedContent.map((block, i) => {
+        if (i === 0 && block.type === 'text' && titleMatch) {
+          return { ...block, text: block.text.replace(titleMatch[0], '') }
+        }
+        return block
+      })
+    : [{ type: 'text', text: storedText }]
   await store.addMessage(convId, 'assistant', storedContent, {
     tool_calls: response.toolCalls.length ? response.toolCalls : undefined,
     tool_outputs: Object.keys(response.toolResults).length ? response.toolResults : undefined,

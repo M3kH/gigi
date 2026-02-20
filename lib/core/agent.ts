@@ -140,11 +140,18 @@ export interface ToolCall {
   input: unknown
 }
 
+/** An ordered content block — text or tool_use — preserving interleaving for faithful replay */
+export type InterleavedBlock =
+  | { type: 'text'; text: string }
+  | { type: 'tool_use'; toolUseId: string; name: string; input: unknown }
+
 export interface AgentResponse {
   content: MessageContent[]
   text: string
   toolCalls: ToolCall[]
   toolResults: Record<string, string>
+  /** Ordered content blocks preserving text/tool interleaving for faithful reload rendering */
+  interleavedContent: InterleavedBlock[]
   sessionId: string | null
   usage: AgentUsage | null
   /** Why the agent stopped: 'end_turn' (natural), 'max_turns' (hit limit), or other SDK reasons */
@@ -606,6 +613,7 @@ export const runAgent = async (
   let capturedSessionId: string | null = null
   const toolCalls: ToolCall[] = []
   const toolResults: Record<string, string> = {}
+  const interleavedContent: InterleavedBlock[] = []
   const startTime = Date.now()
   let turns = 0
   let lastUsage: AgentUsage | null = null
@@ -656,11 +664,19 @@ export const runAgent = async (
         for (const block of content) {
           if (block.type === 'text' && block.text) {
             fullText += block.text as string
+            // Merge consecutive text blocks in interleaved content
+            const lastBlock = interleavedContent[interleavedContent.length - 1]
+            if (lastBlock && lastBlock.type === 'text') {
+              lastBlock.text += block.text as string
+            } else {
+              interleavedContent.push({ type: 'text', text: block.text as string })
+            }
             safeEmit({ type: 'text_chunk', text: block.text as string })
           }
           if (block.type === 'tool_use') {
             const tc: ToolCall = { toolUseId: block.id as string, name: block.name as string, input: block.input }
             toolCalls.push(tc)
+            interleavedContent.push({ type: 'tool_use', toolUseId: tc.toolUseId, name: tc.name, input: tc.input })
             safeEmit({ type: 'tool_use', ...tc })
           }
         }
@@ -771,13 +787,14 @@ export const runAgent = async (
         const response = query({ prompt, options: { ...baseOptions, resume: sessionId } })
         await processResponse(response as unknown as AsyncIterable<Record<string, unknown>>)
         emitDone()
-        return { content: [{ type: 'text', text: fullText }], text: fullText, toolCalls, toolResults, sessionId: capturedSessionId, usage: lastUsage, stopReason: resultReason }
+        return { content: [{ type: 'text', text: fullText }], text: fullText, toolCalls, toolResults, interleavedContent, sessionId: capturedSessionId, usage: lastUsage, stopReason: resultReason }
       } catch (err) {
         console.warn('[agent] Session resume failed, falling back to fresh:', (err as Error).message)
         fullText = ''
         capturedSessionId = null
         lastUsage = null
         toolCalls.length = 0
+        interleavedContent.length = 0
         Object.keys(toolResults).forEach((k) => delete toolResults[k])
         agentDoneEmitted = false
       }
@@ -799,6 +816,7 @@ export const runAgent = async (
     text: fullText,
     toolCalls,
     toolResults,
+    interleavedContent,
     sessionId: capturedSessionId,
     usage: lastUsage,
     stopReason: resultReason,

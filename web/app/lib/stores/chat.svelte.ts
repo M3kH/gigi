@@ -374,19 +374,34 @@ function mapConversation(raw: any): Conversation {
 function mapMessage(raw: any): ChatMessage {
   // Extract text from content (can be string or array of blocks)
   let content = ''
+  let interleavedContent: ChatMessage['interleavedContent'] = undefined
+
   if (typeof raw.content === 'string') {
     content = raw.content
   } else if (Array.isArray(raw.content)) {
+    // Check if content has interleaved tool_use blocks (new format)
+    const hasToolUse = raw.content.some((b: any) => b.type === 'tool_use')
+
     content = raw.content
       .filter((b: any) => b.type === 'text')
       .map((b: any) => b.text)
-      .join('')
+      .join('\n\n')
+
+    if (hasToolUse && raw.role === 'assistant') {
+      interleavedContent = raw.content
+        .filter((b: any) => b.type === 'text' || b.type === 'tool_use')
+        .map((b: any) => {
+          if (b.type === 'text') return { type: 'text' as const, text: b.text }
+          return { type: 'tool_use' as const, toolUseId: b.toolUseId, name: b.name, input: b.input }
+        })
+    }
   }
 
   return {
     id: raw.id || `msg-${Date.now()}-${Math.random()}`,
     role: raw.role,
     content,
+    interleavedContent,
     toolCalls: raw.tool_calls,
     toolOutputs: raw.tool_outputs,
     usage: raw.usage ? mapUsage(raw.usage) : undefined,

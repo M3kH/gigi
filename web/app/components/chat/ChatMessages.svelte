@@ -3,11 +3,11 @@
    * Chat message stream — unified segment rendering
    *
    * Renders the full conversation:
-   * - Historical messages (from store)
+   * - Historical messages (from store) with date separators
    * - Live streaming segments in chronological order
    * - Typing indicator
    */
-  import type { StreamSegment } from '$lib/types/chat'
+  import type { StreamSegment, ChatMessage as ChatMessageType } from '$lib/types/chat'
   import {
     getMessages,
     getDialogState,
@@ -34,6 +34,31 @@
       case 'system': return `sys-${i}`
       case 'text': return `text-${i}`
     }
+  }
+
+  // Format a date separator label (e.g. "Feb 18" or "Today")
+  function formatDateSeparator(dateStr: string): string {
+    const d = new Date(dateStr)
+    const now = new Date()
+    const isToday = d.toDateString() === now.toDateString()
+    const yesterday = new Date(now)
+    yesterday.setDate(yesterday.getDate() - 1)
+    const isYesterday = d.toDateString() === yesterday.toDateString()
+
+    if (isToday) return 'Today'
+    if (isYesterday) return 'Yesterday'
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  }
+
+  // Check if a date separator should be shown before this message
+  function shouldShowDateSeparator(msg: ChatMessageType, index: number, allMessages: ChatMessageType[]): boolean {
+    if (!msg.createdAt) return false
+    if (index === 0) return true
+    const prev = allMessages[index - 1]
+    if (!prev.createdAt) return true
+    const d1 = new Date(prev.createdAt).toDateString()
+    const d2 = new Date(msg.createdAt).toDateString()
+    return d1 !== d2
   }
 
   // Auto-scroll on new content
@@ -68,8 +93,13 @@
   {#if messages.length === 0 && segments.length === 0 && dialogState === 'idle'}
     <p class="empty-state">Send a message to get started</p>
   {:else}
-    <!-- Historical messages -->
-    {#each messages as msg (msg.id)}
+    <!-- Historical messages with date separators -->
+    {#each messages as msg, i (msg.id)}
+      {#if shouldShowDateSeparator(msg, i, messages)}
+        <div class="date-separator">
+          <span class="date-separator-label">{formatDateSeparator(msg.createdAt)}</span>
+        </div>
+      {/if}
       <ChatMessageComponent message={msg} />
     {/each}
 
@@ -138,6 +168,11 @@
     max-width: 80%;
   }
 
+  /* Wider max-width in fullscreen chat mode */
+  :global(.chat-full) .message {
+    max-width: 95%;
+  }
+
   .meta {
     display: flex;
     gap: var(--gigi-space-sm);
@@ -187,6 +222,32 @@
   .live-tool {
     max-width: 80%;
     margin-bottom: var(--gigi-space-xs);
+  }
+
+  :global(.chat-full) .live-tool {
+    max-width: 95%;
+  }
+
+  /* Date separator */
+  .date-separator {
+    display: flex;
+    align-items: center;
+    margin: var(--gigi-space-lg) 0;
+    gap: var(--gigi-space-md);
+  }
+
+  .date-separator::before,
+  .date-separator::after {
+    content: '';
+    flex: 1;
+    border-top: 1px solid var(--gigi-border-muted);
+  }
+
+  .date-separator-label {
+    font-size: var(--gigi-font-size-xs);
+    color: var(--gigi-text-muted);
+    white-space: nowrap;
+    padding: 0 var(--gigi-space-sm);
   }
 
   /* Typing indicator */

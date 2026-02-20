@@ -2,12 +2,14 @@
   /**
    * Conversation list with enriched data:
    * channel icon, activity dot, linked issues, time, preview, cost.
+   * Supports filtering errors, auto-generated titles, and delete functionality.
    */
   import {
     getConversations,
     getActiveConversationId,
     isAgentRunning,
     selectConversation,
+    loadConversations,
   } from '$lib/stores/chat.svelte'
   import { getPanelState, setPanelState } from '$lib/stores/panels.svelte'
   import { formatRelativeTime, formatCost, formatTokens } from '$lib/utils/format'
@@ -16,10 +18,60 @@
   const conversations = $derived(getConversations())
   const activeId = $derived(getActiveConversationId())
 
+  // Filter state: hide error-only conversations
+  let hideErrors = $state(false)
+
+  // Detect error/timeout conversations
+  function isErrorConversation(conv: Conversation): boolean {
+    const p = conv.lastMessagePreview?.toLowerCase() || ''
+    const t = conv.topic?.toLowerCase() || ''
+    return (
+      p.includes('request timed out') ||
+      p.includes('error: claude code process exited') ||
+      p.includes('error:') ||
+      t.includes('error') ||
+      t.includes('timed out')
+    )
+  }
+
+  // Auto-generate display title from preview when topic is generic
+  function displayTitle(conv: Conversation): string {
+    const topic = conv.topic
+    // If topic is generic channel name, try to use the preview
+    if (topic === 'web' || topic === 'telegram' || topic === 'webhook' || topic === 'Untitled') {
+      if (conv.lastMessagePreview) {
+        // Use first ~50 chars of preview, strip context prefix
+        const stripped = conv.lastMessagePreview.replace(/^\[Viewing [^\]]+\]\n?/, '')
+        const trimmed = stripped.trim().slice(0, 50)
+        return trimmed + (stripped.length > 50 ? '...' : '') || topic
+      }
+    }
+    return topic
+  }
+
+  const filteredConversations = $derived(
+    hideErrors ? conversations.filter(c => !isErrorConversation(c)) : conversations
+  )
+
+  const errorCount = $derived(
+    conversations.filter(c => isErrorConversation(c)).length
+  )
+
   function handleSelect(conv: Conversation) {
     selectConversation(conv.id)
     if (getPanelState('chatOverlay') === 'hidden') {
       setPanelState('chatOverlay', 'compact')
+    }
+  }
+
+  async function handleDelete(e: MouseEvent, conv: Conversation) {
+    e.stopPropagation()
+    if (!confirm(`Delete conversation "${displayTitle(conv)}"?`)) return
+    try {
+      await fetch(`/api/conversations/${conv.id}`, { method: 'DELETE' })
+      await loadConversations()
+    } catch (err) {
+      console.error('[chat] Delete failed:', err)
     }
   }
 
@@ -39,20 +91,33 @@
 </script>
 
 <div class="chat-list">
-  {#each conversations as conv (conv.id)}
+  <!-- Error filter toggle -->
+  {#if errorCount > 0}
+    <button class="filter-toggle" onclick={() => hideErrors = !hideErrors}>
+      {hideErrors ? `Show ${errorCount} errors` : `Hide ${errorCount} errors`}
+    </button>
+  {/if}
+
+  {#each filteredConversations as conv (conv.id)}
     <button
       class="chat-item"
       class:active={conv.id === activeId}
+      class:error-conv={isErrorConversation(conv)}
       onclick={() => handleSelect(conv)}
     >
-      <!-- Row 1: channel icon + title + spinner -->
+      <!-- Row 1: channel icon + title + spinner + delete -->
       <div class="chat-item-header">
         <span class="channel-icon" title={conv.channel}>{channelIcon(conv.channel)}</span>
         <span class="status-badge {statusClass(conv)}"></span>
-        <span class="chat-title">{conv.topic}</span>
+        <span class="chat-title">{displayTitle(conv)}</span>
         {#if isAgentRunning(conv.id)}
           <span class="spinner">⟳</span>
         {/if}
+        <button
+          class="delete-btn"
+          title="Delete conversation"
+          onclick={(e) => handleDelete(e, conv)}
+        >×</button>
       </div>
 
       <!-- Row 2: preview -->
@@ -81,7 +146,7 @@
     </button>
   {:else}
     <div class="empty-list">
-      <span class="empty-text">No conversations yet</span>
+      <span class="empty-text">{hideErrors ? 'No non-error conversations' : 'No conversations yet'}</span>
     </div>
   {/each}
 </div>
@@ -90,6 +155,24 @@
   .chat-list {
     display: flex;
     flex-direction: column;
+  }
+
+  .filter-toggle {
+    display: block;
+    width: 100%;
+    padding: var(--gigi-space-xs) var(--gigi-space-md);
+    background: var(--gigi-bg-tertiary);
+    border: none;
+    border-bottom: var(--gigi-border-width) solid var(--gigi-border-muted);
+    color: var(--gigi-accent-blue);
+    font-size: var(--gigi-font-size-xs);
+    cursor: pointer;
+    text-align: center;
+    font-family: var(--gigi-font-sans);
+  }
+
+  .filter-toggle:hover {
+    background: var(--gigi-bg-hover);
   }
 
   .chat-item {
@@ -103,6 +186,7 @@
     border-bottom: var(--gigi-border-width) solid var(--gigi-border-muted);
     transition: background var(--gigi-transition-fast);
     font-family: var(--gigi-font-sans);
+    position: relative;
   }
 
   .chat-item:hover {
@@ -112,6 +196,10 @@
   .chat-item.active {
     background: var(--gigi-bg-active);
     border-left: 2px solid var(--gigi-accent-green);
+  }
+
+  .chat-item.error-conv {
+    opacity: 0.6;
   }
 
   /* ── Header row ──────────────────────────────────────────────── */
@@ -177,6 +265,27 @@
 
   @keyframes spin {
     to { transform: rotate(360deg); }
+  }
+
+  .delete-btn {
+    display: none;
+    flex-shrink: 0;
+    background: none;
+    border: none;
+    color: var(--gigi-text-muted);
+    font-size: 1rem;
+    cursor: pointer;
+    padding: 0 2px;
+    line-height: 1;
+    font-family: var(--gigi-font-sans);
+  }
+
+  .delete-btn:hover {
+    color: var(--gigi-accent-red);
+  }
+
+  .chat-item:hover .delete-btn {
+    display: block;
   }
 
   /* ── Preview ─────────────────────────────────────────────────── */

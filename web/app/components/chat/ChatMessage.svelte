@@ -1,8 +1,11 @@
 <script lang="ts">
   /**
    * Single chat message with markdown rendering, tool blocks, and token badge.
+   *
+   * Supports interleaved rendering: when interleavedContent is available,
+   * text and tool blocks render in their original order (matching live streaming).
    */
-  import type { ChatMessage as ChatMessageType } from '$lib/types/chat'
+  import type { ChatMessage as ChatMessageType, InterleavedBlock } from '$lib/types/chat'
   import { renderMarkdown, highlightAll } from '$lib/utils/markdown'
   import { interceptLinks } from '$lib/utils/intercept-links'
   import { formatTime } from '$lib/utils/format'
@@ -18,12 +21,42 @@
   let contentEl: HTMLDivElement | undefined = $state()
 
   const isUser = $derived(message.role === 'user')
-  const renderedHtml = $derived(renderMarkdown(message.content))
+  const isSystem = $derived(isUser && (
+    message.content.startsWith('[ENFORCER]') ||
+    message.content.startsWith('[SYSTEM') ||
+    message.content.startsWith('[CONVERSATION SUMMARY')
+  ))
+
+  // Strip [Viewing ...] context prefix from user messages for display
+  const displayContent = $derived.by(() => {
+    if (isUser) {
+      return message.content.replace(/^\[Viewing [^\]]+\]\n/, '')
+    }
+    return message.content
+  })
+
+  const renderedHtml = $derived(renderMarkdown(displayContent))
+
+  // Use interleaved content when available (new format with text/tool ordering)
+  const hasInterleaved = $derived(!isUser && !!message.interleavedContent && message.interleavedContent.length > 0)
+
+  // Collapsed tool blocks: show all if <= 10, otherwise show last 3 with expand option
+  const TOOL_COLLAPSE_THRESHOLD = 10
+  let toolsExpanded = $state(false)
+
+  const toolCallsFiltered = $derived(
+    message.toolCalls?.filter(tc => tc.name !== 'ask_user') ?? []
+  )
+  const shouldCollapse = $derived(toolCallsFiltered.length > TOOL_COLLAPSE_THRESHOLD)
+  const visibleToolCalls = $derived(
+    shouldCollapse && !toolsExpanded
+      ? toolCallsFiltered.slice(-3)
+      : toolCallsFiltered
+  )
 
   // Highlight code blocks after content renders
   $effect(() => {
     if (contentEl && renderedHtml) {
-      // Wait for DOM update
       requestAnimationFrame(() => {
         if (contentEl) highlightAll(contentEl)
       })
@@ -31,9 +64,9 @@
   })
 </script>
 
-<div class="message" class:user={isUser} class:assistant={!isUser}>
+<div class="message" class:user={isUser} class:assistant={!isUser} class:system-msg={isSystem}>
   <div class="meta">
-    <span class="role">{isUser ? 'You' : 'Gigi'}</span>
+    <span class="role">{isSystem ? 'System' : isUser ? 'You' : 'Gigi'}</span>
     {#if message.createdAt}
       <span class="timestamp">{formatTime(message.createdAt)}</span>
     {/if}
@@ -42,29 +75,60 @@
     {/if}
   </div>
 
-  {#if isUser}
-    <div class="content user-content" bind:this={contentEl} use:interceptLinks>
-      {@html renderedHtml}
-    </div>
+  {#if hasInterleaved}
+    <!-- Interleaved rendering: text and tool blocks in original order -->
+    {#each message.interleavedContent as block, i}
+      {#if block.type === 'text' && block.text.trim()}
+        <div class="content" bind:this={contentEl} use:interceptLinks>
+          {@html renderMarkdown(block.text)}
+        </div>
+      {:else if block.type === 'tool_use' && block.name !== 'ask_user'}
+        <div class="tool-blocks">
+          <ToolBlock
+            toolUseId={block.toolUseId}
+            name={block.name}
+            input={block.input}
+            result={message.toolOutputs?.[block.toolUseId]}
+            status="done"
+          />
+        </div>
+      {/if}
+    {/each}
   {:else}
-    <div class="content" bind:this={contentEl} use:interceptLinks>
-      {@html renderedHtml}
-    </div>
-  {/if}
+    <!-- Legacy rendering: single text block + tool blocks below -->
+    {#if isUser}
+      <div class="content user-content" bind:this={contentEl} use:interceptLinks>
+        {@html renderedHtml}
+      </div>
+    {:else}
+      <div class="content" bind:this={contentEl} use:interceptLinks>
+        {@html renderedHtml}
+      </div>
+    {/if}
 
-  <!-- Tool blocks from history (hide ask_user — rendered as interactive blocks) -->
-  {#if message.toolCalls && message.toolCalls.length > 0}
-    <div class="tool-blocks">
-      {#each message.toolCalls.filter(tc => tc.name !== 'ask_user') as tc}
-        <ToolBlock
-          toolUseId={tc.toolUseId}
-          name={tc.name}
-          input={tc.input}
-          result={message.toolOutputs?.[tc.toolUseId]}
-          status="done"
-        />
-      {/each}
-    </div>
+    {#if toolCallsFiltered.length > 0}
+      <div class="tool-blocks">
+        {#if shouldCollapse && !toolsExpanded}
+          <button class="tool-collapse-btn" onclick={() => toolsExpanded = true}>
+            Show all {toolCallsFiltered.length} tool calls ({toolCallsFiltered.length - 3} hidden)
+          </button>
+        {/if}
+        {#each visibleToolCalls as tc}
+          <ToolBlock
+            toolUseId={tc.toolUseId}
+            name={tc.name}
+            input={tc.input}
+            result={message.toolOutputs?.[tc.toolUseId]}
+            status="done"
+          />
+        {/each}
+        {#if shouldCollapse && toolsExpanded}
+          <button class="tool-collapse-btn" onclick={() => toolsExpanded = false}>
+            Collapse tool calls
+          </button>
+        {/if}
+      </div>
+    {/if}
   {/if}
 </div>
 
@@ -74,12 +138,30 @@
     max-width: 80%;
   }
 
+  /* Wider max-width in fullscreen chat mode */
+  :global(.chat-full) .message {
+    max-width: 95%;
+  }
+
   .message.user {
     margin-left: auto;
   }
 
   .message.user .meta {
     justify-content: flex-end;
+  }
+
+  /* System/enforcer message styling */
+  .message.system-msg {
+    max-width: 90%;
+    opacity: 0.7;
+  }
+
+  .message.system-msg .content {
+    background: var(--gigi-bg-tertiary);
+    border: 1px dashed var(--gigi-border-muted);
+    font-size: var(--gigi-font-size-xs);
+    font-style: italic;
   }
 
   .meta {
@@ -165,5 +247,24 @@
 
   .tool-blocks {
     margin-top: var(--gigi-space-xs);
+  }
+
+  .tool-collapse-btn {
+    display: block;
+    width: 100%;
+    padding: var(--gigi-space-xs) var(--gigi-space-sm);
+    background: var(--gigi-bg-tertiary);
+    border: 1px solid var(--gigi-border-muted);
+    border-radius: var(--gigi-radius-sm);
+    color: var(--gigi-accent-blue);
+    font-size: var(--gigi-font-size-xs);
+    cursor: pointer;
+    text-align: center;
+    margin: var(--gigi-space-xs) 0;
+    font-family: var(--gigi-font-sans);
+  }
+
+  .tool-collapse-btn:hover {
+    background: var(--gigi-bg-hover);
   }
 </style>

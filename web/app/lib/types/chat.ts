@@ -40,10 +40,17 @@ export interface TokenUsage {
   numTurns?: number
 }
 
+/** An ordered content block — text or tool_use — preserving interleaving for faithful replay */
+export type InterleavedBlock =
+  | { type: 'text'; text: string }
+  | { type: 'tool_use'; toolUseId: string; name: string; input: unknown }
+
 export interface ChatMessage {
   id: string
   role: 'user' | 'assistant'
   content: string
+  /** Ordered content blocks preserving text/tool interleaving (for assistant messages) */
+  interleavedContent?: InterleavedBlock[]
   toolCalls?: ToolCall[]
   toolOutputs?: Record<string, string>
   usage?: TokenUsage
