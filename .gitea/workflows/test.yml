@@ -49,7 +49,7 @@ jobs:
           TEST_OUTPUT=$(tail -n 50 test-output.log | sed 's/"/\\"/g' | sed ':a;N;$!ba;s/\n/\\n/g')
 
           # Create comment on PR mentioning @gigi
-          curl -X POST "${GITEA_URL:-http://localhost:3000}/api/v1/repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments" \
+          curl -X POST "${{ github.server_url }}/api/v1/repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments" \
             -H "Authorization: Bearer ${{ secrets.GITEA_TOKEN }}" \
             -H "Content-Type: application/json" \
             -d "{

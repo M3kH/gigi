@@ -9,6 +9,7 @@ import { getConfig, checkRecentAction } from '../core/store'
 import { handleMessage } from '../core/router'
 import { routeWebhook } from './webhookRouter'
 import { notifyWebhook } from './webhookNotifier'
+import { handlePushDispatch } from './crossRepoDispatch'
 import { emit } from '../core/events'
 
 import type { Context } from 'hono'
@@ -69,6 +70,15 @@ export const handleWebhook = async (c: Context): Promise<Response> => {
   if (isSelfGenerated) {
     console.log(`Skipping self-generated ${event}`)
     return c.json({ ok: true, skipped: 'self-generated' })
+  }
+
+  // Cross-repo workflow dispatch (e.g. gigi push → gigi-infra build)
+  if (event === 'push' && payload.repository?.name && payload.ref) {
+    const commits = payload.commits || []
+    const headSha = commits.length > 0 ? commits[commits.length - 1].id : undefined
+    handlePushDispatch(payload.repository.name, payload.ref, headSha).catch(err =>
+      console.warn('[webhook] Cross-repo dispatch failed:', (err as Error).message)
+    )
   }
 
   // Broadcast to frontend via SSE so the UI updates in real-time
