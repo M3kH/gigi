@@ -3,6 +3,7 @@
    * Cost monitoring widget for the dashboard
    *
    * Shows total spend, budget usage, and daily trend.
+   * Budget is configurable inline via edit mode or from Settings.
    * Part of issue #21: Token optimization - Strategy 4 (Cost Monitoring).
    */
   import { onMount } from 'svelte'
@@ -42,26 +43,84 @@
   let loading = $state(true)
   let expanded = $state(false)
 
+  // Budget editing state
+  let editing = $state(false)
+  let editBudgetUSD = $state(100)
+  let editPeriodDays = $state(7)
+  let saving = $state(false)
+
   const periodCost = $derived(budget?.periodSpend ?? 0)
   const budgetLimit = $derived(budget?.budgetUSD ?? 100)
   const percentUsed = $derived(budget?.percentUsed ?? 0)
   const avgCost = $derived(stats?.avg_cost_per_conversation ?? 0)
   const totalCost = $derived(stats?.total_cost ?? 0)
 
-  onMount(async () => {
+  const periodLabel = $derived(
+    editPeriodDays === 7 ? 'week' : editPeriodDays === 30 ? 'month' : editPeriodDays === 1 ? 'day' : `${editPeriodDays}d`
+  )
+
+  async function loadData() {
     try {
       const [budgetRes, statsRes] = await Promise.all([
         fetch('/api/usage/budget'),
         fetch('/api/usage/stats?days=7'),
       ])
-      if (budgetRes.ok) budget = await budgetRes.json()
+      if (budgetRes.ok) {
+        budget = await budgetRes.json()
+        editBudgetUSD = budget!.budgetUSD
+      }
       if (statsRes.ok) stats = await statsRes.json()
     } catch (err) {
       console.error('[cost-widget] Failed to load:', err)
     } finally {
       loading = false
     }
-  })
+  }
+
+  onMount(loadData)
+
+  function startEditing(e: MouseEvent) {
+    e.stopPropagation()
+    editBudgetUSD = budgetLimit
+    editing = true
+  }
+
+  function cancelEditing(e: MouseEvent) {
+    e.stopPropagation()
+    editing = false
+  }
+
+  async function saveBudget(e: MouseEvent | KeyboardEvent) {
+    e.stopPropagation()
+    saving = true
+    try {
+      const res = await fetch('/api/usage/budget', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          budgetUSD: editBudgetUSD,
+          periodDays: editPeriodDays,
+        }),
+      })
+      if (res.ok) {
+        editing = false
+        loading = true
+        await loadData()
+      }
+    } catch (err) {
+      console.error('[cost-widget] Failed to save budget:', err)
+    } finally {
+      saving = false
+    }
+  }
+
+  function handleKeydown(e: KeyboardEvent) {
+    if (e.key === 'Enter') {
+      saveBudget(e)
+    } else if (e.key === 'Escape') {
+      editing = false
+    }
+  }
 </script>
 
 <div class="cost-widget" class:over-budget={budget?.overBudget}>
@@ -76,7 +135,7 @@
         {loading ? '...' : formatCost(periodCost) || '$0.00'}
       </span>
       <span class="cost-label">
-        / {formatCost(budgetLimit) || '$100'} this week
+        / {formatCost(budgetLimit) || '$100'} this {periodLabel}
       </span>
     </div>
     {#if !loading && budget}
@@ -92,35 +151,91 @@
     <span class="expand-icon">{expanded ? '−' : '+'}</span>
   </button>
 
-  {#if expanded && stats}
-    <div class="cost-details">
-      <div class="cost-row">
-        <span class="detail-label">Total (30d)</span>
-        <span class="detail-value">{formatCost(totalCost) || '$0.00'}</span>
+  {#if expanded}
+    {#if editing}
+      <!-- Budget edit form (inline) -->
+      <!-- svelte-ignore a11y_click_events_have_key_events -->
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <div class="budget-edit" onclick={(e: MouseEvent) => e.stopPropagation()}>
+        <div class="edit-row">
+          <label class="edit-label" for="budget-amount">Budget ($)</label>
+          <input
+            id="budget-amount"
+            type="number"
+            min="1"
+            max="10000"
+            step="10"
+            bind:value={editBudgetUSD}
+            onkeydown={handleKeydown}
+            class="edit-input"
+          />
+        </div>
+        <div class="edit-row">
+          <label class="edit-label" for="budget-period">Period</label>
+          <select
+            id="budget-period"
+            bind:value={editPeriodDays}
+            class="edit-select"
+          >
+            <option value={1}>Daily</option>
+            <option value={7}>Weekly</option>
+            <option value={14}>Bi-weekly</option>
+            <option value={30}>Monthly</option>
+          </select>
+        </div>
+        <div class="edit-actions">
+          <button class="edit-btn save" onclick={saveBudget} disabled={saving}>
+            {saving ? 'Saving...' : 'Save'}
+          </button>
+          <button class="edit-btn cancel" onclick={cancelEditing}>Cancel</button>
+        </div>
       </div>
-      <div class="cost-row">
-        <span class="detail-label">Avg per conv</span>
-        <span class="detail-value">{formatCost(avgCost) || '$0.00'}</span>
-      </div>
-      <div class="cost-row">
-        <span class="detail-label">Conversations</span>
-        <span class="detail-value">{stats.total_conversations}</span>
-      </div>
-      <div class="cost-row">
-        <span class="detail-label">Cache reads</span>
-        <span class="detail-value">{stats.total_cache_read_tokens > 1_000_000 ? (stats.total_cache_read_tokens / 1_000_000).toFixed(1) + 'M' : (stats.total_cache_read_tokens / 1_000).toFixed(0) + 'K'}</span>
-      </div>
-      {#if stats.top_conversations.length > 0}
+    {:else if stats}
+      <div class="cost-details">
+        <div class="cost-row">
+          <span class="detail-label">Total (30d)</span>
+          <span class="detail-value">{formatCost(totalCost) || '$0.00'}</span>
+        </div>
+        <div class="cost-row">
+          <span class="detail-label">Avg per conv</span>
+          <span class="detail-value">{formatCost(avgCost) || '$0.00'}</span>
+        </div>
+        <div class="cost-row">
+          <span class="detail-label">Conversations</span>
+          <span class="detail-value">{stats.total_conversations}</span>
+        </div>
+        <div class="cost-row">
+          <span class="detail-label">Cache reads</span>
+          <span class="detail-value">{stats.total_cache_read_tokens > 1_000_000 ? (stats.total_cache_read_tokens / 1_000_000).toFixed(1) + 'M' : (stats.total_cache_read_tokens / 1_000).toFixed(0) + 'K'}</span>
+        </div>
+        {#if stats.top_conversations.length > 0}
+          <div class="cost-divider"></div>
+          <div class="top-convs-header">Top spenders</div>
+          {#each stats.top_conversations.slice(0, 3) as conv}
+            <div class="cost-row top-conv">
+              <span class="detail-label" title={conv.topic || 'Untitled'}>{(conv.topic || 'Untitled').slice(0, 30)}</span>
+              <span class="detail-value">{formatCost(conv.cost) || '<$0.01'}</span>
+            </div>
+          {/each}
+        {/if}
         <div class="cost-divider"></div>
-        <div class="top-convs-header">Top spenders</div>
-        {#each stats.top_conversations.slice(0, 3) as conv}
-          <div class="cost-row top-conv">
-            <span class="detail-label" title={conv.topic || 'Untitled'}>{(conv.topic || 'Untitled').slice(0, 30)}</span>
-            <span class="detail-value">{formatCost(conv.cost) || '<$0.01'}</span>
-          </div>
-        {/each}
-      {/if}
-    </div>
+        <button class="configure-btn" onclick={startEditing}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 15.5A3.5 3.5 0 1 0 12 8.5a3.5 3.5 0 0 0 0 7zm7.43-2.53c.04-.32.07-.64.07-.97s-.03-.65-.07-.97l2.11-1.65a.5.5 0 0 0 .12-.64l-2-3.46a.5.5 0 0 0-.61-.22l-2.49 1a7.4 7.4 0 0 0-1.67-.97l-.38-2.65A.49.49 0 0 0 14 2h-4a.49.49 0 0 0-.49.42l-.38 2.65c-.61.25-1.17.59-1.67.97l-2.49-1a.5.5 0 0 0-.61.22l-2 3.46a.49.49 0 0 0 .12.64l2.11 1.65c-.04.32-.07.65-.07.97s.03.65.07.97l-2.11 1.65a.5.5 0 0 0-.12.64l2 3.46a.5.5 0 0 0 .61.22l2.49-1c.5.38 1.06.72 1.67.97l.38 2.65c.05.24.26.42.49.42h4c.24 0 .44-.18.49-.42l.38-2.65c.61-.25 1.17-.59 1.67-.97l2.49 1a.5.5 0 0 0 .61-.22l2-3.46a.49.49 0 0 0-.12-.64l-2.11-1.65z"/>
+          </svg>
+          Configure budget
+        </button>
+      </div>
+    {:else}
+      <div class="cost-details">
+        <button class="configure-btn" onclick={startEditing}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 15.5A3.5 3.5 0 1 0 12 8.5a3.5 3.5 0 0 0 0 7zm7.43-2.53c.04-.32.07-.64.07-.97s-.03-.65-.07-.97l2.11-1.65a.5.5 0 0 0 .12-.64l-2-3.46a.5.5 0 0 0-.61-.22l-2.49 1a7.4 7.4 0 0 0-1.67-.97l-.38-2.65A.49.49 0 0 0 14 2h-4a.49.49 0 0 0-.49.42l-.38 2.65c-.61.25-1.17.59-1.67.97l-2.49-1a.5.5 0 0 0-.61.22l-2 3.46a.49.49 0 0 0 .12.64l2.11 1.65c-.04.32-.07.65-.07.97s.03.65.07.97l-2.11 1.65a.5.5 0 0 0-.12.64l2 3.46a.5.5 0 0 0 .61.22l2.49-1c.5.38 1.06.72 1.67.97l.38 2.65c.05.24.26.42.49.42h4c.24 0 .44-.18.49-.42l.38-2.65c.61-.25 1.17-.59 1.67-.97l2.49 1a.5.5 0 0 0 .61-.22l2-3.46a.49.49 0 0 0-.12-.64l-2.11-1.65z"/>
+          </svg>
+          Configure budget
+        </button>
+      </div>
+    {/if}
   {/if}
 </div>
 
@@ -263,5 +378,113 @@
 
   .top-conv .detail-label {
     font-size: 10px;
+  }
+
+  /* ── Configure button ─────────────────────────────────────────── */
+
+  .configure-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    padding: 6px 0;
+    background: none;
+    border: none;
+    color: var(--gigi-text-muted);
+    font-size: var(--gigi-font-size-xs);
+    font-family: var(--gigi-font-sans);
+    cursor: pointer;
+    transition: color var(--gigi-transition-fast);
+  }
+
+  .configure-btn:hover {
+    color: var(--gigi-accent-blue);
+  }
+
+  /* ── Budget edit form ─────────────────────────────────────────── */
+
+  .budget-edit {
+    padding: var(--gigi-space-sm) var(--gigi-space-lg) var(--gigi-space-md);
+    display: flex;
+    flex-direction: column;
+    gap: var(--gigi-space-sm);
+  }
+
+  .edit-row {
+    display: flex;
+    align-items: center;
+    gap: var(--gigi-space-sm);
+  }
+
+  .edit-label {
+    font-size: var(--gigi-font-size-xs);
+    color: var(--gigi-text-secondary);
+    white-space: nowrap;
+    min-width: 72px;
+  }
+
+  .edit-input,
+  .edit-select {
+    flex: 1;
+    padding: 4px 8px;
+    background: var(--gigi-bg-secondary);
+    border: var(--gigi-border-width) solid var(--gigi-border-default);
+    border-radius: var(--gigi-radius-sm);
+    color: var(--gigi-text-primary);
+    font-size: var(--gigi-font-size-sm);
+    font-family: var(--gigi-font-mono, monospace);
+  }
+
+  .edit-select {
+    font-family: var(--gigi-font-sans);
+    cursor: pointer;
+  }
+
+  .edit-input:focus,
+  .edit-select:focus {
+    outline: none;
+    border-color: var(--gigi-accent-blue);
+  }
+
+  .edit-actions {
+    display: flex;
+    gap: var(--gigi-space-xs);
+    justify-content: flex-end;
+    margin-top: var(--gigi-space-xs);
+  }
+
+  .edit-btn {
+    padding: 4px 12px;
+    border-radius: var(--gigi-radius-sm);
+    font-size: var(--gigi-font-size-xs);
+    font-family: var(--gigi-font-sans);
+    cursor: pointer;
+    border: var(--gigi-border-width) solid var(--gigi-border-default);
+    transition: all var(--gigi-transition-fast);
+  }
+
+  .edit-btn.save {
+    background: var(--gigi-accent-blue);
+    color: #fff;
+    border-color: var(--gigi-accent-blue);
+  }
+
+  .edit-btn.save:hover:not(:disabled) {
+    filter: brightness(1.1);
+  }
+
+  .edit-btn.save:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .edit-btn.cancel {
+    background: var(--gigi-bg-tertiary);
+    color: var(--gigi-text-secondary);
+  }
+
+  .edit-btn.cancel:hover {
+    background: var(--gigi-bg-hover);
+    color: var(--gigi-text-primary);
   }
 </style>

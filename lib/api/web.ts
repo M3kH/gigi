@@ -160,7 +160,7 @@ export const createApp = (): Hono => {
     const budget = parseFloat(budgetStr)
     const period = parseInt(periodStr)
     const check = await store.checkBudget(budget, period)
-    return c.json(check)
+    return c.json({ ...check, periodDays: period })
   })
 
   // Set budget configuration

@@ -53,6 +53,12 @@
   let awmAgentBusy = $state(false)
   let awmLastCheck = $state<string | null>(null)
 
+  // Budget settings
+  let budgetUSD = $state(100)
+  let budgetPeriodDays = $state(7)
+  let budgetSaving = $state(false)
+  let budgetSaved = $state(false)
+
   const currentTheme: Theme = $derived(getTheme())
 
   const kanbanState: PanelState = $derived(getPanelState('kanban'))
@@ -90,6 +96,16 @@
         try { localStorage.setItem(AWM_INTERVAL_KEY, String(data.intervalMinutes)) } catch { /* ignore */ }
       }
     } catch { /* ignore — server may not support this yet */ }
+
+    // Sync budget config from server
+    try {
+      const res = await fetch('/api/usage/budget')
+      if (res.ok) {
+        const data = await res.json()
+        budgetUSD = data.budgetUSD ?? 100
+        budgetPeriodDays = data.periodDays ?? 7
+      }
+    } catch { /* ignore */ }
   })
 
   function handleOverview() {
@@ -159,6 +175,23 @@
         body: JSON.stringify({ enabled: alwaysWorkingEnabled, intervalMinutes: alwaysWorkingInterval }),
       }).catch(() => { /* ignore */ })
     }
+  }
+
+  async function handleBudgetSave() {
+    budgetSaving = true
+    budgetSaved = false
+    try {
+      const res = await fetch('/api/usage/budget', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ budgetUSD, periodDays: budgetPeriodDays }),
+      })
+      if (res.ok) {
+        budgetSaved = true
+        setTimeout(() => { budgetSaved = false }, 2000)
+      }
+    } catch { /* ignore */ }
+    finally { budgetSaving = false }
   }
 
   // ── Linked conversations for current issue/PR ──────────────────────
@@ -389,6 +422,47 @@
             {/if}
           </p>
         {/if}
+      </div>
+
+      <div class="settings-divider"></div>
+
+      <div class="settings-section">
+        <span class="section-label">Budget</span>
+        <p class="settings-hint">Set a spending limit. The cost widget on the overview will show progress against this budget.</p>
+        <div class="settings-field">
+          <label class="field-label" for="settings-budget-amount">Amount ($)</label>
+          <input
+            id="settings-budget-amount"
+            type="number"
+            min="1"
+            max="10000"
+            step="10"
+            bind:value={budgetUSD}
+            class="field-input"
+          />
+        </div>
+        <div class="settings-field">
+          <label class="field-label" for="settings-budget-period">Period</label>
+          <select
+            id="settings-budget-period"
+            bind:value={budgetPeriodDays}
+            class="field-select"
+          >
+            <option value={1}>Daily</option>
+            <option value={7}>Weekly</option>
+            <option value={14}>Bi-weekly</option>
+            <option value={30}>Monthly</option>
+          </select>
+        </div>
+        <div class="settings-field">
+          <button
+            class="settings-save-btn"
+            onclick={handleBudgetSave}
+            disabled={budgetSaving}
+          >
+            {budgetSaving ? 'Saving...' : budgetSaved ? 'Saved!' : 'Save budget'}
+          </button>
+        </div>
       </div>
     </div>
   {/if}
@@ -719,9 +793,53 @@
     font-family: var(--gigi-font-mono, monospace);
   }
 
-  .field-input:focus {
+  .field-input:focus,
+  .field-select:focus {
     outline: none;
     border-color: var(--gigi-accent-green);
+  }
+
+  .field-select {
+    padding: 4px 8px;
+    background: var(--gigi-bg-secondary);
+    border: var(--gigi-border-width) solid var(--gigi-border-default);
+    border-radius: var(--gigi-radius-sm);
+    color: var(--gigi-text-primary);
+    font-size: var(--gigi-font-size-sm);
+    font-family: var(--gigi-font-sans);
+    cursor: pointer;
+  }
+
+  .settings-divider {
+    border-top: 1px solid var(--gigi-border-muted);
+    margin: var(--gigi-space-sm) 0;
+  }
+
+  .section-label {
+    font-size: var(--gigi-font-size-sm);
+    font-weight: 600;
+    color: var(--gigi-text-primary);
+  }
+
+  .settings-save-btn {
+    padding: 4px 12px;
+    background: var(--gigi-accent-blue);
+    color: #fff;
+    border: none;
+    border-radius: var(--gigi-radius-sm);
+    font-size: var(--gigi-font-size-xs);
+    font-family: var(--gigi-font-sans);
+    cursor: pointer;
+    transition: all var(--gigi-transition-fast);
+  }
+
+  .settings-save-btn:hover:not(:disabled) {
+    filter: brightness(1.1);
+  }
+
+  .settings-save-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
   }
 
   /* ── Context bar (issue/PR linked chats) ──────────────────────── */
