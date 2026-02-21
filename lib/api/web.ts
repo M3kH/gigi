@@ -431,7 +431,12 @@ export const createApp = (): Hono => {
   app.get('/api/threads/:id/context', async (c) => {
     const threadId = c.req.param('id')
     const context = await buildThreadContext(threadId)
-    return c.json({ messages: context, count: context.length })
+    return c.json({
+      messages: context.messages,
+      count: context.eventCount,
+      estimatedTokens: context.estimatedTokens,
+      channels: context.channels,
+    })
   })
 
   // Thread usage analytics

@@ -16,6 +16,7 @@ import * as store from './store'
 import * as threads from './threads'
 import { enforceCompletion, startTask, markNotified } from './enforcer'
 import { detectUnfinishedWork } from './completion-detector'
+import { buildThreadContext, shouldCompact, type BuildContextResult } from './thread-compact'
 import type { ViewContext } from './protocol'
 import { createGiteaClient } from '../api-gitea'
 import { classifyMessage, type RoutingDecision } from './llm-router'
@@ -267,34 +268,36 @@ export const handleMessage = async (
     console.warn('[router] getSessionId failed:', (err as Error).message)
   }
 
-  // Build messages for agent
-  // Strategy 3: Sliding window — for long conversations without a session,
-  // send only the last N messages + a summary of earlier ones to reduce context size.
-  const HISTORY_WINDOW_SIZE = 10 // Keep last N messages in full detail
+  // Build messages for agent using unified thread context (issue #43)
+  // The thread context includes events from ALL channels with attribution,
+  // linked refs, and compacted summaries when available.
   let messages: AgentMessage[]
+  let contextInfo: BuildContextResult | null = null
   if (sessionId) {
+    // Existing session: Claude SDK has context, just send the new message
     messages = [{ role: 'user', content: [{ type: 'text', text: enrichedText }] }]
   } else {
-    const history = await store.getMessages(convId)
-    if (history.length > HISTORY_WINDOW_SIZE) {
-      // Summarize older messages to save tokens
-      const older = history.slice(0, -HISTORY_WINDOW_SIZE)
-      const recent = history.slice(-HISTORY_WINDOW_SIZE)
-      const summaryParts: string[] = []
-      for (const m of older) {
-        const text = extractMessageText(m.content)
-        if (text) summaryParts.push(`[${m.role}]: ${text.slice(0, 120)}`)
+    // No session: build full thread context from thread_events
+    try {
+      contextInfo = await buildThreadContext(threadId)
+      messages = contextInfo.messages as AgentMessage[]
+
+      const channelNote = contextInfo.channels.length > 1
+        ? ` across channels: ${contextInfo.channels.join(', ')}`
+        : ''
+      console.log(`[router] Thread context: ${contextInfo.eventCount} events, ~${contextInfo.estimatedTokens} tokens${channelNote}`)
+
+      // Check if thread needs compaction (non-blocking)
+      if (contextInfo.eventCount > 15) {
+        const compactCheck = await shouldCompact(threadId, 20)
+        if (compactCheck.shouldCompact) {
+          console.warn(`[router] ⚠️ Thread may need compaction: ${compactCheck.reason}`)
+        }
       }
-      const summaryText = `[CONVERSATION SUMMARY — ${older.length} earlier messages condensed]\n${summaryParts.join('\n')}`
-      messages = [
-        { role: 'user', content: [{ type: 'text', text: summaryText }] },
-        ...recent.map((m) => ({
-          role: (m.role === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
-          content: m.content as AgentMessage['content'],
-        })),
-      ]
-      console.log(`[router] History: ${history.length} msgs → summarized ${older.length} + ${recent.length} recent`)
-    } else {
+    } catch (err) {
+      // Fallback to old conversation-based context if thread context fails
+      console.warn('[router] Thread context build failed, falling back to conversation history:', (err as Error).message)
+      const history = await store.getMessages(convId)
       messages = history.map((m) => ({
         role: (m.role === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
         content: m.content as AgentMessage['content'],

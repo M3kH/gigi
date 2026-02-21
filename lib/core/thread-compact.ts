@@ -21,6 +21,7 @@ import {
   getThreadRefs,
   countThreadEvents,
   type ThreadEvent,
+  type ThreadRef,
 } from './threads.js'
 import { queryLLM } from './agent.js'
 
@@ -294,29 +295,167 @@ export const forkCompactThread = async (
 // ─── Context Builder ────────────────────────────────────────────────
 
 /**
+ * Channel labels for attribution in agent context.
+ * The agent sees these so it knows WHERE each message originated.
+ */
+const CHANNEL_LABELS: Record<string, string> = {
+  web: 'Web',
+  telegram: 'Telegram',
+  gitea_comment: 'Gitea comment',
+  gitea_review: 'Gitea review',
+  webhook: 'Webhook',
+  system: 'System',
+}
+
+/**
+ * Format a channel attribution prefix for an event.
+ * Returns e.g., "[via Telegram]" or "[via Gitea comment by @mauro]"
+ */
+const formatChannelAttribution = (event: ThreadEvent): string => {
+  const label = CHANNEL_LABELS[event.channel] ?? event.channel
+  const actor = event.actor !== 'user' && event.actor !== 'gigi'
+    ? ` by ${event.actor}`
+    : ''
+  return `[via ${label}${actor}]`
+}
+
+/**
+ * Add channel attribution to an event's text content.
+ * Only adds it for inbound events (user messages) — outbound events
+ * from gigi don't need channel labels since they are responses.
+ */
+const addChannelAttributionToContent = (
+  event: ThreadEvent,
+  enableAttribution: boolean
+): unknown => {
+  // Don't add attribution if disabled or for gigi's own responses
+  if (!enableAttribution || event.direction === 'outbound') {
+    return event.content
+  }
+
+  const attribution = formatChannelAttribution(event)
+  const content = event.content
+
+  // For text content blocks, prepend the attribution
+  if (Array.isArray(content)) {
+    const blocks = content as Array<{ type: string; text?: string }>
+    const firstTextIdx = blocks.findIndex(b => b.type === 'text' && b.text)
+    if (firstTextIdx >= 0) {
+      const modified = [...blocks]
+      modified[firstTextIdx] = {
+        ...modified[firstTextIdx],
+        text: `${attribution} ${modified[firstTextIdx].text}`,
+      }
+      return modified
+    }
+  }
+
+  if (typeof content === 'string') {
+    return `${attribution} ${content}`
+  }
+
+  return content
+}
+
+/**
+ * Format linked refs as a context preamble for the agent.
+ * Shows the thread's linked issues/PRs so the agent knows the context.
+ */
+const formatRefsContext = (refs: ThreadRef[]): string | null => {
+  if (refs.length === 0) return null
+
+  const lines = refs.map(r => {
+    const num = r.number ? `#${r.number}` : r.ref || ''
+    const status = r.status ? ` (${r.status})` : ''
+    return `- ${r.ref_type} ${r.repo}${num}${status}${r.url ? ` — ${r.url}` : ''}`
+  })
+
+  return `[LINKED REFS]\n${lines.join('\n')}`
+}
+
+export interface BuildContextOptions {
+  /** Add channel attribution prefixes like [via Telegram] to messages (default: true) */
+  channelAttribution?: boolean
+  /** Include linked refs as context preamble (default: true) */
+  includeRefs?: boolean
+}
+
+export interface BuildContextResult {
+  messages: Array<{ role: 'user' | 'assistant'; content: unknown }>
+  /** Estimated token count of the context (rough: ~4 chars per token) */
+  estimatedTokens: number
+  /** Number of thread events included */
+  eventCount: number
+  /** Channels represented in the context */
+  channels: string[]
+}
+
+/**
+ * Estimate token count for a content block.
+ * Uses a rough heuristic: ~4 characters per token (works for English text).
+ * Good enough for budget checks — not meant to be precise.
+ */
+export const estimateTokens = (content: unknown): number => {
+  if (typeof content === 'string') return Math.ceil(content.length / 4)
+  if (Array.isArray(content)) {
+    return (content as Array<{ type: string; text?: string }>)
+      .reduce((sum, b) => sum + (b.text ? Math.ceil(b.text.length / 4) : 0), 0)
+  }
+  if (content && typeof content === 'object') {
+    try { return Math.ceil(JSON.stringify(content).length / 4) } catch { return 0 }
+  }
+  return 0
+}
+
+/**
  * Build agent context messages from a thread, using summaries when available.
  *
- * Strategy:
- * 1. If thread has a summary event → use it as the first message
- * 2. Load non-compacted events after the summary
- * 3. Convert to agent message format: [summary?, ...recent_events]
+ * Full unified context pipeline (issue #43):
+ * 1. Prepend linked refs context (issues, PRs linked to this thread)
+ * 2. If thread has a summary event → use it as context preamble
+ * 3. Load non-compacted events from all channels
+ * 4. Add channel attribution to each message so agent knows the source
+ * 5. Convert to agent message format: [refs?, summary?, ...events]
+ * 6. Estimate token count for budget awareness
  *
  * This replaces the sliding window approach in router.ts for threads.
  */
 export const buildThreadContext = async (
-  threadId: string
-): Promise<Array<{ role: 'user' | 'assistant'; content: unknown }>> => {
-  // Load non-compacted events (summary events are NOT compacted, so they appear)
+  threadId: string,
+  opts: BuildContextOptions = {}
+): Promise<BuildContextResult> => {
+  const enableAttribution = opts.channelAttribution ?? true
+  const includeRefs = opts.includeRefs ?? true
+
+  const messages: Array<{ role: 'user' | 'assistant'; content: unknown }> = []
+  const channelsSet = new Set<string>()
+  let totalTokens = 0
+
+  // 1. Load and prepend linked refs
+  if (includeRefs) {
+    const refs = await getThreadRefs(threadId)
+    const refsText = formatRefsContext(refs)
+    if (refsText) {
+      const refsContent = [{ type: 'text', text: refsText }]
+      messages.push({ role: 'user', content: refsContent })
+      totalTokens += estimateTokens(refsContent)
+    }
+  }
+
+  // 2. Load non-compacted events (summary events are NOT compacted, so they appear)
   const events = await getThreadEvents(threadId, {
     include_compacted: false,
     limit: 10000,
   })
 
-  if (events.length === 0) return []
+  if (events.length === 0 && messages.length === 0) {
+    return { messages: [], estimatedTokens: 0, eventCount: 0, channels: [] }
+  }
 
-  const messages: Array<{ role: 'user' | 'assistant'; content: unknown }> = []
-
+  // 3. Convert each event to agent message format
   for (const event of events) {
+    channelsSet.add(event.channel)
+
     // Map event direction/actor to message role
     const role: 'user' | 'assistant' =
       event.direction === 'inbound' ? 'user' : 'assistant'
@@ -326,22 +465,29 @@ export const buildThreadContext = async (
       const summaryText = extractEventText(event)
       const metadata = event.metadata as Record<string, unknown>
       const compactedCount = metadata?.compacted_count ?? metadata?.source_event_count ?? '?'
-      messages.push({
-        role: 'user', // summaries are presented as context to the assistant
-        content: [
-          {
-            type: 'text',
-            text: `[THREAD SUMMARY — ${compactedCount} earlier events condensed]\n${summaryText}`,
-          },
-        ],
-      })
+      const content = [
+        {
+          type: 'text',
+          text: `[THREAD SUMMARY — ${compactedCount} earlier events condensed]\n${summaryText}`,
+        },
+      ]
+      messages.push({ role: 'user', content })
+      totalTokens += estimateTokens(content)
       continue
     }
 
-    messages.push({ role, content: event.content })
+    // Add channel attribution for cross-channel awareness
+    const content = addChannelAttributionToContent(event, enableAttribution)
+    messages.push({ role, content })
+    totalTokens += estimateTokens(content)
   }
 
-  return messages
+  return {
+    messages,
+    estimatedTokens: totalTokens,
+    eventCount: events.length,
+    channels: [...channelsSet],
+  }
 }
 
 // ─── Utilities ──────────────────────────────────────────────────────

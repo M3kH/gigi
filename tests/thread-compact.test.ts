@@ -309,6 +309,297 @@ describe('buildContextFromEvents', () => {
   })
 })
 
+// ─── Channel Attribution ────────────────────────────────────────────
+
+/** Channel labels for attribution */
+const CHANNEL_LABELS: Record<string, string> = {
+  web: 'Web',
+  telegram: 'Telegram',
+  gitea_comment: 'Gitea comment',
+  gitea_review: 'Gitea review',
+  webhook: 'Webhook',
+  system: 'System',
+}
+
+/** Format channel attribution prefix */
+function formatChannelAttribution(event: MockThreadEvent): string {
+  const label = CHANNEL_LABELS[event.channel] ?? event.channel
+  const actor = event.actor !== 'user' && event.actor !== 'gigi'
+    ? ` by ${event.actor}`
+    : ''
+  return `[via ${label}${actor}]`
+}
+
+/** Add channel attribution to content */
+function addChannelAttributionToContent(event: MockThreadEvent, enableAttribution: boolean): unknown {
+  if (!enableAttribution || event.direction === 'outbound') return event.content
+  const attribution = formatChannelAttribution(event)
+  const content = event.content
+  if (Array.isArray(content)) {
+    const blocks = content as Array<{ type: string; text?: string }>
+    const firstTextIdx = blocks.findIndex(b => b.type === 'text' && b.text)
+    if (firstTextIdx >= 0) {
+      const modified = [...blocks]
+      modified[firstTextIdx] = {
+        ...modified[firstTextIdx],
+        text: `${attribution} ${modified[firstTextIdx].text}`,
+      }
+      return modified
+    }
+  }
+  if (typeof content === 'string') return `${attribution} ${content}`
+  return content
+}
+
+/** Format refs context */
+function formatRefsContext(refs: Array<{ ref_type: string; repo: string; number?: number | null; ref?: string | null; status?: string | null; url?: string | null }>): string | null {
+  if (refs.length === 0) return null
+  const lines = refs.map(r => {
+    const num = r.number ? `#${r.number}` : r.ref || ''
+    const status = r.status ? ` (${r.status})` : ''
+    return `- ${r.ref_type} ${r.repo}${num}${status}${r.url ? ` — ${r.url}` : ''}`
+  })
+  return `[LINKED REFS]\n${lines.join('\n')}`
+}
+
+/** Estimate tokens from content */
+function estimateTokens(content: unknown): number {
+  if (typeof content === 'string') return Math.ceil(content.length / 4)
+  if (Array.isArray(content)) {
+    return (content as Array<{ type: string; text?: string }>)
+      .reduce((sum, b) => sum + (b.text ? Math.ceil(b.text.length / 4) : 0), 0)
+  }
+  if (content && typeof content === 'object') {
+    try { return Math.ceil(JSON.stringify(content).length / 4) } catch { return 0 }
+  }
+  return 0
+}
+
+describe('formatChannelAttribution', () => {
+  it('formats web channel for regular user', () => {
+    const event = makeEvent({ channel: 'web', actor: 'user' })
+    assert.equal(formatChannelAttribution(event), '[via Web]')
+  })
+
+  it('formats telegram channel for regular user', () => {
+    const event = makeEvent({ channel: 'telegram', actor: 'user' })
+    assert.equal(formatChannelAttribution(event), '[via Telegram]')
+  })
+
+  it('includes actor name for non-user/gigi actors', () => {
+    const event = makeEvent({ channel: 'gitea_comment', actor: '@mauro' })
+    assert.equal(formatChannelAttribution(event), '[via Gitea comment by @mauro]')
+  })
+
+  it('does not include actor for gigi', () => {
+    const event = makeEvent({ channel: 'web', actor: 'gigi' })
+    assert.equal(formatChannelAttribution(event), '[via Web]')
+  })
+
+  it('handles unknown channel type gracefully', () => {
+    const event = makeEvent({ channel: 'slack' as string })
+    assert.equal(formatChannelAttribution(event), '[via slack]')
+  })
+})
+
+describe('addChannelAttributionToContent', () => {
+  it('prepends attribution to text content blocks for inbound events', () => {
+    const event = makeEvent({
+      channel: 'telegram',
+      direction: 'inbound',
+      content: [{ type: 'text', text: 'Hello from phone' }],
+    })
+    const result = addChannelAttributionToContent(event, true) as Array<{ type: string; text: string }>
+    assert.equal(result[0].text, '[via Telegram] Hello from phone')
+  })
+
+  it('does NOT add attribution to outbound events', () => {
+    const event = makeEvent({
+      channel: 'web',
+      direction: 'outbound',
+      actor: 'gigi',
+      content: [{ type: 'text', text: 'Sure, I will help' }],
+    })
+    const result = addChannelAttributionToContent(event, true) as Array<{ type: string; text: string }>
+    assert.equal(result[0].text, 'Sure, I will help')
+  })
+
+  it('does NOT add attribution when disabled', () => {
+    const event = makeEvent({
+      channel: 'telegram',
+      direction: 'inbound',
+      content: [{ type: 'text', text: 'Hello' }],
+    })
+    const result = addChannelAttributionToContent(event, false) as Array<{ type: string; text: string }>
+    assert.equal(result[0].text, 'Hello')
+  })
+
+  it('handles string content', () => {
+    const event = makeEvent({
+      channel: 'telegram',
+      direction: 'inbound',
+      content: 'Plain string message',
+    })
+    const result = addChannelAttributionToContent(event, true)
+    assert.equal(result, '[via Telegram] Plain string message')
+  })
+
+  it('preserves non-text blocks while attributing the first text block', () => {
+    const event = makeEvent({
+      channel: 'gitea_review',
+      direction: 'inbound',
+      actor: '@reviewer',
+      content: [
+        { type: 'tool_result', id: 'x' },
+        { type: 'text', text: 'Looks good' },
+      ],
+    })
+    const result = addChannelAttributionToContent(event, true) as Array<{ type: string; text?: string }>
+    assert.equal(result[0].type, 'tool_result') // non-text preserved
+    assert.equal(result[1].text, '[via Gitea review by @reviewer] Looks good')
+  })
+})
+
+describe('formatRefsContext', () => {
+  it('formats multiple refs with status and URLs', () => {
+    const refs = [
+      { ref_type: 'issue', repo: 'gigi', number: 37, status: 'open', ref: null, url: 'http://gitea/gigi/issues/37' },
+      { ref_type: 'pr', repo: 'gigi', number: 31, status: 'merged', ref: null, url: 'http://gitea/gigi/pulls/31' },
+    ]
+    const result = formatRefsContext(refs)!
+    assert.ok(result.includes('[LINKED REFS]'))
+    assert.ok(result.includes('issue gigi#37 (open)'))
+    assert.ok(result.includes('pr gigi#31 (merged)'))
+  })
+
+  it('returns null for empty refs', () => {
+    assert.equal(formatRefsContext([]), null)
+  })
+
+  it('handles refs without number (e.g., branches)', () => {
+    const refs = [
+      { ref_type: 'branch', repo: 'gigi', number: null, ref: 'feat/dark-mode', status: null, url: null },
+    ]
+    const result = formatRefsContext(refs)!
+    assert.ok(result.includes('branch gigifeat/dark-mode'))
+  })
+})
+
+describe('estimateTokens', () => {
+  it('estimates tokens for a string (~4 chars per token)', () => {
+    const tokens = estimateTokens('Hello world!!') // 13 chars → 4 tokens
+    assert.equal(tokens, Math.ceil(13 / 4))
+  })
+
+  it('estimates tokens for content block arrays', () => {
+    const tokens = estimateTokens([
+      { type: 'text', text: 'Hello' },      // 5 chars
+      { type: 'text', text: 'World' },      // 5 chars
+    ]) // 10 chars → 3 tokens
+    assert.equal(tokens, Math.ceil(5 / 4) + Math.ceil(5 / 4))
+  })
+
+  it('returns 0 for null/undefined content', () => {
+    assert.equal(estimateTokens(null), 0)
+    assert.equal(estimateTokens(undefined), 0)
+  })
+
+  it('handles object content (JSON)', () => {
+    const tokens = estimateTokens({ key: 'value' })
+    assert.ok(tokens > 0)
+  })
+})
+
+describe('buildContextFromEvents (with attribution)', () => {
+  /** Enhanced buildContext that includes channel attribution */
+  function buildContextWithAttribution(
+    events: MockThreadEvent[],
+    refs: Array<{ ref_type: string; repo: string; number?: number | null; status?: string | null; ref?: string | null; url?: string | null }> = [],
+    enableAttribution = true,
+  ) {
+    const messages: Array<{ role: 'user' | 'assistant'; content: unknown }> = []
+    let totalTokens = 0
+
+    // Prepend refs
+    const refsText = formatRefsContext(refs)
+    if (refsText) {
+      const refsContent = [{ type: 'text', text: refsText }]
+      messages.push({ role: 'user', content: refsContent })
+      totalTokens += estimateTokens(refsContent)
+    }
+
+    for (const event of events) {
+      const role: 'user' | 'assistant' = event.direction === 'inbound' ? 'user' : 'assistant'
+      if (event.message_type === 'summary') {
+        const summaryText = extractEventText(event)
+        const metadata = event.metadata as Record<string, unknown>
+        const compactedCount = metadata?.compacted_count ?? metadata?.source_event_count ?? '?'
+        const content = [{ type: 'text', text: `[THREAD SUMMARY — ${compactedCount} earlier events condensed]\n${summaryText}` }]
+        messages.push({ role: 'user', content })
+        totalTokens += estimateTokens(content)
+        continue
+      }
+      const content = addChannelAttributionToContent(event, enableAttribution)
+      messages.push({ role, content })
+      totalTokens += estimateTokens(content)
+    }
+
+    const channels = [...new Set(events.map(e => e.channel))]
+    return { messages, estimatedTokens: totalTokens, eventCount: events.length, channels }
+  }
+
+  it('adds channel attribution to cross-channel events', () => {
+    const events = [
+      makeEvent({ channel: 'telegram', direction: 'inbound', content: [{ type: 'text', text: 'Add dark mode' }] }),
+      makeEvent({ channel: 'web', direction: 'outbound', actor: 'gigi', content: [{ type: 'text', text: 'Sure!' }] }),
+      makeEvent({ channel: 'gitea_comment', direction: 'inbound', actor: '@mauro', content: [{ type: 'text', text: 'Also add persistence' }] }),
+    ]
+    const result = buildContextWithAttribution(events)
+    assert.equal(result.messages.length, 3)
+    // Inbound telegram gets attribution
+    assert.ok((result.messages[0].content as Array<{ text: string }>)[0].text.includes('[via Telegram]'))
+    // Outbound from gigi: no attribution
+    assert.ok(!(result.messages[1].content as Array<{ text: string }>)[0].text.includes('[via'))
+    // Inbound gitea: attribution with actor
+    assert.ok((result.messages[2].content as Array<{ text: string }>)[0].text.includes('[via Gitea comment by @mauro]'))
+  })
+
+  it('includes linked refs as first message', () => {
+    const refs = [{ ref_type: 'issue', repo: 'gigi', number: 37, status: 'open', ref: null, url: null }]
+    const events = [makeEvent()]
+    const result = buildContextWithAttribution(events, refs)
+    assert.equal(result.messages.length, 2) // refs + 1 event
+    assert.ok((result.messages[0].content as Array<{ text: string }>)[0].text.includes('[LINKED REFS]'))
+    assert.equal(result.messages[0].role, 'user')
+  })
+
+  it('tracks channels present in context', () => {
+    const events = [
+      makeEvent({ channel: 'web' }),
+      makeEvent({ channel: 'telegram' }),
+      makeEvent({ channel: 'telegram' }),
+    ]
+    const result = buildContextWithAttribution(events)
+    assert.deepEqual(result.channels.sort(), ['telegram', 'web'])
+  })
+
+  it('estimates total token count', () => {
+    const events = [
+      makeEvent({ content: [{ type: 'text', text: 'Hello world from telegram' }] }),
+    ]
+    const result = buildContextWithAttribution(events)
+    assert.ok(result.estimatedTokens > 0)
+  })
+
+  it('works with attribution disabled', () => {
+    const events = [
+      makeEvent({ channel: 'telegram', direction: 'inbound', content: [{ type: 'text', text: 'No attribution' }] }),
+    ]
+    const result = buildContextWithAttribution(events, [], false)
+    assert.ok(!(result.messages[0].content as Array<{ text: string }>)[0].text.includes('[via'))
+  })
+})
+
 // ─── Compaction Logic Validation ────────────────────────────────────
 
 describe('Compaction logic validation', () => {
