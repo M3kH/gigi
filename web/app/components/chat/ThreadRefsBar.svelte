@@ -181,4 +181,12 @@
     color: var(--gigi-accent-blue);
     background: rgba(88, 166, 255, 0.05);
   }
+
+  /* ── Responsive ────────────────────────────────────────────────────── */
+  @media (max-width: 480px) {
+    .refs-bar {
+      padding: var(--gigi-space-xs);
+      gap: 3px;
+    }
+  }
 </style>

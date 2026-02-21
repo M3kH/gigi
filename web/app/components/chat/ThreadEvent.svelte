@@ -305,4 +305,20 @@
   }
   .event-content :global(a) { color: var(--gigi-accent-blue); text-decoration: none; }
   .event-content :global(a:hover) { text-decoration: underline; }
+
+  /* ── Responsive ────────────────────────────────────────────────────── */
+  @media (max-width: 480px) {
+    .event-message {
+      max-width: 95%;
+    }
+
+    .system-event {
+      max-width: 100%;
+    }
+
+    .event-meta {
+      flex-wrap: wrap;
+      gap: 2px var(--gigi-space-sm);
+    }
+  }
 </style>

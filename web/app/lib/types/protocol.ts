@@ -61,17 +61,20 @@ export type ClientMessage =
 export type AgentStartEvent = {
   type: 'agent_start'
   conversationId: string
+  channel?: string
 }
 
 export type TextChunkEvent = {
   type: 'text_chunk'
   conversationId?: string
+  channel?: string
   text: string
 }
 
 export type ToolUseEvent = {
   type: 'tool_use'
   conversationId?: string
+  channel?: string
   toolUseId: string
   name: string
   input: unknown
@@ -80,6 +83,7 @@ export type ToolUseEvent = {
 export type ToolResultEvent = {
   type: 'tool_result'
   conversationId?: string
+  channel?: string
   toolUseId: string
   result: string
 }
@@ -87,6 +91,7 @@ export type ToolResultEvent = {
 export type AgentDoneEvent = {
   type: 'agent_done'
   conversationId?: string
+  channel?: string
   cost: number | null
   duration: number
   turns: number
@@ -97,6 +102,7 @@ export type AgentDoneEvent = {
 export type AgentStoppedEvent = {
   type: 'agent_stopped'
   conversationId: string
+  channel?: string
 }
 
 export type TitleUpdateEvent = {

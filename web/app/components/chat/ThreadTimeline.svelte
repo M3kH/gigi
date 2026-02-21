@@ -43,6 +43,7 @@
   import AskUser from './AskUser.svelte'
   import SystemMessage from './SystemMessage.svelte'
   import ChannelBadge from './ChannelBadge.svelte'
+  import AddRefDialog from './AddRefDialog.svelte'
 
   const messages = $derived(getMessages())
   const dialogState = $derived(getDialogState())
@@ -55,6 +56,7 @@
   let threadRefs = $state<ThreadRef[]>([])
   let compactStatus = $state<CompactStatus | null>(null)
   let hasThreadEvents = $state(false)
+  let showAddRefDialog = $state(false)
 
   // Track previous dialog state to detect agent completion
   let prevDialogState = $state<string>('idle')
@@ -184,8 +186,13 @@
   }
 
   function handleAddRef() {
-    // TODO: implement add ref dialog
-    console.log('[thread] Add ref not yet implemented')
+    showAddRefDialog = true
+  }
+
+  async function handleRefAdded() {
+    if (activeId) {
+      threadRefs = await getThreadRefs(activeId)
+    }
   }
 
   async function handleLoadOriginalEvents() {
@@ -202,7 +209,7 @@
   {/if}
 
   <!-- Thread refs bar -->
-  {#if threadRefs.length > 0}
+  {#if threadRefs.length > 0 || (activeId && hasThreadEvents)}
     <ThreadRefsBar refs={threadRefs} onAddRef={handleAddRef} />
   {/if}
 
@@ -314,6 +321,15 @@
       <SystemMessage text={seg.text} />
     {/if}
   {/each}
+
+  <!-- Add ref dialog -->
+  {#if showAddRefDialog && activeId}
+    <AddRefDialog
+      threadId={activeId}
+      onClose={() => showAddRefDialog = false}
+      onAdded={handleRefAdded}
+    />
+  {/if}
 </div>
 
 <style>
@@ -483,5 +499,20 @@
   @keyframes typing {
     0%, 60%, 100% { opacity: 0.3; transform: translateY(0); }
     30% { opacity: 1; transform: translateY(-6px); }
+  }
+
+  /* ── Responsive: narrow panels / mobile ───────────────────────────── */
+  @media (max-width: 480px) {
+    .messages-area {
+      padding: var(--gigi-space-sm);
+    }
+
+    .message, .live-tool {
+      max-width: 95%;
+    }
+
+    .lineage-children {
+      font-size: 0.65rem;
+    }
   }
 </style>

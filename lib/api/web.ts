@@ -479,6 +479,38 @@ export const createApp = (): Hono => {
     }
   })
 
+  // Add a ref to a thread
+  app.post('/api/threads/:id/refs', async (c) => {
+    const threadId = c.req.param('id')
+    const body = await c.req.json<{ ref_type: string; repo: string; number?: number; ref?: string; url?: string; status?: string }>()
+    try {
+      const ref = await threads.addThreadRef(threadId, {
+        ref_type: body.ref_type as threads.ThreadRefType,
+        repo: body.repo,
+        number: body.number,
+        ref: body.ref,
+        url: body.url,
+        status: body.status,
+      })
+      return c.json(ref, 201)
+    } catch (err) {
+      const msg = (err as Error).message
+      return c.json({ error: msg }, 400)
+    }
+  })
+
+  // Remove a ref from a thread
+  app.delete('/api/threads/:id/refs/:refId', async (c) => {
+    const refId = c.req.param('refId')
+    try {
+      await threads.removeThreadRef(refId)
+      return c.json({ ok: true })
+    } catch (err) {
+      const msg = (err as Error).message
+      return c.json({ error: msg }, 400)
+    }
+  })
+
   // Gitea proxy endpoints (for frontend SPA)
   app.route('/api/gitea', createGiteaProxy())
 

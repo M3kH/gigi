@@ -589,6 +589,7 @@ function mapConversation(raw: any): Conversation {
     usageCost: raw.usage_cost ? Number(raw.usage_cost) : undefined,
     usageInputTokens: raw.usage_input_tokens ? Number(raw.usage_input_tokens) : undefined,
     usageOutputTokens: raw.usage_output_tokens ? Number(raw.usage_output_tokens) : undefined,
+    refCount: raw.ref_count ? Number(raw.ref_count) : undefined,
   }
 }
 

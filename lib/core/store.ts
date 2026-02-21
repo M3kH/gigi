@@ -307,7 +307,8 @@ export const listConversations = async (
        lm.preview AS last_message_preview,
        u.total_cost AS usage_cost,
        u.input_tokens AS usage_input_tokens,
-       u.output_tokens AS usage_output_tokens
+       u.output_tokens AS usage_output_tokens,
+       COALESCE(rc.ref_count, 0)::int AS ref_count
      FROM conversations c
      LEFT JOIN LATERAL (
        SELECT LEFT(
@@ -334,6 +335,12 @@ export const listConversations = async (
        FROM messages
        WHERE conversation_id = c.id AND usage IS NOT NULL
      ) u ON true
+     LEFT JOIN LATERAL (
+       SELECT COUNT(*)::int AS ref_count
+       FROM thread_refs tr
+       JOIN threads t ON t.id = tr.thread_id
+       WHERE t.conversation_id = c.id
+     ) rc ON true
      ${where}
      ORDER BY c.updated_at DESC
      LIMIT $${i}`,

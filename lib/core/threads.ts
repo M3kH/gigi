@@ -525,7 +525,7 @@ export const forkThread = async (
 
   // 4. Create the new thread
   const newThread = await createThread({
-    topic: forkTopic,
+    topic: forkTopic ?? undefined,
     status: 'paused',
     parent_thread_id: sourceId,
     fork_point_event_id: forkPointEventId ?? undefined,

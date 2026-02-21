@@ -23,6 +23,7 @@ export interface Conversation {
   usageCost?: number
   usageInputTokens?: number
   usageOutputTokens?: number
+  refCount?: number
 }
 
 // ── Message ─────────────────────────────────────────────────────────

@@ -235,6 +235,9 @@
         {#each conv.tags.slice(0, 2) as tag}
           <span class="chat-tag">{tag}</span>
         {/each}
+        {#if conv.refCount && conv.refCount > 0}
+          <span class="meta-refs" title="{conv.refCount} linked ref{conv.refCount > 1 ? 's' : ''}">🔗{conv.refCount}</span>
+        {/if}
         <span class="meta-spacer"></span>
         {#if conv.usageCost}
           <span class="meta-cost" title="{formatTokens(conv.usageInputTokens)} in / {formatTokens(conv.usageOutputTokens)} out">
@@ -586,6 +589,12 @@
     background: var(--gigi-bg-tertiary);
     padding: 0 4px;
     border-radius: 3px;
+    flex-shrink: 0;
+  }
+
+  .meta-refs {
+    font-size: 9px;
+    color: var(--gigi-accent-blue);
     flex-shrink: 0;
   }
 

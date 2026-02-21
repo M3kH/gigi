@@ -311,9 +311,9 @@ export const handleMessage = async (
     }
   }
 
-  // Wrap onEvent to inject conversationId and broadcast to event bus
+  // Wrap onEvent to inject conversationId and channel, then broadcast
   const wrappedOnEvent: EventCallback = (event) => {
-    const enriched = { ...event, conversationId: convId } as import('./events').AgentEvent
+    const enriched: import('./events').AgentEvent = { ...event, type: event.type as string, conversationId: convId, channel }
     try { emit(enriched) } catch (err) {
       console.error('[router] emit error:', (err as Error).message)
     }
