@@ -3,6 +3,8 @@
  *
  * Listens to meaningful webhook events and sends templated Telegram messages.
  * Only notifies for significant events — not every push or edit.
+ *
+ * Also provides thread-aware cross-channel notifications (see #45).
  */
 
 import type { Bot } from 'grammy'
@@ -156,6 +158,57 @@ export const notifyWebhook = async (event: string, payload: WebhookPayload): Pro
       return true
     } catch (retryErr) {
       console.error(`[webhookNotifier] Failed to send notification:`, (retryErr as Error).message)
+      return false
+    }
+  }
+}
+
+// ─── Thread-Aware Cross-Channel Notifications ────────────────────────
+
+/**
+ * Send a thread-aware Telegram notification for a webhook event.
+ *
+ * Unlike notifyWebhook() which fires for all webhook events, this is
+ * triggered by the response routing system when a webhook event occurs
+ * on a thread that has Telegram activity. It includes thread context
+ * so the user can connect it to their conversation.
+ *
+ * @see Issue #45 — Cross-channel response routing and notifications
+ */
+export const notifyThreadEvent = async (
+  event: string,
+  payload: WebhookPayload,
+  threadTopic: string | null,
+): Promise<boolean> => {
+  if (!bot) return false
+
+  // Don't send thread notifications for our own actions
+  const sender = payload.sender?.login || payload.pusher?.login || ''
+  if (sender === 'gigi') return false
+
+  const chatId = await getConfig('telegram_chat_id')
+  if (!chatId) return false
+
+  // Build thread-aware notification
+  const baseMessage = formatNotification(event, payload)
+  const threadContext = threadTopic
+    ? `\n🧵 _Thread: ${escapeMarkdown(threadTopic)}_`
+    : ''
+  const message = `${baseMessage}${threadContext}`
+
+  try {
+    await bot.api.sendMessage(chatId, message, { parse_mode: 'Markdown' })
+    console.log(`[webhookNotifier] Sent thread-aware Telegram notification for ${event} (thread: ${threadTopic})`)
+    return true
+  } catch {
+    // Retry without markdown
+    try {
+      const plainMessage = message.replace(/[*_`\[\]()]/g, '')
+      await bot.api.sendMessage(chatId, plainMessage)
+      console.log(`[webhookNotifier] Sent thread-aware notification (plain) for ${event}`)
+      return true
+    } catch (retryErr) {
+      console.error(`[webhookNotifier] Thread notification failed:`, (retryErr as Error).message)
       return false
     }
   }

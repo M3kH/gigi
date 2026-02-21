@@ -10,7 +10,13 @@ import * as store from '../core/store'
 import * as threads from '../core/threads'
 import { runAgent } from '../core/agent'
 import { emit } from '../core/events'
-import { notifyWebhook } from './webhookNotifier'
+import { notifyWebhook, notifyThreadEvent } from './webhookNotifier'
+import {
+  determineRouting,
+  isSignificantEvent,
+  buildDeliveryMetadata,
+  getThreadActiveChannels,
+} from '../core/response-routing'
 
 import type { AgentMessage } from '../core/agent'
 import type { WebhookPayload, WebhookResult } from './webhooks'
@@ -270,23 +276,55 @@ export const routeWebhook = async (event: string, payload: WebhookPayload): Prom
     message_type: 'webhook',
   })
 
-  // Store as thread event too
+  // Store as thread event with delivery metadata
   if (threadId) {
     try {
+      // Determine cross-channel routing for this webhook event
+      const threadChannels = await getThreadActiveChannels(threadId, store.getPool)
+      const routing = determineRouting('webhook', threadChannels)
+
+      const deliveredTo: threads.ThreadEventChannel[] = ['webhook']
+
+      // Check if we should cross-post to other channels
+      const shouldCrossPost = routing.notify && routing.notify.length > 0 && (
+        routing.notifyCondition === 'always' ||
+        (routing.notifyCondition === 'significant' && isSignificantEvent(
+          'webhook',
+          systemMessage,
+          { event, action: payload.action },
+        ))
+      )
+
+      if (shouldCrossPost && routing.notify) {
+        deliveredTo.push(...routing.notify)
+      }
+
+      const deliveryMeta = buildDeliveryMetadata('webhook', deliveredTo)
+
       await threads.addThreadEvent(threadId, {
         channel: 'webhook',
         direction: 'inbound',
         actor: payload.sender?.login || payload.pusher?.login || 'system',
         content: [{ type: 'text', text: systemMessage }],
         message_type: 'webhook',
-        metadata: { event, action: payload.action },
+        metadata: { event, action: payload.action, delivery: deliveryMeta },
       })
+
+      // Cross-channel notification: send thread-aware Telegram notification
+      // This is different from the generic notifyWebhook — it includes thread context
+      if (shouldCrossPost && routing.notify?.includes('telegram')) {
+        const thread = await threads.getThread(threadId)
+        notifyThreadEvent(event, payload, thread?.topic || null).catch(err =>
+          console.warn('[webhookRouter] Cross-channel Telegram notification failed:', (err as Error).message)
+        )
+      }
     } catch (err) {
       console.warn('[webhookRouter] Thread event failed:', (err as Error).message)
     }
   }
 
-  // Send Telegram notification for significant events (fire-and-forget)
+  // Send generic Telegram notification for significant events (fire-and-forget)
+  // This fires for ALL webhook events regardless of thread — existing behavior
   notifyWebhook(event, payload).catch(err =>
     console.warn('[webhookRouter] Telegram notification failed:', (err as Error).message)
   )
@@ -441,9 +479,10 @@ const checkAndInvokeAgent = async (
       triggered_by: 'github_mention',
     } as store.MessageExtras)
 
-    // Store agent response as thread event
+    // Store agent response as thread event with delivery metadata
     if (threadId) {
       try {
+        const deliveryMeta = buildDeliveryMetadata('gitea_comment', ['gitea_comment'])
         await threads.addThreadEvent(threadId, {
           channel: 'gitea_comment',
           direction: 'outbound',
@@ -451,6 +490,7 @@ const checkAndInvokeAgent = async (
           content: [{ type: 'text', text: response.text }],
           message_type: 'text',
           usage: response.usage || undefined,
+          metadata: { delivery: deliveryMeta },
         })
       } catch { /* ignore */ }
     }

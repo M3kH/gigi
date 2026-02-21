@@ -20,6 +20,12 @@ import { buildThreadContext, shouldCompact, type BuildContextResult } from './th
 import type { ViewContext } from './protocol'
 import { createGiteaClient } from '../api-gitea'
 import { classifyMessage, type RoutingDecision } from './llm-router'
+import {
+  determineRouting,
+  isSignificantEvent,
+  buildDeliveryMetadata,
+  getThreadActiveChannels,
+} from './response-routing'
 
 // Active conversations per channel key (e.g. "telegram:12345", "web:uuid")
 const active = new Map<string, string>()
@@ -419,7 +425,21 @@ export const handleMessage = async (
     usage: response.usage || undefined,
   })
 
-  // Store assistant response as thread event too
+  // ── Response Routing: determine delivery channels ──────────────
+  const threadChannels = await getThreadActiveChannels(threadId, store.getPool)
+  const responseRouting = determineRouting(
+    channel as threads.ThreadEventChannel,
+    threadChannels,
+  )
+
+  // Build delivery metadata — start with primary channel
+  const deliveredTo: threads.ThreadEventChannel[] = [responseRouting.primary]
+  const deliveryMeta = buildDeliveryMetadata(
+    channel as threads.ThreadEventChannel,
+    deliveredTo,
+  )
+
+  // Store assistant response as thread event with delivery metadata
   try {
     await threads.addThreadEvent(threadId, {
       channel: channel as threads.ThreadEventChannel,
@@ -428,6 +448,7 @@ export const handleMessage = async (
       content: storedContent,
       message_type: 'text',
       usage: response.usage || undefined,
+      metadata: { delivery: deliveryMeta },
     })
   } catch (err) {
     console.warn('[router] Thread event (assistant) failed:', (err as Error).message)
