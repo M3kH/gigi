@@ -63,6 +63,7 @@ services:
       - "5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
+      - ./scripts/init-test-db.sql:/docker-entrypoint-initdb.d/20-init-test-db.sql:ro
     networks:
       - gigi-local
     healthcheck:
