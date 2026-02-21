@@ -17,6 +17,8 @@ import { createGiteaProxy } from './gitea-proxy'
 import { askUser } from '../core/ask-user'
 import { startAwmScheduler, stopAwmScheduler, getAwmStatus } from '../core/awm-scheduler'
 import * as store from '../core/store'
+import * as threads from '../core/threads'
+import { compactThread, forkCompactThread, buildThreadContext, shouldCompact } from '../core/thread-compact'
 
 export const createApp = (): Hono => {
   const app = new Hono()
@@ -358,6 +360,109 @@ export const createApp = (): Hono => {
     }
 
     return c.json({ ok: true, ...getAwmStatus() })
+  })
+
+  // ── Thread API ─────────────────────────────────────────────────────
+
+  // List threads
+  app.get('/api/threads', async (c) => {
+    const status = c.req.query('status') as threads.ThreadStatus | undefined
+    const archivedParam = c.req.query('archived')
+    const archived = archivedParam === 'true' ? true : archivedParam === 'false' ? false : undefined
+    const limit = parseInt(c.req.query('limit') || '50')
+    const list = await threads.listThreads({ status, archived, limit })
+    return c.json(list)
+  })
+
+  // Get a single thread with refs
+  app.get('/api/threads/:id', async (c) => {
+    const thread = await threads.getThread(c.req.param('id'))
+    if (!thread) return c.json({ error: 'not found' }, 404)
+    return c.json(thread)
+  })
+
+  // Get thread events (timeline)
+  app.get('/api/threads/:id/events', async (c) => {
+    const threadId = c.req.param('id')
+    const includeCompacted = c.req.query('include_compacted') === 'true'
+    const channel = c.req.query('channel') as threads.ThreadEventChannel | undefined
+    const limit = parseInt(c.req.query('limit') || '100')
+    const offset = parseInt(c.req.query('offset') || '0')
+
+    const events = await threads.getThreadEvents(threadId, {
+      include_compacted: includeCompacted,
+      channel,
+      limit,
+      offset,
+    })
+    return c.json(events)
+  })
+
+  // Compact a thread (in-place or fork)
+  app.post('/api/threads/:id/compact', async (c) => {
+    const threadId = c.req.param('id')
+    const body = await c.req.json<{ mode?: 'in-place' | 'fork'; keep_recent?: number; topic?: string }>()
+    const mode = body.mode || 'in-place'
+
+    try {
+      if (mode === 'fork') {
+        const result = await forkCompactThread(threadId, { topic: body.topic })
+        return c.json(result)
+      } else {
+        const result = await compactThread(threadId, { keep_recent: body.keep_recent })
+        return c.json(result)
+      }
+    } catch (err) {
+      const message = (err as Error).message
+      const status = message.includes('not found') ? 404 : 400
+      return c.json({ error: message }, status)
+    }
+  })
+
+  // Check if a thread should be compacted
+  app.get('/api/threads/:id/compact-status', async (c) => {
+    const threadId = c.req.param('id')
+    const threshold = parseInt(c.req.query('threshold') || '20')
+    const status = await shouldCompact(threadId, threshold)
+    return c.json(status)
+  })
+
+  // Build context for a thread (useful for debugging)
+  app.get('/api/threads/:id/context', async (c) => {
+    const threadId = c.req.param('id')
+    const context = await buildThreadContext(threadId)
+    return c.json({ messages: context, count: context.length })
+  })
+
+  // Thread usage analytics
+  app.get('/api/threads/:id/usage', async (c) => {
+    const threadId = c.req.param('id')
+    const usage = await threads.getThreadUsage(threadId)
+    return c.json(usage)
+  })
+
+  // Thread lineage (parent, children, fork point)
+  app.get('/api/threads/:id/lineage', async (c) => {
+    const threadId = c.req.param('id')
+    const thread = await threads.getThread(threadId)
+    if (!thread) return c.json({ error: 'not found' }, 404)
+
+    // Get parent if exists
+    let parent: threads.ThreadWithRefs | null = null
+    if (thread.parent_thread_id) {
+      parent = await threads.getThread(thread.parent_thread_id)
+    }
+
+    // Get children (threads forked from this one)
+    const allThreads = await threads.listThreads({ limit: 200 })
+    const children = allThreads.filter(t => t.parent_thread_id === threadId)
+
+    return c.json({
+      thread: { id: thread.id, topic: thread.topic },
+      parent: parent ? { id: parent.id, topic: parent.topic } : null,
+      children: children.map(t => ({ id: t.id, topic: t.topic })),
+      fork_point_event_id: thread.fork_point_event_id,
+    })
   })
 
   // Gitea proxy endpoints (for frontend SPA)
