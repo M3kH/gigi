@@ -1,7 +1,7 @@
 /**
  * Thread Data Model Tests
  *
- * Tests for the thread store module types, migration tag parsing logic,
+ * Tests for the thread store module types, tag parsing logic,
  * and thread status transitions.
  *
  * Pure function tests — no database calls required. These validate the
@@ -11,7 +11,7 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 
-// ─── Tag Parsing Logic (mirrors migrateConversationsToThreads) ──────
+// ─── Tag Parsing Logic ─────────────────────────────────────────────
 
 interface ParsedRef {
   ref_type: 'issue' | 'pr'
@@ -21,7 +21,7 @@ interface ParsedRef {
 
 /**
  * Parse conversation tags into thread refs.
- * Mirrors the logic in migrateConversationsToThreads().
+ * Parses conversation tags into thread ref structures.
  */
 function parseTagsToRefs(tags: string[], convRepo: string | null): ParsedRef[] {
   const refs: ParsedRef[] = []
