@@ -157,6 +157,64 @@ const migrate = async (): Promise<void> => {
 
     ALTER TABLE conversations ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ;
     CREATE INDEX IF NOT EXISTS idx_conversations_archived ON conversations(archived_at) WHERE archived_at IS NOT NULL;
+
+    -- ─── Thread tables (cross-channel unified model) ───────────────
+
+    CREATE TABLE IF NOT EXISTS threads (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      topic TEXT,
+      status TEXT NOT NULL DEFAULT 'paused',
+      session_id TEXT,
+      summary TEXT,
+      parent_thread_id UUID REFERENCES threads(id),
+      fork_point_event_id UUID,
+      created_at TIMESTAMPTZ DEFAULT now(),
+      updated_at TIMESTAMPTZ DEFAULT now(),
+      closed_at TIMESTAMPTZ,
+      archived_at TIMESTAMPTZ
+    );
+
+    CREATE TABLE IF NOT EXISTS thread_refs (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      thread_id UUID NOT NULL REFERENCES threads(id) ON DELETE CASCADE,
+      ref_type TEXT NOT NULL,
+      repo TEXT NOT NULL,
+      number INT,
+      ref TEXT,
+      url TEXT,
+      status TEXT,
+      created_at TIMESTAMPTZ DEFAULT now()
+    );
+
+    CREATE TABLE IF NOT EXISTS thread_events (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      thread_id UUID NOT NULL REFERENCES threads(id) ON DELETE CASCADE,
+      channel TEXT NOT NULL,
+      direction TEXT NOT NULL,
+      actor TEXT NOT NULL,
+      content JSONB NOT NULL,
+      message_type TEXT DEFAULT 'text',
+      usage JSONB,
+      metadata JSONB DEFAULT '{}',
+      is_compacted BOOLEAN DEFAULT false,
+      created_at TIMESTAMPTZ DEFAULT now()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_thread_events_thread ON thread_events(thread_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_thread_refs_lookup ON thread_refs(repo, ref_type, number);
+    CREATE INDEX IF NOT EXISTS idx_threads_status ON threads(status);
+    CREATE INDEX IF NOT EXISTS idx_threads_updated ON threads(updated_at DESC);
+
+    -- Unique constraint for thread_refs to prevent duplicate links
+    DO $$ BEGIN
+      ALTER TABLE thread_refs ADD CONSTRAINT uq_thread_refs_link
+        UNIQUE(thread_id, ref_type, repo, number);
+    EXCEPTION WHEN duplicate_table THEN NULL;
+    END $$;
+
+    -- Add conversation_id to threads for migration backward-compat
+    ALTER TABLE threads ADD COLUMN IF NOT EXISTS conversation_id UUID REFERENCES conversations(id);
+    CREATE INDEX IF NOT EXISTS idx_threads_conversation ON threads(conversation_id) WHERE conversation_id IS NOT NULL;
   `)
 }
 
