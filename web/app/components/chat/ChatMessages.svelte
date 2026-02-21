@@ -7,11 +7,14 @@
    * - Live streaming segments in chronological order
    * - Typing indicator
    */
-  import type { StreamSegment, ChatMessage as ChatMessageType } from '$lib/types/chat'
+  import type { StreamSegment, ChatMessage as ChatMessageType, ThreadLineage } from '$lib/types/chat'
   import {
     getMessages,
     getDialogState,
     getStreamSegments,
+    getActiveConversationId,
+    getThreadLineage,
+    selectConversation,
   } from '$lib/stores/chat.svelte'
   import { renderMarkdown, highlightAll } from '$lib/utils/markdown'
   import { getToolDescription } from '$lib/utils/tool-descriptions'
@@ -24,6 +27,24 @@
   const messages = $derived(getMessages())
   const dialogState = $derived(getDialogState())
   const segments = $derived(getStreamSegments())
+  const activeId = $derived(getActiveConversationId())
+
+  // Thread lineage state
+  let lineage = $state<ThreadLineage | null>(null)
+
+  // Fetch lineage when active conversation changes
+  $effect(() => {
+    const id = activeId
+    if (id) {
+      getThreadLineage(id).then(l => { lineage = l })
+    } else {
+      lineage = null
+    }
+  })
+
+  function navigateToThread(threadId: string) {
+    selectConversation(threadId)
+  }
 
   let messagesEl: HTMLDivElement | undefined = $state()
 
@@ -90,6 +111,33 @@
 </script>
 
 <div class="messages-area" bind:this={messagesEl}>
+  <!-- Fork lineage banner -->
+  {#if lineage?.parent || (lineage?.children && lineage.children.length > 0)}
+    <div class="lineage-banner">
+      {#if lineage?.parent}
+        <span class="lineage-item">
+          <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor" class="lineage-icon">
+            <path d="M5 3.25a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Zm-1.72 1.97a2.25 2.25 0 1 0-1.06 0C2.08 6.45 2 7.69 2 8v.75c0 1.107.608 2.076 1.508 2.585a2.25 2.25 0 1 0 1.042-.044A1.75 1.75 0 0 1 3.5 9.75V8c0-.536.034-1.058.272-1.78h-.002ZM5 12.75a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Zm7.772-1.72a.75.75 0 1 0-1.042.044c.9.509 1.508 1.478 1.508 2.585v.341h-.002A2.25 2.25 0 1 0 14 12.75v-.75c0-.311-.08-1.55-.228-2.78ZM11.25 3a.75.75 0 1 1 0 1.5.75.75 0 0 1 0-1.5Zm0 10.5a.75.75 0 1 1 0 1.5.75.75 0 0 1 0-1.5Z"/>
+          </svg>
+          Forked from
+          <button class="lineage-link" onclick={() => navigateToThread(lineage!.parent!.id)}>
+            {lineage.parent.topic || 'parent thread'}
+          </button>
+        </span>
+      {/if}
+      {#if lineage?.children && lineage.children.length > 0}
+        <span class="lineage-item">
+          {lineage.children.length} fork{lineage.children.length > 1 ? 's' : ''}:
+          {#each lineage.children as child, i}
+            <button class="lineage-link" onclick={() => navigateToThread(child.id)}>
+              {child.topic || `Fork ${i + 1}`}
+            </button>{#if i < lineage.children.length - 1}, {/if}
+          {/each}
+        </span>
+      {/if}
+    </div>
+  {/if}
+
   {#if messages.length === 0 && segments.length === 0 && dialogState === 'idle'}
     <p class="empty-state">Send a message to get started</p>
   {:else}
@@ -226,6 +274,51 @@
 
   :global(.chat-full) .live-tool {
     max-width: 95%;
+  }
+
+  /* Lineage banner */
+  .lineage-banner {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--gigi-space-xs) var(--gigi-space-md);
+    padding: var(--gigi-space-xs) var(--gigi-space-sm);
+    margin-bottom: var(--gigi-space-md);
+    background: var(--gigi-bg-tertiary);
+    border: 1px solid var(--gigi-border-muted);
+    border-radius: var(--gigi-radius-md);
+    font-size: var(--gigi-font-size-xs);
+    color: var(--gigi-text-muted);
+    align-items: center;
+  }
+
+  .lineage-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: wrap;
+  }
+
+  .lineage-icon {
+    opacity: 0.6;
+    flex-shrink: 0;
+  }
+
+  .lineage-link {
+    background: none;
+    border: none;
+    color: var(--gigi-accent-purple, #a371f7);
+    cursor: pointer;
+    padding: 0;
+    font-size: inherit;
+    font-family: inherit;
+    text-decoration: underline;
+    text-decoration-style: dotted;
+    text-underline-offset: 2px;
+  }
+
+  .lineage-link:hover {
+    color: var(--gigi-accent-blue);
+    text-decoration-style: solid;
   }
 
   /* Date separator */

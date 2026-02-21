@@ -441,28 +441,37 @@ export const createApp = (): Hono => {
     return c.json(usage)
   })
 
+  // Fork a thread (full copy or compact)
+  app.post('/api/threads/:id/fork', async (c) => {
+    const sourceId = c.req.param('id')
+    const body = await c.req.json().catch(() => ({}))
+    const { topic, at_event_id, compact } = body as {
+      topic?: string
+      at_event_id?: string
+      compact?: boolean
+    }
+
+    try {
+      const forked = await threads.forkThread(sourceId, { topic, at_event_id, compact })
+      return c.json(forked, 201)
+    } catch (err) {
+      const msg = (err as Error).message
+      if (msg.includes('not found')) return c.json({ error: msg }, 404)
+      return c.json({ error: msg }, 500)
+    }
+  })
+
   // Thread lineage (parent, children, fork point)
   app.get('/api/threads/:id/lineage', async (c) => {
     const threadId = c.req.param('id')
-    const thread = await threads.getThread(threadId)
-    if (!thread) return c.json({ error: 'not found' }, 404)
-
-    // Get parent if exists
-    let parent: threads.ThreadWithRefs | null = null
-    if (thread.parent_thread_id) {
-      parent = await threads.getThread(thread.parent_thread_id)
+    try {
+      const lineage = await threads.getThreadLineage(threadId)
+      return c.json(lineage)
+    } catch (err) {
+      const msg = (err as Error).message
+      if (msg.includes('not found')) return c.json({ error: msg }, 404)
+      return c.json({ error: msg }, 500)
     }
-
-    // Get children (threads forked from this one)
-    const allThreads = await threads.listThreads({ limit: 200 })
-    const children = allThreads.filter(t => t.parent_thread_id === threadId)
-
-    return c.json({
-      thread: { id: thread.id, topic: thread.topic },
-      parent: parent ? { id: parent.id, topic: parent.topic } : null,
-      children: children.map(t => ({ id: t.id, topic: t.topic })),
-      fork_point_event_id: thread.fork_point_event_id,
-    })
   })
 
   // Gitea proxy endpoints (for frontend SPA)

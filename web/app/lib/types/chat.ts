@@ -89,6 +89,47 @@ export type StreamSegment =
   | { type: 'ask_user'; questionId: string; question: string; options: string[]; answer?: string; answeredAt?: number }
   | { type: 'system'; text: string; event?: string; action?: string; repo?: string }
 
+// ── Thread lineage (fork tracking) ──────────────────────────────────
+
+export interface ThreadRef {
+  id: string
+  thread_id: string
+  ref_type: 'issue' | 'pr' | 'commit' | 'branch'
+  repo: string
+  number: number | null
+  ref: string | null
+  url: string | null
+  status: string | null
+  created_at: string
+}
+
+export interface ThreadLineageThread {
+  id: string
+  topic: string | null
+  status: ThreadStatus
+  parent_thread_id: string | null
+  fork_point_event_id: string | null
+  created_at: string
+  refs: ThreadRef[]
+}
+
+export interface ThreadEvent {
+  id: string
+  thread_id: string
+  channel: string
+  direction: string
+  actor: string
+  content: unknown
+  message_type: string
+  created_at: string
+}
+
+export interface ThreadLineage {
+  parent: ThreadLineageThread | null
+  fork_point: ThreadEvent | null
+  children: ThreadLineageThread[]
+}
+
 // ── Chat dialog state ───────────────────────────────────────────────
 
 export type DialogState = 'idle' | 'thinking' | 'streaming' | 'tool_running' | 'waiting_for_user'

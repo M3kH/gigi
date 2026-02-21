@@ -17,6 +17,7 @@ import type {
   DialogState,
   TokenUsage,
   ThreadStatus,
+  ThreadLineage,
 } from '$lib/types/chat'
 import type { ServerMessage } from '$lib/types/protocol'
 import { fetchBoard } from '$lib/stores/kanban.svelte'
@@ -201,6 +202,46 @@ export async function deleteConversation(convId: string): Promise<void> {
     }
   } catch (err) {
     console.error('[chat] Delete failed:', err)
+  }
+}
+
+/**
+ * Fork a conversation/thread — creates a copy to explore alternate directions.
+ * Navigates to the forked thread after creation.
+ */
+export async function forkConversation(convId: string, opts?: { topic?: string; compact?: boolean }): Promise<string | null> {
+  try {
+    const res = await fetch(`/api/threads/${convId}/fork`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        topic: opts?.topic,
+        compact: opts?.compact ?? false,
+      }),
+    })
+    if (!res.ok) {
+      console.error('[chat] Fork failed:', res.status)
+      return null
+    }
+    const forked = await res.json()
+    // Refresh conversation list and select the fork
+    await loadConversations()
+    await selectConversation(forked.id)
+    return forked.id
+  } catch (err) {
+    console.error('[chat] Fork failed:', err)
+    return null
+  }
+}
+
+/**
+ * Fetch lineage info for a thread (parent, children, fork point).
+ */
+export async function getThreadLineage(threadId: string): Promise<ThreadLineage | null> {
+  try {
+    return await apiFetch<ThreadLineage>(`/api/threads/${threadId}/lineage`)
+  } catch {
+    return null
   }
 }
 

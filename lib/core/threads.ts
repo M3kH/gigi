@@ -108,6 +108,18 @@ export interface ThreadListFilters {
   limit?: number
 }
 
+export interface ForkThreadOpts {
+  topic?: string
+  at_event_id?: string  // Fork at a specific event (default: HEAD)
+  compact?: boolean     // If true, store a summary instead of copying events
+}
+
+export interface ThreadLineage {
+  parent: ThreadWithRefs | null
+  fork_point: ThreadEvent | null
+  children: ThreadWithRefs[]
+}
+
 // ─── Thread CRUD ────────────────────────────────────────────────────
 
 /**
@@ -463,4 +475,147 @@ export const getThreadUsage = async (threadId: string): Promise<{
     total_cost: parseFloat(rows[0].total_cost),
     event_count: parseInt(rows[0].event_count),
   }
+}
+
+// ─── Thread Fork ─────────────────────────────────────────────────────
+
+/**
+ * Fork a thread at HEAD or at a specific event.
+ *
+ * Creates a new thread with `parent_thread_id` pointing to the source.
+ * Events up to the fork point are copied into the new thread (Option A — simple copy).
+ * All thread_refs are also copied. The new thread gets no session_id (fresh start).
+ *
+ * If `compact` is true, instead of copying events, we store just the
+ * source thread's summary in the new thread's summary field.
+ */
+export const forkThread = async (
+  sourceId: string,
+  opts: ForkThreadOpts = {}
+): Promise<ThreadWithRefs> => {
+  const pool = getPool()
+
+  // 1. Verify source thread exists
+  const source = await getThread(sourceId)
+  if (!source) throw new Error(`Thread ${sourceId} not found`)
+
+  // 2. Determine fork point
+  let forkPointEventId: string | null = null
+
+  if (opts.at_event_id) {
+    // Verify the event exists and belongs to this thread
+    const { rows: eventRows } = await pool.query(
+      'SELECT id FROM thread_events WHERE id = $1 AND thread_id = $2',
+      [opts.at_event_id, sourceId]
+    )
+    if (!eventRows[0]) throw new Error(`Event ${opts.at_event_id} not found in thread ${sourceId}`)
+    forkPointEventId = opts.at_event_id
+  } else {
+    // Fork at HEAD — get the last event
+    const { rows: lastEvent } = await pool.query(
+      'SELECT id FROM thread_events WHERE thread_id = $1 ORDER BY created_at DESC LIMIT 1',
+      [sourceId]
+    )
+    forkPointEventId = lastEvent[0]?.id ?? null
+  }
+
+  // 3. Build topic for the fork
+  const forkTopic = opts.topic
+    ?? (source.topic ? `Fork of: ${source.topic}` : null)
+
+  // 4. Create the new thread
+  const newThread = await createThread({
+    topic: forkTopic,
+    status: 'paused',
+    parent_thread_id: sourceId,
+    fork_point_event_id: forkPointEventId ?? undefined,
+  })
+
+  // 5. Copy events or set summary
+  if (opts.compact) {
+    // Fork-compact: use the source summary (or generate a placeholder)
+    const summary = source.summary ?? `Forked from thread "${source.topic ?? sourceId}" (compact — original events not copied)`
+    await updateThreadSummary(newThread.id, summary)
+  } else if (forkPointEventId) {
+    // Copy events up to and including the fork point
+    // We get the fork point's created_at to determine the cutoff
+    const { rows: forkEvent } = await pool.query(
+      'SELECT created_at FROM thread_events WHERE id = $1',
+      [forkPointEventId]
+    )
+    const cutoff = forkEvent[0]?.created_at
+
+    if (cutoff) {
+      await pool.query(
+        `INSERT INTO thread_events (thread_id, channel, direction, actor, content, message_type, usage, metadata, is_compacted, created_at)
+         SELECT $2, channel, direction, actor, content, message_type, usage, metadata, is_compacted, created_at
+         FROM thread_events
+         WHERE thread_id = $1 AND created_at <= $3
+         ORDER BY created_at ASC`,
+        [sourceId, newThread.id, cutoff]
+      )
+    }
+  }
+
+  // 6. Copy thread_refs from source
+  if (source.refs.length > 0) {
+    for (const ref of source.refs) {
+      await addThreadRef(newThread.id, {
+        ref_type: ref.ref_type,
+        repo: ref.repo,
+        number: ref.number ?? undefined,
+        ref: ref.ref ?? undefined,
+        url: ref.url ?? undefined,
+        status: ref.status ?? undefined,
+      })
+    }
+  }
+
+  // 7. Return the new thread with its refs
+  return (await getThread(newThread.id))!
+}
+
+/**
+ * Get the lineage of a thread: parent, fork point event, and children.
+ */
+export const getThreadLineage = async (threadId: string): Promise<ThreadLineage> => {
+  const pool = getPool()
+
+  // Get the thread itself to find parent info
+  const thread = await getThread(threadId)
+  if (!thread) throw new Error(`Thread ${threadId} not found`)
+
+  // Get parent thread (if this is a fork)
+  let parent: ThreadWithRefs | null = null
+  if (thread.parent_thread_id) {
+    parent = await getThread(thread.parent_thread_id)
+  }
+
+  // Get fork point event (if exists)
+  let forkPoint: ThreadEvent | null = null
+  if (thread.fork_point_event_id) {
+    const { rows } = await pool.query(
+      'SELECT * FROM thread_events WHERE id = $1',
+      [thread.fork_point_event_id]
+    )
+    forkPoint = rows[0] ?? null
+  }
+
+  // Get child threads (threads forked from this one)
+  const { rows: childRows } = await pool.query(
+    `SELECT * FROM threads WHERE parent_thread_id = $1 ORDER BY created_at ASC`,
+    [threadId]
+  )
+
+  // Enrich children with refs
+  const children: ThreadWithRefs[] = []
+  for (const child of childRows) {
+    const { rows: refs } = await pool.query(
+      'SELECT * FROM thread_refs WHERE thread_id = $1 ORDER BY created_at ASC',
+      [child.id]
+    )
+    children.push({ ...child, refs })
+  }
+
+  return { parent, fork_point: forkPoint, children }
 }
