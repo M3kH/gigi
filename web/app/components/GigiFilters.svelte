@@ -11,6 +11,7 @@
   import { getTheme, toggleTheme, type Theme } from '$lib/stores/theme.svelte'
   import { goHome, navigateToGitea, navigateToBrowser, getCurrentView, getViewContext } from '$lib/stores/navigation.svelte'
   import { selectConversation } from '$lib/stores/chat.svelte'
+  import { getBudget, refreshBudget, saveBudget as saveBudgetToStore } from '$lib/stores/budget.svelte'
   import { onMount } from 'svelte'
 
   interface Props {
@@ -53,11 +54,13 @@
   let awmAgentBusy = $state(false)
   let awmLastCheck = $state<string | null>(null)
 
-  // Budget settings
-  let budgetUSD = $state(100)
-  let budgetPeriodDays = $state(7)
+  // Budget settings — shared store is source of truth, local state for edit fields
+  const budgetConfig = $derived(getBudget())
+  let editBudgetUSD = $state(100)
+  let editBudgetPeriod = $state(7)
   let budgetSaving = $state(false)
   let budgetSaved = $state(false)
+  let budgetInitialized = $state(false)
 
   const currentTheme: Theme = $derived(getTheme())
 
@@ -97,15 +100,11 @@
       }
     } catch { /* ignore — server may not support this yet */ }
 
-    // Sync budget config from server
-    try {
-      const res = await fetch('/api/usage/budget')
-      if (res.ok) {
-        const data = await res.json()
-        budgetUSD = data.budgetUSD ?? 100
-        budgetPeriodDays = data.periodDays ?? 7
-      }
-    } catch { /* ignore */ }
+    // Sync budget config from shared store
+    await refreshBudget()
+    editBudgetUSD = budgetConfig.budgetUSD
+    editBudgetPeriod = budgetConfig.periodDays
+    budgetInitialized = true
   })
 
   function handleOverview() {
@@ -177,21 +176,26 @@
     }
   }
 
+  // Sync edit fields when shared store updates (e.g. from CostWidget inline edit)
+  $effect(() => {
+    if (budgetInitialized) {
+      editBudgetUSD = budgetConfig.budgetUSD
+      editBudgetPeriod = budgetConfig.periodDays
+    }
+  })
+
   async function handleBudgetSave() {
     budgetSaving = true
     budgetSaved = false
     try {
-      const res = await fetch('/api/usage/budget', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ budgetUSD, periodDays: budgetPeriodDays }),
-      })
-      if (res.ok) {
+      const ok = await saveBudgetToStore(editBudgetUSD, editBudgetPeriod)
+      if (ok) {
         budgetSaved = true
         setTimeout(() => { budgetSaved = false }, 2000)
       }
-    } catch { /* ignore */ }
-    finally { budgetSaving = false }
+    } finally {
+      budgetSaving = false
+    }
   }
 
   // ── Linked conversations for current issue/PR ──────────────────────
@@ -437,7 +441,7 @@
             min="1"
             max="10000"
             step="10"
-            bind:value={budgetUSD}
+            bind:value={editBudgetUSD}
             class="field-input"
           />
         </div>
@@ -445,7 +449,7 @@
           <label class="field-label" for="settings-budget-period">Period</label>
           <select
             id="settings-budget-period"
-            bind:value={budgetPeriodDays}
+            bind:value={editBudgetPeriod}
             class="field-select"
           >
             <option value={1}>Daily</option>

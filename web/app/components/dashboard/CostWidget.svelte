@@ -4,17 +4,12 @@
    *
    * Shows total spend, budget usage, and daily trend.
    * Budget is configurable inline via edit mode or from Settings.
+   * Uses shared budget store for cross-component sync.
    * Part of issue #21: Token optimization - Strategy 4 (Cost Monitoring).
    */
   import { onMount } from 'svelte'
   import { formatCost } from '$lib/utils/format'
-
-  interface BudgetCheck {
-    periodSpend: number
-    budgetUSD: number
-    overBudget: boolean
-    percentUsed: number
-  }
+  import { getBudget, refreshBudget, saveBudget as saveBudgetToStore, isBudgetLoaded } from '$lib/stores/budget.svelte'
 
   interface UsageStats {
     total_cost: number
@@ -38,50 +33,53 @@
     }>
   }
 
-  let budget = $state<BudgetCheck | null>(null)
   let stats = $state<UsageStats | null>(null)
-  let loading = $state(true)
+  let statsLoading = $state(true)
   let expanded = $state(false)
 
-  // Budget editing state
+  // Budget editing state (local to this component)
   let editing = $state(false)
   let editBudgetUSD = $state(100)
   let editPeriodDays = $state(7)
   let saving = $state(false)
 
-  const periodCost = $derived(budget?.periodSpend ?? 0)
-  const budgetLimit = $derived(budget?.budgetUSD ?? 100)
-  const percentUsed = $derived(budget?.percentUsed ?? 0)
+  // Derive from shared budget store
+  const budget = $derived(getBudget())
+  const budgetLoaded = $derived(isBudgetLoaded())
+  const periodCost = $derived(budget.periodSpend)
+  const budgetLimit = $derived(budget.budgetUSD)
+  const percentUsed = $derived(budget.percentUsed)
   const avgCost = $derived(stats?.avg_cost_per_conversation ?? 0)
   const totalCost = $derived(stats?.total_cost ?? 0)
+  const loading = $derived(!budgetLoaded || statsLoading)
 
   const periodLabel = $derived(
-    editPeriodDays === 7 ? 'week' : editPeriodDays === 30 ? 'month' : editPeriodDays === 1 ? 'day' : `${editPeriodDays}d`
+    budget.periodDays === 7 ? 'week' : budget.periodDays === 30 ? 'month' : budget.periodDays === 1 ? 'day' : `${budget.periodDays}d`
   )
 
-  async function loadData() {
+  onMount(async () => {
+    // Load budget from shared store + stats independently
+    await Promise.all([
+      refreshBudget(),
+      loadStats(),
+    ])
+  })
+
+  async function loadStats() {
     try {
-      const [budgetRes, statsRes] = await Promise.all([
-        fetch('/api/usage/budget'),
-        fetch('/api/usage/stats?days=7'),
-      ])
-      if (budgetRes.ok) {
-        budget = await budgetRes.json()
-        editBudgetUSD = budget!.budgetUSD
-      }
-      if (statsRes.ok) stats = await statsRes.json()
+      const res = await fetch('/api/usage/stats?days=7')
+      if (res.ok) stats = await res.json()
     } catch (err) {
-      console.error('[cost-widget] Failed to load:', err)
+      console.error('[cost-widget] Failed to load stats:', err)
     } finally {
-      loading = false
+      statsLoading = false
     }
   }
-
-  onMount(loadData)
 
   function startEditing(e: MouseEvent) {
     e.stopPropagation()
     editBudgetUSD = budgetLimit
+    editPeriodDays = budget.periodDays
     editing = true
   }
 
@@ -90,25 +88,12 @@
     editing = false
   }
 
-  async function saveBudget(e: MouseEvent | KeyboardEvent) {
+  async function handleSaveBudget(e: MouseEvent | KeyboardEvent) {
     e.stopPropagation()
     saving = true
     try {
-      const res = await fetch('/api/usage/budget', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          budgetUSD: editBudgetUSD,
-          periodDays: editPeriodDays,
-        }),
-      })
-      if (res.ok) {
-        editing = false
-        loading = true
-        await loadData()
-      }
-    } catch (err) {
-      console.error('[cost-widget] Failed to save budget:', err)
+      const ok = await saveBudgetToStore(editBudgetUSD, editPeriodDays)
+      if (ok) editing = false
     } finally {
       saving = false
     }
@@ -116,29 +101,29 @@
 
   function handleKeydown(e: KeyboardEvent) {
     if (e.key === 'Enter') {
-      saveBudget(e)
+      handleSaveBudget(e)
     } else if (e.key === 'Escape') {
       editing = false
     }
   }
 </script>
 
-<div class="cost-widget" class:over-budget={budget?.overBudget}>
+<div class="cost-widget" class:over-budget={budget.overBudget}>
   <button class="cost-header" onclick={() => (expanded = !expanded)}>
-    <div class="cost-icon" class:warning={budget?.overBudget}>
+    <div class="cost-icon" class:warning={budget.overBudget}>
       <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
         <path d="M8 16A8 8 0 108 0a8 8 0 000 16zm.25-11.25v4.5a.75.75 0 01-1.5 0v-4.5a.75.75 0 011.5 0zM8 13a1 1 0 110-2 1 1 0 010 2z"/>
       </svg>
     </div>
     <div class="cost-summary">
-      <span class="cost-value" class:warning={budget?.overBudget}>
+      <span class="cost-value" class:warning={budget.overBudget}>
         {loading ? '...' : formatCost(periodCost) || '$0.00'}
       </span>
       <span class="cost-label">
         / {formatCost(budgetLimit) || '$100'} this {periodLabel}
       </span>
     </div>
-    {#if !loading && budget}
+    {#if !loading && budgetLoaded}
       <div class="cost-bar">
         <div
           class="cost-bar-fill"
@@ -184,7 +169,7 @@
           </select>
         </div>
         <div class="edit-actions">
-          <button class="edit-btn save" onclick={saveBudget} disabled={saving}>
+          <button class="edit-btn save" onclick={handleSaveBudget} disabled={saving}>
             {saving ? 'Saving...' : 'Save'}
           </button>
           <button class="edit-btn cancel" onclick={cancelEditing}>Cancel</button>
