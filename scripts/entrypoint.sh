@@ -11,5 +11,13 @@ if [ -d /app/gitea/custom/templates ] && [ -d "$GITEA_TEMPLATES_TARGET" ]; then
   echo "[entrypoint] Templates synced."
 fi
 
+# Sync Gitea custom public assets (logo, favicon) to shared volume
+GITEA_PUBLIC_TARGET="${GITEA_CUSTOM_PUBLIC_PATH:-/gitea-custom-public}"
+if [ -d /app/gitea/custom/public ] && [ -d "$GITEA_PUBLIC_TARGET" ]; then
+  echo "[entrypoint] Syncing Gitea custom public assets to $GITEA_PUBLIC_TARGET ..."
+  cp -r /app/gitea/custom/public/* "$GITEA_PUBLIC_TARGET/"
+  echo "[entrypoint] Public assets synced."
+fi
+
 # Start the app
 exec node --import tsx src/index.ts

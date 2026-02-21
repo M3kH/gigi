@@ -161,7 +161,7 @@
     <!-- Welcome / Empty state -->
     <div class="welcome">
       <div class="welcome-header">
-          <img src="/gigi.png" width="200px">
+          <img src="/gigi-zen.png" width="200px" alt="Gigi">
         <h1 class="welcome-title">Welcome to Gigi</h1>
         <p class="welcome-subtitle">Your AI-powered development workspace. Let's get started.</p>
       </div>

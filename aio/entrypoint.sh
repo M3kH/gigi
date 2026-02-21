@@ -104,6 +104,15 @@ EOINI
     echo "[aio] Gitea templates linked"
   fi
 
+  # Symlink custom public assets (logo, favicon)
+  PUBLIC_DIR="/data/gitea/custom/public"
+  if [ -d /app/gitea/custom/public ] && [ ! -L "$PUBLIC_DIR" ]; then
+    mkdir -p "$(dirname "$PUBLIC_DIR")"
+    rm -rf "$PUBLIC_DIR"
+    ln -sf /app/gitea/custom/public "$PUBLIC_DIR"
+    echo "[aio] Gitea public assets linked"
+  fi
+
   # Start Gitea temporarily for init
   echo "[aio] Starting Gitea for init..."
   su -s /bin/sh gigi -c "GITEA_WORK_DIR=/data/gitea /usr/local/bin/gitea web --config $GITEA_CONF" &
@@ -300,6 +309,14 @@ elif [ "$ENABLE_GITEA" = "true" ]; then
   if [ -d /app/gitea/custom/templates ] && [ ! -L "$TEMPLATE_DIR" ]; then
     rm -rf "$TEMPLATE_DIR"
     ln -sf /app/gitea/custom/templates "$TEMPLATE_DIR"
+  fi
+
+  # Ensure custom public assets are linked (logo, favicon)
+  PUBLIC_DIR="/data/gitea/custom/public"
+  if [ -d /app/gitea/custom/public ] && [ ! -L "$PUBLIC_DIR" ]; then
+    mkdir -p "$(dirname "$PUBLIC_DIR")"
+    rm -rf "$PUBLIC_DIR"
+    ln -sf /app/gitea/custom/public "$PUBLIC_DIR"
   fi
 fi
 
