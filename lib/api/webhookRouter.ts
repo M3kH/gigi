@@ -1,11 +1,13 @@
 /**
  * API — Webhook Router
  *
- * Routes Gitea webhook events to chat conversations by tag matching.
- * Auto-creates conversations for new issues/PRs, invokes agent on @gigi mentions.
+ * Routes Gitea webhook events to threads via thread_refs lookup.
+ * Falls back to legacy tag-based conversation lookup for backward compat.
+ * Auto-creates threads for new issues/PRs, invokes agent on @gigi mentions.
  */
 
 import * as store from '../core/store'
+import * as threads from '../core/threads'
 import { runAgent } from '../core/agent'
 import { emit } from '../core/events'
 import { notifyWebhook } from './webhookNotifier'
@@ -13,45 +15,57 @@ import { notifyWebhook } from './webhookNotifier'
 import type { AgentMessage } from '../core/agent'
 import type { WebhookPayload, WebhookResult } from './webhooks'
 
-// ─── Main Router ────────────────────────────────────────────────────
+// ─── Ref Extraction ─────────────────────────────────────────────────
 
-export const routeWebhook = async (event: string, payload: WebhookPayload): Promise<WebhookResult | null> => {
-  const tags = extractTags(event, payload)
-  if (!tags.length) return null
-
-  let conversation = await findConversationByTags(tags)
-
-  if (!conversation && shouldAutoCreate(event, payload)) {
-    conversation = await createConversationForWebhook(event, payload, tags)
-  }
-
-  if (!conversation) {
-    console.log(`[webhookRouter] No conversation found for tags:`, tags)
-    return null
-  }
-
-  const systemMessage = formatWebhookEvent(event, payload)
-  await store.addMessage(conversation.id, 'system', [{ type: 'text', text: systemMessage }], {
-    message_type: 'webhook',
-  })
-
-  // Send Telegram notification for significant events (fire-and-forget)
-  notifyWebhook(event, payload).catch(err =>
-    console.warn('[webhookRouter] Telegram notification failed:', (err as Error).message)
-  )
-
-  const shouldInvokeAgent = await checkAndInvokeAgent(event, payload, conversation.id, systemMessage)
-
-  if (shouldAutoClose(event, payload, conversation)) {
-    await store.stopThread(conversation.id)
-    emit({ type: 'thread_status', conversationId: conversation.id, status: 'stopped' })
-    console.log(`[webhookRouter] Auto-stopped conversation ${conversation.id}`)
-  }
-
-  return { conversationId: conversation.id, tags, systemMessage, agentInvoked: shouldInvokeAgent }
+interface WebhookRef {
+  repo: string
+  ref_type: 'issue' | 'pr'
+  number: number
 }
 
-// ─── Tag Extraction ─────────────────────────────────────────────────
+/**
+ * Extract structured refs from a webhook payload.
+ * Returns the refs that should be used for thread lookup.
+ */
+const extractRefs = (event: string, payload: WebhookPayload): WebhookRef[] => {
+  const refs: WebhookRef[] = []
+  const repo = payload.repository?.name
+  if (!repo) return refs
+
+  switch (event) {
+    case 'issues':
+      if (payload.issue?.number) {
+        refs.push({ repo, ref_type: 'issue', number: payload.issue.number })
+      }
+      break
+    case 'issue_comment':
+      if (payload.issue?.number) {
+        // PR comments arrive as issue_comment — check if it's a PR
+        if (payload.issue?.pull_request) {
+          refs.push({ repo, ref_type: 'pr', number: payload.issue.number })
+        } else {
+          refs.push({ repo, ref_type: 'issue', number: payload.issue.number })
+        }
+      }
+      break
+    case 'pull_request': {
+      const prNum = payload.number || payload.pull_request?.number
+      if (prNum) {
+        refs.push({ repo, ref_type: 'pr', number: prNum })
+      }
+      break
+    }
+    case 'pull_request_review_comment':
+      if (payload.pull_request?.number) {
+        refs.push({ repo, ref_type: 'pr', number: payload.pull_request.number })
+      }
+      break
+  }
+
+  return refs
+}
+
+// ─── Legacy Tag Extraction (backward compat) ─────────────────────────
 
 const extractTags = (event: string, payload: WebhookPayload): string[] => {
   const tags: string[] = []
@@ -67,7 +81,6 @@ const extractTags = (event: string, payload: WebhookPayload): string[] => {
     case 'issue_comment':
       if (payload.issue?.number) {
         tags.push(`${repo}#${payload.issue.number}`)
-        // PR comments arrive as issue_comment — also tag with pr# for lookup
         if (payload.issue?.pull_request) tags.push(`pr#${payload.issue.number}`)
       }
       break
@@ -90,9 +103,30 @@ const extractTags = (event: string, payload: WebhookPayload): string[] => {
   return tags
 }
 
-// ─── Conversation Lookup ────────────────────────────────────────────
+// ─── Thread + Conversation Resolution ────────────────────────────────
 
-const findConversationByTags = async (tags: string[]): Promise<store.Conversation | null> => {
+/**
+ * Find a conversation by thread_refs first, then fall back to tag-based lookup.
+ * This is the hybrid approach during migration: thread_refs are preferred,
+ * but old conversations that predate the thread model are still found by tags.
+ */
+const findConversation = async (
+  refs: WebhookRef[],
+  tags: string[]
+): Promise<{ conversation: store.Conversation; threadId: string | null } | null> => {
+  // 1. Try thread_refs lookup (preferred — unified model)
+  for (const ref of refs) {
+    const thread = await threads.findThreadByRef(ref.repo, ref.ref_type, ref.number)
+    if (thread && thread.conversation_id) {
+      const conv = await store.getConversation(thread.conversation_id)
+      if (conv && (conv.status === 'active' || conv.status === 'paused')) {
+        console.log(`[webhookRouter] Found thread ${thread.id} via ref ${ref.repo}/${ref.ref_type}#${ref.number}`)
+        return { conversation: conv, threadId: thread.id }
+      }
+    }
+  }
+
+  // 2. Fall back to legacy tag-based lookup
   const prioritized = [...tags].sort((a, b) => {
     const aSpecific = a.includes('#')
     const bSpecific = b.includes('#')
@@ -104,7 +138,16 @@ const findConversationByTags = async (tags: string[]): Promise<store.Conversatio
   for (const tag of prioritized) {
     const conversations = await store.findByTag(tag)
     const match = conversations.find((c) => c.status === 'active' || c.status === 'paused')
-    if (match) return match
+    if (match) {
+      // Check if this conversation has a linked thread
+      const pool = store.getPool()
+      const { rows } = await pool.query(
+        'SELECT id FROM threads WHERE conversation_id = $1 LIMIT 1',
+        [match.id]
+      )
+      const threadId = rows[0]?.id || null
+      return { conversation: match, threadId }
+    }
   }
 
   return null
@@ -117,11 +160,16 @@ const shouldAutoCreate = (event: string, payload: WebhookPayload): boolean => {
   )
 }
 
-const createConversationForWebhook = async (
+/**
+ * Create a conversation + thread for a new webhook event.
+ * Links the thread to the issue/PR via thread_refs.
+ */
+const createForWebhook = async (
   event: string,
   payload: WebhookPayload,
-  tags: string[]
-): Promise<store.Conversation> => {
+  tags: string[],
+  refs: WebhookRef[]
+): Promise<{ conversation: store.Conversation; threadId: string }> => {
   const repo = payload.repository?.name
   let topic: string | null = null
 
@@ -132,6 +180,7 @@ const createConversationForWebhook = async (
     topic = `PR #${prNum}: ${payload.pull_request!.title}`
   }
 
+  // Create conversation (backward compat)
   const conversation = await store.createConversation('webhook', topic)
   await store.updateConversation(conversation.id, {
     tags,
@@ -139,8 +188,29 @@ const createConversationForWebhook = async (
     status: 'paused',
   })
 
-  console.log(`[webhookRouter] Created conversation ${conversation.id} for ${topic}`)
-  return conversation
+  // Create thread linked to conversation
+  const thread = await threads.createThread({
+    topic: topic ?? undefined,
+    conversation_id: conversation.id,
+    status: 'paused',
+  })
+
+  // Add thread_refs for each extracted ref
+  for (const ref of refs) {
+    const url = ref.ref_type === 'issue'
+      ? payload.issue?.html_url
+      : payload.pull_request?.html_url
+    await threads.addThreadRef(thread.id, {
+      ref_type: ref.ref_type,
+      repo: ref.repo,
+      number: ref.number,
+      url: url || undefined,
+      status: 'open',
+    })
+  }
+
+  console.log(`[webhookRouter] Created conversation ${conversation.id} + thread ${thread.id} for ${topic}`)
+  return { conversation, threadId: thread.id }
 }
 
 const shouldAutoClose = (event: string, payload: WebhookPayload, conversation: store.Conversation): boolean => {
@@ -149,6 +219,90 @@ const shouldAutoClose = (event: string, payload: WebhookPayload, conversation: s
     (event === 'issues' && payload.action === 'closed') ||
     (event === 'pull_request' && (payload.action === 'closed' || payload.pull_request?.merged === true))
   )
+}
+
+// ─── Main Router ────────────────────────────────────────────────────
+
+export const routeWebhook = async (event: string, payload: WebhookPayload): Promise<WebhookResult | null> => {
+  const refs = extractRefs(event, payload)
+  const tags = extractTags(event, payload)
+  if (!tags.length && !refs.length) return null
+
+  let result = await findConversation(refs, tags)
+  let threadId: string | null = null
+
+  if (!result && shouldAutoCreate(event, payload)) {
+    const created = await createForWebhook(event, payload, tags, refs)
+    result = { conversation: created.conversation, threadId: created.threadId }
+  }
+
+  if (!result) {
+    console.log(`[webhookRouter] No conversation found for refs:`, refs, 'tags:', tags)
+    return null
+  }
+
+  const { conversation } = result
+  threadId = result.threadId
+
+  // Update thread_ref status when issues/PRs are closed/merged
+  if (event === 'issues' && payload.action === 'closed' && refs.length > 0) {
+    for (const ref of refs) {
+      try {
+        await threads.updateThreadRefStatus(ref.repo, ref.ref_type, ref.number, 'closed')
+      } catch { /* ignore */ }
+    }
+  }
+  if (event === 'pull_request' && refs.length > 0) {
+    const prStatus = payload.pull_request?.merged ? 'merged' : payload.action === 'closed' ? 'closed' : null
+    if (prStatus) {
+      for (const ref of refs) {
+        try {
+          await threads.updateThreadRefStatus(ref.repo, ref.ref_type, ref.number, prStatus)
+        } catch { /* ignore */ }
+      }
+    }
+  }
+
+  const systemMessage = formatWebhookEvent(event, payload)
+
+  // Store in messages table (backward compat)
+  await store.addMessage(conversation.id, 'system', [{ type: 'text', text: systemMessage }], {
+    message_type: 'webhook',
+  })
+
+  // Store as thread event too
+  if (threadId) {
+    try {
+      await threads.addThreadEvent(threadId, {
+        channel: 'webhook',
+        direction: 'inbound',
+        actor: payload.sender?.login || payload.pusher?.login || 'system',
+        content: [{ type: 'text', text: systemMessage }],
+        message_type: 'webhook',
+        metadata: { event, action: payload.action },
+      })
+    } catch (err) {
+      console.warn('[webhookRouter] Thread event failed:', (err as Error).message)
+    }
+  }
+
+  // Send Telegram notification for significant events (fire-and-forget)
+  notifyWebhook(event, payload).catch(err =>
+    console.warn('[webhookRouter] Telegram notification failed:', (err as Error).message)
+  )
+
+  const shouldInvokeAgent = await checkAndInvokeAgent(event, payload, conversation.id, systemMessage, threadId)
+
+  if (shouldAutoClose(event, payload, conversation)) {
+    await store.stopThread(conversation.id)
+    if (threadId) {
+      try { await threads.updateThreadStatus(threadId, 'stopped') } catch { /* ignore */ }
+    }
+    emit({ type: 'thread_status', conversationId: conversation.id, status: 'stopped' })
+    console.log(`[webhookRouter] Auto-stopped conversation ${conversation.id}`)
+  }
+
+  return { conversationId: conversation.id, tags, systemMessage, agentInvoked: shouldInvokeAgent }
 }
 
 // ─── Event Formatting ───────────────────────────────────────────────
@@ -218,11 +372,11 @@ const checkAndInvokeAgent = async (
   event: string,
   payload: WebhookPayload,
   conversationId: string,
-  systemMessage: string
+  systemMessage: string,
+  threadId: string | null
 ): Promise<boolean> => {
   // In Gitea, comments on PRs arrive as 'issue_comment' (PRs are issues internally).
   // 'pull_request_review_comment' covers inline code review comments.
-  // Note: 'pull_request' event never has action='commented' — that was dead code.
   const isComment = (
     (event === 'issue_comment' && payload.action === 'created') ||
     (event === 'pull_request_review_comment' && payload.action === 'created')
@@ -253,14 +407,28 @@ const checkAndInvokeAgent = async (
       github_user: author,
     } as store.MessageExtras)
 
+    // Also store as thread event
+    if (threadId) {
+      try {
+        await threads.addThreadEvent(threadId, {
+          channel: 'gitea_comment',
+          direction: 'inbound',
+          actor: `@${author}`,
+          content: [{ type: 'text', text: contextMessage }],
+          message_type: 'text',
+          metadata: { event, github_user: author },
+        })
+      } catch { /* ignore */ }
+    }
+
     const history = await store.getMessages(conversationId)
     const messages: AgentMessage[] = history.map((m) => ({
       role: (m.role === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
       content: m.content as AgentMessage['content'],
     }))
 
-    const onEvent = (event: Record<string, unknown>): void => {
-      emit({ ...event, conversationId } as import('../core/events').AgentEvent)
+    const onEvent = (agentEvent: Record<string, unknown>): void => {
+      emit({ ...agentEvent, conversationId } as import('../core/events').AgentEvent)
     }
 
     onEvent({ type: 'agent_start', conversationId })
@@ -273,9 +441,26 @@ const checkAndInvokeAgent = async (
       triggered_by: 'github_mention',
     } as store.MessageExtras)
 
+    // Store agent response as thread event
+    if (threadId) {
+      try {
+        await threads.addThreadEvent(threadId, {
+          channel: 'gitea_comment',
+          direction: 'outbound',
+          actor: 'gigi',
+          content: [{ type: 'text', text: response.text }],
+          message_type: 'text',
+          usage: response.usage || undefined,
+        })
+      } catch { /* ignore */ }
+    }
+
     if (response.sessionId) {
       try {
         await store.setSessionId(conversationId, response.sessionId)
+        if (threadId) {
+          await threads.setThreadSession(threadId, response.sessionId)
+        }
       } catch (err) {
         console.warn('[webhookRouter] Failed to store session ID:', (err as Error).message)
       }

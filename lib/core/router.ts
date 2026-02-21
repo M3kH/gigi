@@ -1,13 +1,19 @@
 /**
- * Core Router — Message routing and conversation management
+ * Core Router — Unified thread-based message routing
  *
- * Routes messages from web/telegram/webhook channels, manages sessions,
- * enforces task completion, and handles /issue command tracking.
+ * Routes messages from web/telegram/webhook channels through a unified
+ * thread model. Each conversation is backed by a thread that supports
+ * cross-channel refs, events, and auto-linking.
+ *
+ * Backward compatible: conversations + messages tables are still written
+ * alongside threads + thread_events. The conversation ID remains the
+ * primary key for all external APIs and events.
  */
 
 import { runAgent, type AgentMessage, type EventCallback } from './agent'
 import { emit } from './events'
 import * as store from './store'
+import * as threads from './threads'
 import { enforceCompletion, startTask, markNotified } from './enforcer'
 import { detectUnfinishedWork } from './completion-detector'
 import type { ViewContext } from './protocol'
@@ -31,6 +37,97 @@ const extractMessageText = (content: unknown): string => {
 
 // Track running agent processes by conversation ID
 const runningAgents = new Map<string, AbortController>()
+
+// ── Thread Resolution ────────────────────────────────────────────────
+
+/**
+ * Find or create a thread linked to a conversation.
+ * This is the core of unified routing — every conversation gets a thread.
+ */
+const resolveThread = async (convId: string, channel: string): Promise<string> => {
+  // Check if conversation already has a linked thread
+  const pool = store.getPool()
+  const { rows } = await pool.query(
+    'SELECT id FROM threads WHERE conversation_id = $1 LIMIT 1',
+    [convId]
+  )
+
+  if (rows[0]) return rows[0].id
+
+  // Create a new thread linked to this conversation
+  const thread = await threads.createThread({
+    conversation_id: convId,
+    status: 'paused',
+  })
+
+  console.log(`[router] Created thread ${thread.id} for conversation ${convId} (channel: ${channel})`)
+  return thread.id
+}
+
+/**
+ * After agent completes, scan tool calls for PR/issue creation
+ * and auto-link them as thread_refs.
+ */
+const autoLinkRefs = async (
+  threadId: string,
+  toolCalls: unknown[],
+  toolResults: Record<string, string>
+): Promise<void> => {
+  try {
+    for (const tc of toolCalls as Array<{ name: string; input?: Record<string, unknown> }>) {
+      // Detect gitea tool calls that create PRs or issues
+      if (tc.name === 'mcp__gigi-tools__gitea' && tc.input) {
+        const input = tc.input as Record<string, unknown>
+        const action = input.action as string
+
+        if (action === 'create_pr' && input.repo) {
+          // Find the PR number from the tool result
+          const resultKey = Object.keys(toolResults).find(k =>
+            toolResults[k]?.includes('"number"')
+          )
+          if (resultKey) {
+            try {
+              const result = JSON.parse(toolResults[resultKey])
+              if (result.number) {
+                await threads.addThreadRef(threadId, {
+                  ref_type: 'pr',
+                  repo: input.repo as string,
+                  number: result.number,
+                  url: result.html_url || null,
+                  status: 'open',
+                })
+                console.log(`[router] Auto-linked PR ${input.repo}#${result.number} to thread ${threadId}`)
+              }
+            } catch { /* result not parseable */ }
+          }
+        }
+
+        if (action === 'create_issue' && input.repo) {
+          const resultKey = Object.keys(toolResults).find(k =>
+            toolResults[k]?.includes('"number"')
+          )
+          if (resultKey) {
+            try {
+              const result = JSON.parse(toolResults[resultKey])
+              if (result.number) {
+                await threads.addThreadRef(threadId, {
+                  ref_type: 'issue',
+                  repo: input.repo as string,
+                  number: result.number,
+                  url: result.html_url || null,
+                  status: 'open',
+                })
+                console.log(`[router] Auto-linked issue ${input.repo}#${result.number} to thread ${threadId}`)
+              }
+            } catch { /* result not parseable */ }
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[router] Auto-link failed:', (err as Error).message)
+  }
+}
 
 // ── View Context Enrichment ──────────────────────────────────────────
 
@@ -97,11 +194,15 @@ export const handleMessage = async (
     active.set(key, convId)
   }
 
-  // Detect /issue command to start task tracking + auto-tag
+  // Resolve the thread for this conversation
+  const threadId = await resolveThread(convId, channel)
+
+  // Detect /issue command to start task tracking + auto-tag + auto-ref
   const issueMatch = text.match(/\/issue\s+([a-z0-9-]+)#(\d+)/i)
   if (issueMatch) {
     const [, repo, issueNumber] = issueMatch
-    await startTask(convId, repo, parseInt(issueNumber, 10))
+    const issueNum = parseInt(issueNumber, 10)
+    await startTask(convId, repo, issueNum)
     console.log(`[router] Started task tracking: ${repo}#${issueNumber}`)
     try {
       await store.addTags(convId, [`${repo}#${issueNumber}`, repo])
@@ -109,13 +210,36 @@ export const handleMessage = async (
     } catch (err) {
       console.warn('[router] Auto-tag failed:', (err as Error).message)
     }
+    // Add thread ref for the issue being tracked
+    try {
+      await threads.addThreadRef(threadId, {
+        ref_type: 'issue',
+        repo,
+        number: issueNum,
+        status: 'open',
+      })
+      console.log(`[router] Added thread ref: ${repo}#${issueNumber}`)
+    } catch (err) {
+      console.warn('[router] Thread ref failed:', (err as Error).message)
+    }
   }
 
   // Enrich message with view context (if provided)
   const enrichedText = context ? await enrichWithContext(text, context) : text
 
-  // Store user message
+  // Store user message in both conversations (backward compat) and thread_events
   await store.addMessage(convId, 'user', [{ type: 'text', text: enrichedText }])
+  try {
+    await threads.addThreadEvent(threadId, {
+      channel: channel as threads.ThreadEventChannel,
+      direction: 'inbound',
+      actor: 'user',
+      content: [{ type: 'text', text: enrichedText }],
+      message_type: 'text',
+    })
+  } catch (err) {
+    console.warn('[router] Thread event (user) failed:', (err as Error).message)
+  }
 
   // ── LLM Routing: classify message complexity ──────────────────
   // /issue commands always get complex routing (they trigger task tracking)
@@ -131,8 +255,8 @@ export const handleMessage = async (
   try {
     sessionId = await store.getSessionId(convId)
     if (sessionId) {
-      // Existing session → always use Opus (session was created with Opus)
-      // Don't downgrade mid-conversation — it would lose context
+      // Existing session -> always use Opus (session was created with Opus)
+      // Don't downgrade mid-conversation -- it would lose context
       routing.model = 'claude-opus-4-6'
       routing.useMinimalPrompt = false
       routing.includeTools = true
@@ -206,10 +330,11 @@ export const handleMessage = async (
     console.warn('[router] Budget check failed:', (err as Error).message)
   }
 
-  // Emit agent_start + activate thread
+  // Emit agent_start + activate thread (both conversation and thread tables)
   wrappedOnEvent({ type: 'agent_start', conversationId: convId })
   try {
     await store.activateThread(convId)
+    await threads.updateThreadStatus(threadId, 'active')
     wrappedOnEvent({ type: 'thread_status', conversationId: convId, status: 'active' })
   } catch (err) {
     console.warn('[router] activateThread failed:', (err as Error).message)
@@ -230,6 +355,7 @@ export const handleMessage = async (
       await store.addMessage(convId, 'assistant', [{ type: 'text', text: '⏹️ Stopped by user' }])
       try {
         await store.pauseThread(convId)
+        await threads.updateThreadStatus(threadId, 'paused')
         wrappedOnEvent({ type: 'thread_status', conversationId: convId, status: 'paused' })
       } catch { /* ignore */ }
       throw new Error('Agent stopped by user')
@@ -242,15 +368,17 @@ export const handleMessage = async (
   // Pause thread (agent done with this turn)
   try {
     await store.pauseThread(convId)
+    await threads.updateThreadStatus(threadId, 'paused')
     wrappedOnEvent({ type: 'thread_status', conversationId: convId, status: 'paused' })
   } catch (err) {
     console.warn('[router] pauseThread failed:', (err as Error).message)
   }
 
-  // Store session ID from response
+  // Store session ID from response (both conversation and thread)
   if (response.sessionId) {
     try {
       await store.setSessionId(convId, response.sessionId)
+      await threads.setThreadSession(threadId, response.sessionId)
     } catch (err) {
       console.warn('[router] setSessionId failed:', (err as Error).message)
     }
@@ -264,6 +392,7 @@ export const handleMessage = async (
     storedText = response.text.replace(titleMatch[0], '')
     try {
       await store.updateConversation(convId, { topic: title })
+      await threads.updateThreadTopic(threadId, title)
       wrappedOnEvent({ type: 'title_update', conversationId: convId, title })
     } catch (err) {
       console.warn('[router] title update failed:', (err as Error).message)
@@ -287,12 +416,32 @@ export const handleMessage = async (
     usage: response.usage || undefined,
   })
 
+  // Store assistant response as thread event too
+  try {
+    await threads.addThreadEvent(threadId, {
+      channel: channel as threads.ThreadEventChannel,
+      direction: 'outbound',
+      actor: 'gigi',
+      content: storedContent,
+      message_type: 'text',
+      usage: response.usage || undefined,
+    })
+  } catch (err) {
+    console.warn('[router] Thread event (assistant) failed:', (err as Error).message)
+  }
+
+  // Auto-link any PRs/issues created by the agent
+  if (response.toolCalls.length > 0) {
+    await autoLinkRefs(threadId, response.toolCalls, response.toolResults)
+  }
+
   // MAXTURNS CONTINUATION: If the agent hit the turn limit, resume to let it finish
   if (response.stopReason === 'max_turns' && response.sessionId) {
     console.log(`[router] Agent hit maxTurns — continuing conversation to completion`)
     const continuationSessionId = response.sessionId
     try {
       await store.setSessionId(convId, continuationSessionId)
+      await threads.setThreadSession(threadId, continuationSessionId)
     } catch { /* ignore */ }
 
     const continueMsg = '[SYSTEM] You hit the turn limit before completing your task. Please wrap up: summarize what you accomplished, what remains, and provide any final answers or PR links.'
@@ -302,7 +451,10 @@ export const handleMessage = async (
     try {
       const contResponse = await runAgent(contMessages, wrappedOnEvent, { sessionId: continuationSessionId, signal: abortController.signal })
       if (contResponse.sessionId) {
-        try { await store.setSessionId(convId, contResponse.sessionId) } catch { /* ignore */ }
+        try {
+          await store.setSessionId(convId, contResponse.sessionId)
+          await threads.setThreadSession(threadId, contResponse.sessionId)
+        } catch { /* ignore */ }
       }
       const contText = contResponse.text
       await store.addMessage(convId, 'assistant', [{ type: 'text', text: contText }], {
@@ -310,6 +462,10 @@ export const handleMessage = async (
         tool_outputs: Object.keys(contResponse.toolResults).length ? contResponse.toolResults : undefined,
         usage: contResponse.usage || undefined,
       })
+      // Auto-link from continuation too
+      if (contResponse.toolCalls.length > 0) {
+        await autoLinkRefs(threadId, contResponse.toolCalls, contResponse.toolResults)
+      }
       // Update the main response text with the continuation
       storedText = storedText + '\n\n' + contText
     } catch (err) {
@@ -345,7 +501,10 @@ export const handleMessage = async (
 
       const response2 = await runAgent(messages2, wrappedOnEvent, { sessionId: enforcementSessionId })
       if (response2.sessionId) {
-        try { await store.setSessionId(convId, response2.sessionId) } catch { /* ignore */ }
+        try {
+          await store.setSessionId(convId, response2.sessionId)
+          await threads.setThreadSession(threadId, response2.sessionId)
+        } catch { /* ignore */ }
         enforcementSessionId = response2.sessionId
       }
       await store.addMessage(convId, 'assistant', response2.content, {
@@ -353,6 +512,10 @@ export const handleMessage = async (
         tool_outputs: Object.keys(response2.toolResults).length ? response2.toolResults : undefined,
         usage: response2.usage || undefined,
       })
+      // Auto-link from enforcement response
+      if (response2.toolCalls.length > 0) {
+        await autoLinkRefs(threadId, response2.toolCalls, response2.toolResults)
+      }
 
       const enforcement2 = await enforceCompletion(convId)
       if (enforcement2?.action === 'needs_notification') {
@@ -377,7 +540,10 @@ export const handleMessage = async (
 
       const response2 = await runAgent(messages2, wrappedOnEvent, { sessionId: enforcementSessionId })
       if (response2.sessionId) {
-        try { await store.setSessionId(convId, response2.sessionId) } catch { /* ignore */ }
+        try {
+          await store.setSessionId(convId, response2.sessionId)
+          await threads.setThreadSession(threadId, response2.sessionId)
+        } catch { /* ignore */ }
       }
       await store.addMessage(convId, 'assistant', response2.content, {
         tool_calls: response2.toolCalls.length ? response2.toolCalls : undefined,
@@ -414,7 +580,10 @@ export const handleMessage = async (
       try {
         const completionResponse = await runAgent(completionMessages, wrappedOnEvent, { sessionId: completionSessionId })
         if (completionResponse.sessionId) {
-          try { await store.setSessionId(convId, completionResponse.sessionId) } catch { /* ignore */ }
+          try {
+            await store.setSessionId(convId, completionResponse.sessionId)
+            await threads.setThreadSession(threadId, completionResponse.sessionId)
+          } catch { /* ignore */ }
         }
         const completionText = completionResponse.text
         await store.addMessage(convId, 'assistant', [{ type: 'text', text: completionText }], {
@@ -422,6 +591,10 @@ export const handleMessage = async (
           tool_outputs: Object.keys(completionResponse.toolResults).length ? completionResponse.toolResults : undefined,
           usage: completionResponse.usage || undefined,
         })
+        // Auto-link from completion response
+        if (completionResponse.toolCalls.length > 0) {
+          await autoLinkRefs(threadId, completionResponse.toolCalls, completionResponse.toolResults)
+        }
         storedText = storedText + '\n\n' + completionText
         console.log(`[router] Completion follow-up finished`)
       } catch (err) {
