@@ -261,6 +261,6 @@ describe('Webhook Integration: Routing', () => {
       action: 'closed',
     })
 
-    await assertThreadStatus(result.conversationId, 'closed')
+    await assertThreadStatus(result.conversationId, 'stopped')
   })
 })

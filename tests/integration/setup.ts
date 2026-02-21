@@ -124,7 +124,7 @@ export const truncateAll = async (): Promise<void> => {
   const { getPool } = await import('../../lib/core/store')
   const pool = getPool()
   await pool.query(`
-    TRUNCATE action_log, messages, conversations, config CASCADE
+    TRUNCATE thread_events, thread_refs, threads, action_log, messages, conversations, config CASCADE
   `)
 }
 

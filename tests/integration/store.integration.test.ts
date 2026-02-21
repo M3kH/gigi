@@ -42,7 +42,7 @@ describe('Store Integration: Conversations', () => {
     assert.ok(conv.id)
     assert.equal(conv.channel, 'test')
     assert.equal(conv.topic, 'My Topic')
-    assert.equal(conv.status, 'open')
+    assert.equal(conv.status, 'paused')
 
     const fetched = await store.getConversation(conv.id)
     assert.ok(fetched)
@@ -83,7 +83,7 @@ describe('Store Integration: Conversations', () => {
 
     await store.closeConversation(conv.id)
     let fetched = await store.getConversation(conv.id)
-    assert.equal(fetched?.status, 'closed')
+    assert.equal(fetched?.status, 'stopped')
     assert.ok(fetched?.closed_at)
 
     await store.archiveConversation(conv.id)
@@ -178,7 +178,7 @@ describe('Store Integration: Sessions', () => {
     assert.equal(await store.getSessionId(conv.id), null)
 
     const cleared = await store.getConversation(conv.id)
-    assert.equal(cleared?.status, 'open')
+    assert.equal(cleared?.status, 'active')
   })
 })
 
@@ -231,7 +231,7 @@ describe('Store Integration: Multi-Channel Thread', () => {
     assert.equal(allMessages.length, 4)
 
     // Verify status
-    await assertThreadStatus(conversation.id, 'open')
+    await assertThreadStatus(conversation.id, 'paused')
   })
 
   it('should find thread by tag and continue the conversation', async () => {
