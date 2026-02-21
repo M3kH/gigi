@@ -56,6 +56,9 @@
   let compactStatus = $state<CompactStatus | null>(null)
   let hasThreadEvents = $state(false)
 
+  // Track previous dialog state to detect agent completion
+  let prevDialogState = $state<string>('idle')
+
   // Fetch thread data when active conversation changes
   $effect(() => {
     const id = activeId
@@ -75,6 +78,21 @@
       compactStatus = null
       hasThreadEvents = false
     }
+  })
+
+  // Refresh thread events when agent finishes (dialogState goes back to idle)
+  $effect(() => {
+    const ds = dialogState
+    if (prevDialogState !== 'idle' && ds === 'idle' && activeId) {
+      // Agent just finished — reload thread events + refs
+      getThreadEvents(activeId).then(evts => {
+        threadEvents = evts
+        hasThreadEvents = evts.length > 0
+      })
+      getThreadRefs(activeId).then(refs => { threadRefs = refs })
+      getCompactStatus(activeId).then(status => { compactStatus = status })
+    }
+    prevDialogState = ds
   })
 
   // Separate compacted events from visible ones

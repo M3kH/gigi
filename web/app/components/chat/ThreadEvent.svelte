@@ -2,15 +2,18 @@
   /**
    * Single thread event — renders differently based on channel and message_type.
    *
-   * - Regular messages: bubble with channel badge
+   * - Regular messages: bubble with channel badge + token usage
    * - Webhook/system events: compact inline card
-   * - Summary events: collapsible compacted section
+   * - Summary events: handled by CompactedSection (skipped here)
+   * - Tool blocks rendered inline for assistant messages with interleaved content
    */
-  import type { ThreadEvent as ThreadEventType } from '$lib/types/chat'
+  import type { ThreadEvent as ThreadEventType, TokenUsage } from '$lib/types/chat'
   import { renderMarkdown, highlightAll } from '$lib/utils/markdown'
   import { interceptLinks } from '$lib/utils/intercept-links'
   import { formatTime } from '$lib/utils/format'
   import ChannelBadge from './ChannelBadge.svelte'
+  import ToolBlock from './ToolBlock.svelte'
+  import TokenBadge from './TokenBadge.svelte'
 
   interface Props {
     event: ThreadEventType
@@ -33,18 +36,67 @@
   // Extract text content from the event
   const textContent = $derived.by(() => {
     const c = event.content
-    if (typeof c === 'string') return c
-    if (Array.isArray(c)) {
-      return c
+    let text = ''
+    if (typeof c === 'string') {
+      text = c
+    } else if (Array.isArray(c)) {
+      text = c
         .filter((b: any) => b.type === 'text')
         .map((b: any) => b.text)
         .join('\n\n')
+    } else if (c && typeof c === 'object' && 'text' in c) {
+      text = (c as { text: string }).text
+    } else {
+      text = JSON.stringify(c)
     }
-    if (c && typeof c === 'object' && 'text' in c) return (c as { text: string }).text
-    return JSON.stringify(c)
+    // Strip [Viewing ...] context prefix from user messages for display
+    if (isUser) {
+      text = text.replace(/^\[Viewing [^\]]+\]\n/, '')
+    }
+    return text
+  })
+
+  // Check for interleaved tool_use blocks in content
+  const hasInterleaved = $derived.by(() => {
+    if (!isGigi) return false
+    const c = event.content
+    if (!Array.isArray(c)) return false
+    return c.some((b: any) => b.type === 'tool_use')
+  })
+
+  // Extract interleaved blocks for rendering
+  const interleavedBlocks = $derived.by(() => {
+    if (!hasInterleaved) return []
+    const c = event.content as any[]
+    return c.filter((b: any) => b.type === 'text' || b.type === 'tool_use')
+  })
+
+  // Extract tool outputs from metadata
+  const toolOutputs = $derived.by((): Record<string, string> => {
+    if (!event.metadata || typeof event.metadata !== 'object') return {}
+    const m = event.metadata as Record<string, unknown>
+    if (m.tool_outputs && typeof m.tool_outputs === 'object') {
+      return m.tool_outputs as Record<string, string>
+    }
+    return {}
   })
 
   const renderedHtml = $derived(renderMarkdown(textContent))
+
+  // Extract usage from event
+  const usage = $derived.by((): TokenUsage | undefined => {
+    if (!event.usage) return undefined
+    const u = event.usage as Record<string, unknown>
+    return {
+      inputTokens: (u.inputTokens || u.input_tokens) as number | undefined,
+      outputTokens: (u.outputTokens || u.output_tokens) as number | undefined,
+      cacheReadInputTokens: (u.cacheReadInputTokens || u.cache_read_input_tokens) as number | undefined,
+      cacheCreationInputTokens: (u.cacheCreationInputTokens || u.cache_creation_input_tokens) as number | undefined,
+      costUSD: (u.costUSD || u.cost_usd) as number | undefined,
+      durationMs: (u.durationMs || u.duration_ms) as number | undefined,
+      numTurns: (u.numTurns || u.num_turns) as number | undefined,
+    }
+  })
 
   // Actor display name
   const actorName = $derived.by(() => {
@@ -53,6 +105,17 @@
     if (event.actor.startsWith('gitea:')) return event.actor.replace('gitea:', '@')
     return event.actor
   })
+
+  // Collapsed tool blocks: show all if <= 10, otherwise show last 3 with expand
+  const TOOL_COLLAPSE_THRESHOLD = 10
+  let toolsExpanded = $state(false)
+
+  const toolBlocks = $derived.by(() => {
+    if (!hasInterleaved) return []
+    return interleavedBlocks.filter((b: any) => b.type === 'tool_use' && b.name !== 'ask_user')
+  })
+
+  const shouldCollapse = $derived(toolBlocks.length > TOOL_COLLAPSE_THRESHOLD)
 
   // Highlight code blocks after content renders
   $effect(() => {
@@ -84,16 +147,40 @@
       {#if event.created_at}
         <span class="event-time">{formatTime(event.created_at)}</span>
       {/if}
+      {#if isGigi && usage}
+        <TokenBadge {usage} />
+      {/if}
     </div>
 
-    {#if isUser}
-      <div class="event-content user-content" bind:this={contentEl} use:interceptLinks>
-        {@html renderedHtml}
-      </div>
+    {#if hasInterleaved}
+      <!-- Interleaved rendering: text + tool blocks in original order -->
+      {#each interleavedBlocks as block, i}
+        {#if block.type === 'text' && block.text.trim()}
+          <div class="event-content" bind:this={contentEl} use:interceptLinks>
+            {@html renderMarkdown(block.text)}
+          </div>
+        {:else if block.type === 'tool_use' && block.name !== 'ask_user'}
+          <div class="tool-blocks">
+            <ToolBlock
+              toolUseId={block.toolUseId}
+              name={block.name}
+              input={block.input}
+              result={toolOutputs[block.toolUseId]}
+              status="done"
+            />
+          </div>
+        {/if}
+      {/each}
     {:else}
-      <div class="event-content" bind:this={contentEl} use:interceptLinks>
-        {@html renderedHtml}
-      </div>
+      {#if isUser}
+        <div class="event-content user-content" bind:this={contentEl} use:interceptLinks>
+          {@html renderedHtml}
+        </div>
+      {:else}
+        <div class="event-content" bind:this={contentEl} use:interceptLinks>
+          {@html renderedHtml}
+        </div>
+      {/if}
     {/if}
   </div>
 {/if}
@@ -180,6 +267,10 @@
     background: var(--gigi-bubble-assistant);
     border: 1px solid var(--gigi-border-muted);
     border-radius: var(--gigi-radius-lg) var(--gigi-radius-lg) var(--gigi-radius-lg) var(--gigi-radius-sm);
+  }
+
+  .tool-blocks {
+    margin-top: var(--gigi-space-xs);
   }
 
   /* Markdown styling */
