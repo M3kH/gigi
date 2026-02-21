@@ -22,6 +22,7 @@ import {
   countThreadEvents,
   type ThreadEvent,
 } from './threads.js'
+import { queryLLM } from './agent.js'
 
 // ─── Types ──────────────────────────────────────────────────────────
 
@@ -96,59 +97,25 @@ const formatEventsForSummary = (events: ThreadEvent[]): string => {
 
 /**
  * Generate a summary of thread events using Haiku for cost efficiency.
- * Uses the Anthropic Messages API directly via fetch (avoids extra SDK dependency).
+ * Uses queryLLM() which reuses the centralized agent auth (OAuth + API keys).
  */
 export const generateSummary = async (events: ThreadEvent[]): Promise<string> => {
   if (events.length === 0) return 'No events to summarize.'
 
-  const apiKey = process.env.ANTHROPIC_API_KEY
-  if (!apiKey) {
-    console.warn('[compact] ANTHROPIC_API_KEY not set — returning basic summary')
-    return formatBasicSummary(events)
-  }
-
   const formattedEvents = formatEventsForSummary(events)
+  const prompt = `Summarize this thread history (${events.length} events):\n\n${formattedEvents}`
 
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model: 'claude-haiku-4-5',
-      max_tokens: 1024,
-      system: SUMMARY_SYSTEM_PROMPT,
-      messages: [
-        {
-          role: 'user',
-          content: `Summarize this thread history (${events.length} events):\n\n${formattedEvents}`,
-        },
-      ],
-    }),
-  })
-
-  if (!response.ok) {
-    const errorText = await response.text()
-    console.error(`[compact] Anthropic API error (${response.status}):`, errorText)
+  try {
+    const text = await queryLLM(prompt, SUMMARY_SYSTEM_PROMPT, 'claude-haiku-4-5')
+    return text || 'Summary generation produced no output.'
+  } catch (err) {
+    console.error('[compact] Summary generation failed:', (err as Error).message)
     return formatBasicSummary(events)
   }
-
-  const data = await response.json() as {
-    content: Array<{ type: string; text: string }>
-  }
-
-  const text = data.content
-    .filter((b: { type: string }) => b.type === 'text')
-    .map((b: { text: string }) => b.text)
-    .join('\n')
-
-  return text || 'Summary generation failed.'
 }
 
 /**
- * Fallback: basic summary without LLM (when API key unavailable).
+ * Fallback: basic summary without LLM (when queryLLM fails).
  */
 const formatBasicSummary = (events: ThreadEvent[]): string => {
   const channels = [...new Set(events.map(e => e.channel))]

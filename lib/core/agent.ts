@@ -822,3 +822,60 @@ export const runAgent = async (
     stopReason: resultReason,
   }
 }
+
+// ─── Lightweight LLM Query ──────────────────────────────────────────
+
+/**
+ * Simple one-shot LLM query — no tools, no MCP, no session persistence.
+ *
+ * Uses the same auth setup as runAgent (handles OAuth tokens and API keys)
+ * but with minimal overhead. Ideal for summary generation, classification,
+ * and other short text-in/text-out tasks.
+ *
+ * @param prompt - The user prompt text
+ * @param systemPrompt - System instructions
+ * @param model - Model to use (default: claude-haiku-4-5 for cost efficiency)
+ * @returns The text response
+ */
+export const queryLLM = async (
+  prompt: string,
+  systemPrompt: string,
+  model: string = 'claude-haiku-4-5'
+): Promise<string> => {
+  await ensureReady()
+  const env = await getAgentEnv()
+
+  let resultText = ''
+  const response = query({
+    prompt,
+    options: {
+      systemPrompt,
+      model,
+      executable: process.execPath as 'node' | 'bun' | 'deno',
+      env,
+      cwd: process.env.WORKSPACE_DIR || '/workspace',
+      maxTurns: 1,
+      permissionMode: 'bypassPermissions' as const,
+      allowDangerouslySkipPermissions: true,
+      persistSession: false,
+      mcpServers: {} as Record<string, never>,
+      stderr: (data: string) => console.error('[queryLLM]', data.trim()),
+    },
+  })
+
+  for await (const message of response as unknown as AsyncIterable<Record<string, unknown>>) {
+    if (message.type === 'assistant' && (message.message as Record<string, unknown>)?.content) {
+      const content = (message.message as Record<string, unknown>).content as Array<Record<string, unknown>>
+      for (const block of content) {
+        if (block.type === 'text' && block.text) {
+          resultText += block.text as string
+        }
+      }
+    }
+    if (message.type === 'result' && message.result) {
+      resultText = message.result as string
+    }
+  }
+
+  return resultText
+}
