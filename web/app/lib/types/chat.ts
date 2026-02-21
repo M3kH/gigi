@@ -6,12 +6,14 @@
 
 // ── Conversation ────────────────────────────────────────────────────
 
+export type ThreadStatus = 'active' | 'paused' | 'stopped' | 'archived'
+
 export interface Conversation {
   id: string
   topic: string
   channel: string
   channelId: string
-  status: 'open' | 'active' | 'closed'
+  status: ThreadStatus
   tags: string[]
   repo?: string
   createdAt: string

@@ -43,8 +43,9 @@ export const routeWebhook = async (event: string, payload: WebhookPayload): Prom
   const shouldInvokeAgent = await checkAndInvokeAgent(event, payload, conversation.id, systemMessage)
 
   if (shouldAutoClose(event, payload, conversation)) {
-    await store.closeConversation(conversation.id)
-    console.log(`[webhookRouter] Auto-closed conversation ${conversation.id}`)
+    await store.stopThread(conversation.id)
+    emit({ type: 'thread_status', conversationId: conversation.id, status: 'stopped' })
+    console.log(`[webhookRouter] Auto-stopped conversation ${conversation.id}`)
   }
 
   return { conversationId: conversation.id, tags, systemMessage, agentInvoked: shouldInvokeAgent }
@@ -102,7 +103,7 @@ const findConversationByTags = async (tags: string[]): Promise<store.Conversatio
 
   for (const tag of prioritized) {
     const conversations = await store.findByTag(tag)
-    const match = conversations.find((c) => c.status === 'open' || c.status === 'active')
+    const match = conversations.find((c) => c.status === 'active' || c.status === 'paused')
     if (match) return match
   }
 
@@ -135,7 +136,7 @@ const createConversationForWebhook = async (
   await store.updateConversation(conversation.id, {
     tags,
     repo: repo,
-    status: 'open',
+    status: 'paused',
   })
 
   console.log(`[webhookRouter] Created conversation ${conversation.id} for ${topic}`)
@@ -143,7 +144,7 @@ const createConversationForWebhook = async (
 }
 
 const shouldAutoClose = (event: string, payload: WebhookPayload, conversation: store.Conversation): boolean => {
-  if (conversation.status === 'closed') return false
+  if (conversation.status === 'stopped' || conversation.status === 'archived') return false
   return (
     (event === 'issues' && payload.action === 'closed') ||
     (event === 'pull_request' && (payload.action === 'closed' || payload.pull_request?.merged === true))

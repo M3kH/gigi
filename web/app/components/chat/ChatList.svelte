@@ -14,6 +14,8 @@
     archiveConversation,
     unarchiveConversation,
     deleteConversation,
+    stopThread,
+    reopenThread,
   } from '$lib/stores/chat.svelte'
   import { getPanelState, setPanelState } from '$lib/stores/panels.svelte'
   import { formatRelativeTime, formatCost, formatTokens } from '$lib/utils/format'
@@ -87,9 +89,30 @@
     await deleteConversation(conv.id)
   }
 
+  async function handleStopThread(e: MouseEvent, conv: Conversation) {
+    e.stopPropagation()
+    await stopThread(conv.id)
+  }
+
+  async function handleReopen(e: MouseEvent, conv: Conversation) {
+    e.stopPropagation()
+    await reopenThread(conv.id)
+  }
+
   function statusClass(conv: Conversation): string {
     if (isAgentRunning(conv.id)) return 'active'
-    return conv.status || 'open'
+    return conv.status || 'paused'
+  }
+
+  function statusTooltip(conv: Conversation): string {
+    if (isAgentRunning(conv.id)) return 'Agent running'
+    switch (conv.status) {
+      case 'active': return 'Agent running'
+      case 'paused': return 'Ready for more work'
+      case 'stopped': return 'Completed'
+      case 'archived': return 'Archived'
+      default: return conv.status
+    }
   }
 
   function channelIcon(channel: string): string {
@@ -125,12 +148,30 @@
       <!-- Row 1: channel icon + title + spinner + actions -->
       <div class="chat-item-header">
         <span class="channel-icon" title={conv.channel}>{channelIcon(conv.channel)}</span>
-        <span class="status-badge {statusClass(conv)}"></span>
+        <span class="status-badge {statusClass(conv)}" title={statusTooltip(conv)}></span>
         <span class="chat-title">{displayTitle(conv)}</span>
         {#if isAgentRunning(conv.id)}
           <span class="spinner">&#x27F3;</span>
         {/if}
         <div class="action-btns">
+          {#if conv.status === 'paused' || conv.status === 'active'}
+            <button
+              class="action-btn stop-btn"
+              title="Stop thread (mark as done)"
+              onclick={(e) => handleStopThread(e, conv)}
+            >
+              <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor">
+                <path d="M4.5 2A2.5 2.5 0 002 4.5v7A2.5 2.5 0 004.5 14h7a2.5 2.5 0 002.5-2.5v-7A2.5 2.5 0 0011.5 2h-7z"/>
+              </svg>
+            </button>
+          {/if}
+          {#if conv.status === 'stopped'}
+            <button
+              class="action-btn reopen-btn"
+              title="Reopen thread"
+              onclick={(e) => handleReopen(e, conv)}
+            >↩</button>
+          {/if}
           <button
             class="action-btn archive-btn"
             title="Archive conversation"
@@ -317,13 +358,27 @@
     flex-shrink: 0;
   }
 
-  .status-badge.open {
+  .status-badge.paused {
     background: var(--gigi-accent-green);
   }
 
   .status-badge.active {
     background: var(--gigi-accent-orange);
     animation: pulse 1.5s ease-in-out infinite;
+  }
+
+  .status-badge.stopped {
+    background: var(--gigi-text-muted);
+  }
+
+  .status-badge.archived {
+    background: var(--gigi-text-muted);
+    opacity: 0.5;
+  }
+
+  /* Legacy compat */
+  .status-badge.open {
+    background: var(--gigi-accent-green);
   }
 
   .status-badge.closed {
@@ -385,6 +440,18 @@
 
   .action-btn:hover {
     background: var(--gigi-bg-tertiary);
+  }
+
+  .stop-btn:hover {
+    color: var(--gigi-text-muted);
+  }
+
+  .reopen-btn {
+    font-size: 0.75rem;
+  }
+
+  .reopen-btn:hover {
+    color: var(--gigi-accent-green);
   }
 
   .archive-btn:hover {

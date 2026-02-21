@@ -124,6 +124,14 @@ export type AskUserEvent = {
   options: string[]
 }
 
+export type ThreadStatus = 'active' | 'paused' | 'stopped' | 'archived'
+
+export type ThreadStatusEvent = {
+  type: 'thread_status'
+  conversationId: string
+  status: ThreadStatus
+}
+
 export type ServerMessage =
   | AgentStartEvent
   | TextChunkEvent
@@ -135,3 +143,4 @@ export type ServerMessage =
   | PongEvent
   | GiteaEvent
   | AskUserEvent
+  | ThreadStatusEvent

@@ -16,6 +16,7 @@ import type {
   StreamSegment,
   DialogState,
   TokenUsage,
+  ThreadStatus,
 } from '$lib/types/chat'
 import type { ServerMessage } from '$lib/types/protocol'
 import { fetchBoard } from '$lib/stores/kanban.svelte'
@@ -214,6 +215,35 @@ export async function stopAgent(): Promise<void> {
   }
 }
 
+export async function stopThread(convId: string): Promise<void> {
+  try {
+    await fetch(`/api/conversations/${convId}/stop-thread`, { method: 'POST' })
+    conversations = conversations.map(c =>
+      c.id === convId ? { ...c, status: 'stopped' as ThreadStatus } : c
+    )
+  } catch (err) {
+    console.error('[chat] Stop thread failed:', err)
+  }
+}
+
+export async function reopenThread(convId: string): Promise<void> {
+  try {
+    await fetch(`/api/conversations/${convId}/reopen`, { method: 'POST' })
+    // Move from archived to conversations if needed
+    const archived = archivedConversations.find(c => c.id === convId)
+    if (archived) {
+      archivedConversations = archivedConversations.filter(c => c.id !== convId)
+      conversations = [{ ...archived, status: 'paused' as ThreadStatus, archivedAt: null }, ...conversations]
+    } else {
+      conversations = conversations.map(c =>
+        c.id === convId ? { ...c, status: 'paused' as ThreadStatus } : c
+      )
+    }
+  } catch (err) {
+    console.error('[chat] Reopen thread failed:', err)
+  }
+}
+
 // ── Event handler (called from connection store) ──────────────────────
 
 export function handleServerEvent(event: ServerMessage): void {
@@ -224,6 +254,10 @@ export function handleServerEvent(event: ServerMessage): void {
     case 'agent_start': {
       if (convId) {
         agentRunning = new Set([...agentRunning, convId])
+        // Update conversation status to active
+        conversations = conversations.map(c =>
+          c.id === convId ? { ...c, status: 'active' as ThreadStatus } : c
+        )
       }
       // Adopt conversation ID for new conversations (handles race with REST response)
       if (!activeConversationId && awaitingConversation && convId) {
@@ -265,6 +299,10 @@ export function handleServerEvent(event: ServerMessage): void {
         const next = new Set(agentRunning)
         next.delete(convId)
         agentRunning = next
+        // Update conversation status to paused
+        conversations = conversations.map(c =>
+          c.id === convId ? { ...c, status: 'paused' as ThreadStatus } : c
+        )
       }
       if (isActive) {
         dialogState = 'idle'
@@ -291,6 +329,10 @@ export function handleServerEvent(event: ServerMessage): void {
         const next = new Set(agentRunning)
         next.delete(convId)
         agentRunning = next
+        // Update conversation status to paused
+        conversations = conversations.map(c =>
+          c.id === convId ? { ...c, status: 'paused' as ThreadStatus } : c
+        )
       }
       if (convId === activeConversationId) {
         dialogState = 'idle'
@@ -319,6 +361,33 @@ export function handleServerEvent(event: ServerMessage): void {
       if (isActive) {
         dialogState = 'waiting_for_user'
         streamSegments = applyEvent(streamSegments, event)
+      }
+      break
+    }
+
+    case 'thread_status': {
+      const status = (event as { status: ThreadStatus }).status
+      if (convId) {
+        // Update conversation status in real-time
+        conversations = conversations.map(c =>
+          c.id === convId ? { ...c, status } : c
+        )
+        // If thread is archived, move it to archived list
+        if (status === 'archived') {
+          const conv = conversations.find(c => c.id === convId)
+          if (conv) {
+            conversations = conversations.filter(c => c.id !== convId)
+            archivedConversations = [{ ...conv, status: 'archived' }, ...archivedConversations]
+          }
+        }
+        // If thread is unarchived (reopened), move it back
+        if (status === 'paused' || status === 'active') {
+          const archived = archivedConversations.find(c => c.id === convId)
+          if (archived) {
+            archivedConversations = archivedConversations.filter(c => c.id !== convId)
+            conversations = [{ ...archived, status }, ...conversations]
+          }
+        }
       }
       break
     }
@@ -401,12 +470,17 @@ export function onGiteaEvent(fn: GiteaListener): () => void {
 // ── Mappers ───────────────────────────────────────────────────────────
 
 function mapConversation(raw: any): Conversation {
+  // Map legacy status values to new lifecycle states
+  let status: ThreadStatus = raw.status || 'paused'
+  if (status === ('open' as string)) status = 'paused'
+  if (status === ('closed' as string)) status = 'stopped'
+
   return {
     id: raw.id,
     topic: raw.topic || raw.channel || 'Untitled',
     channel: raw.channel || '',
     channelId: raw.channel_id || '',
-    status: raw.status || 'open',
+    status,
     tags: raw.tags || [],
     repo: raw.repo,
     createdAt: raw.created_at || raw.createdAt || '',

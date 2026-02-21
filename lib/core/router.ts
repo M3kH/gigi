@@ -206,8 +206,14 @@ export const handleMessage = async (
     console.warn('[router] Budget check failed:', (err as Error).message)
   }
 
-  // Emit agent_start
+  // Emit agent_start + activate thread
   wrappedOnEvent({ type: 'agent_start', conversationId: convId })
+  try {
+    await store.activateThread(convId)
+    wrappedOnEvent({ type: 'thread_status', conversationId: convId, status: 'active' })
+  } catch (err) {
+    console.warn('[router] activateThread failed:', (err as Error).message)
+  }
 
   // Create abort controller for this agent
   const abortController = new AbortController()
@@ -222,11 +228,23 @@ export const handleMessage = async (
       console.log(`[router] Agent stopped by user for conversation ${convId}`)
       wrappedOnEvent({ type: 'agent_stopped', conversationId: convId })
       await store.addMessage(convId, 'assistant', [{ type: 'text', text: '⏹️ Stopped by user' }])
+      try {
+        await store.pauseThread(convId)
+        wrappedOnEvent({ type: 'thread_status', conversationId: convId, status: 'paused' })
+      } catch { /* ignore */ }
       throw new Error('Agent stopped by user')
     }
     throw err
   } finally {
     runningAgents.delete(convId)
+  }
+
+  // Pause thread (agent done with this turn)
+  try {
+    await store.pauseThread(convId)
+    wrappedOnEvent({ type: 'thread_status', conversationId: convId, status: 'paused' })
+  } catch (err) {
+    console.warn('[router] pauseThread failed:', (err as Error).message)
   }
 
   // Store session ID from response

@@ -141,6 +141,12 @@ export const AskUserEvent = z.object({
   options: z.array(z.string()),
 })
 
+export const ThreadStatusEvent = z.object({
+  type: z.literal('thread_status'),
+  conversationId: z.string(),
+  status: z.enum(['active', 'paused', 'stopped', 'archived']),
+})
+
 export const ServerMessage = z.discriminatedUnion('type', [
   AgentStartEvent,
   TextChunkEvent,
@@ -152,6 +158,7 @@ export const ServerMessage = z.discriminatedUnion('type', [
   PongEvent,
   GiteaEvent,
   AskUserEvent,
+  ThreadStatusEvent,
 ])
 
 export type ServerMessage = z.infer<typeof ServerMessage>

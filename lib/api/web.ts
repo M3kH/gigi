@@ -93,7 +93,19 @@ export const createApp = (): Hono => {
   })
 
   app.post('/api/conversations/:id/close', async (c) => {
-    await store.closeConversation(c.req.param('id'))
+    await store.stopThread(c.req.param('id'))
+    return c.json({ ok: true })
+  })
+
+  // Stop a thread (purpose fulfilled)
+  app.post('/api/conversations/:id/stop-thread', async (c) => {
+    await store.stopThread(c.req.param('id'))
+    return c.json({ ok: true })
+  })
+
+  // Reopen a stopped/archived thread
+  app.post('/api/conversations/:id/reopen', async (c) => {
+    await store.reopenThread(c.req.param('id'))
     return c.json({ ok: true })
   })
 

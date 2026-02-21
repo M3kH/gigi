@@ -10,11 +10,14 @@ const { Pool } = pg
 
 // ─── Types ──────────────────────────────────────────────────────────
 
+// Thread lifecycle states
+export type ThreadStatus = 'active' | 'paused' | 'stopped' | 'archived'
+
 export interface Conversation {
   id: string
   channel: string
   topic: string | null
-  status: string
+  status: ThreadStatus
   tags: string[]
   repo: string | null
   session_id: string | null
@@ -158,6 +161,11 @@ const migrate = async (): Promise<void> => {
     ALTER TABLE conversations ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ;
     CREATE INDEX IF NOT EXISTS idx_conversations_archived ON conversations(archived_at) WHERE archived_at IS NOT NULL;
 
+    -- Migrate old status values to new lifecycle states
+    UPDATE conversations SET status = 'paused' WHERE status = 'open';
+    UPDATE conversations SET status = 'stopped' WHERE status = 'closed';
+    -- 'active' stays as 'active' (same meaning)
+
     -- ─── Thread tables (cross-channel unified model) ───────────────
 
     CREATE TABLE IF NOT EXISTS threads (
@@ -249,7 +257,7 @@ export const deleteConfig = async (key: string): Promise<void> => {
 
 export const createConversation = async (channel: string, topic: string | null = null): Promise<Conversation> => {
   const { rows } = await pool.query(
-    'INSERT INTO conversations (channel, topic) VALUES ($1, $2) RETURNING *',
+    `INSERT INTO conversations (channel, topic, status) VALUES ($1, $2, 'paused') RETURNING *`,
     [channel, topic]
   )
   return rows[0]
@@ -425,7 +433,49 @@ export const getSessionId = async (convId: string): Promise<string | null> => {
 
 export const clearSessionId = async (convId: string): Promise<void> => {
   await pool.query(
-    `UPDATE conversations SET session_id = NULL, status = 'open', updated_at = now() WHERE id = $1`,
+    `UPDATE conversations SET session_id = NULL, updated_at = now() WHERE id = $1`,
+    [convId]
+  )
+}
+
+// ─── Thread lifecycle transitions ────────────────────────────────
+
+/** Transition to active (agent starting). Valid from paused/stopped. */
+export const activateThread = async (convId: string): Promise<void> => {
+  await pool.query(
+    `UPDATE conversations SET status = 'active', updated_at = now() WHERE id = $1 AND status IN ('paused', 'stopped')`,
+    [convId]
+  )
+}
+
+/** Transition to paused (agent done with turn). Valid from active. */
+export const pauseThread = async (convId: string): Promise<void> => {
+  await pool.query(
+    `UPDATE conversations SET status = 'paused', updated_at = now() WHERE id = $1 AND status = 'active'`,
+    [convId]
+  )
+}
+
+/** Transition to stopped (purpose fulfilled / manual). Valid from any non-archived state. */
+export const stopThread = async (convId: string): Promise<void> => {
+  await pool.query(
+    `UPDATE conversations SET status = 'stopped', closed_at = now(), updated_at = now() WHERE id = $1 AND status != 'archived'`,
+    [convId]
+  )
+}
+
+/** Transition to archived (manual). Valid from stopped. */
+export const archiveThread = async (convId: string): Promise<void> => {
+  await pool.query(
+    `UPDATE conversations SET status = 'archived', archived_at = now(), updated_at = now() WHERE id = $1 AND status = 'stopped'`,
+    [convId]
+  )
+}
+
+/** Reopen a stopped or archived thread → paused. */
+export const reopenThread = async (convId: string): Promise<void> => {
+  await pool.query(
+    `UPDATE conversations SET status = 'paused', closed_at = NULL, archived_at = NULL, updated_at = now() WHERE id = $1 AND status IN ('stopped', 'archived')`,
     [convId]
   )
 }
@@ -447,9 +497,10 @@ export const updateConversation = async (id: string, fields: ConversationUpdate)
   await pool.query(`UPDATE conversations SET ${sets.join(', ')} WHERE id = $1`, values)
 }
 
+/** @deprecated Use stopThread() instead. Kept for backward compat — maps to 'stopped'. */
 export const closeConversation = async (id: string): Promise<void> => {
   await pool.query(
-    `UPDATE conversations SET status = 'closed', closed_at = now(), updated_at = now() WHERE id = $1`,
+    `UPDATE conversations SET status = 'stopped', closed_at = now(), updated_at = now() WHERE id = $1`,
     [id]
   )
 }
@@ -460,14 +511,14 @@ export const deleteConversation = async (id: string): Promise<void> => {
 
 export const archiveConversation = async (id: string): Promise<void> => {
   await pool.query(
-    `UPDATE conversations SET archived_at = now(), updated_at = now() WHERE id = $1`,
+    `UPDATE conversations SET status = 'archived', archived_at = now(), updated_at = now() WHERE id = $1`,
     [id]
   )
 }
 
 export const unarchiveConversation = async (id: string): Promise<void> => {
   await pool.query(
-    `UPDATE conversations SET archived_at = NULL, updated_at = now() WHERE id = $1`,
+    `UPDATE conversations SET status = 'paused', archived_at = NULL, updated_at = now() WHERE id = $1`,
     [id]
   )
 }
@@ -480,9 +531,8 @@ export const unarchiveConversation = async (id: string): Promise<void> => {
 export const autoArchiveStale = async (staleDays: number = 7): Promise<number> => {
   const { rowCount } = await pool.query(
     `UPDATE conversations
-     SET archived_at = now(), updated_at = now()
-     WHERE archived_at IS NULL
-       AND status NOT IN ('active')
+     SET status = 'archived', archived_at = now(), updated_at = now()
+     WHERE status IN ('paused', 'stopped')
        AND updated_at < now() - make_interval(days => $1)`,
     [staleDays]
   )
@@ -508,7 +558,7 @@ export const findByTag = async (tag: string): Promise<Conversation[]> => {
 
 export const findLatest = async (channel: string): Promise<Conversation | null> => {
   const { rows } = await pool.query(
-    `SELECT * FROM conversations WHERE channel = $1 AND status IN ('active', 'open') ORDER BY updated_at DESC LIMIT 1`,
+    `SELECT * FROM conversations WHERE channel = $1 AND status IN ('active', 'paused') ORDER BY updated_at DESC LIMIT 1`,
     [channel]
   )
   return rows[0] ?? null
