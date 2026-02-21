@@ -113,15 +113,26 @@ export interface ThreadLineageThread {
   refs: ThreadRef[]
 }
 
+export type ThreadChannel = 'web' | 'telegram' | 'gitea_comment' | 'gitea_review' | 'webhook' | 'system'
+
 export interface ThreadEvent {
   id: string
   thread_id: string
-  channel: string
-  direction: string
+  channel: ThreadChannel | string
+  direction: 'inbound' | 'outbound' | string
   actor: string
   content: unknown
   message_type: string
+  usage?: unknown
+  metadata?: Record<string, unknown>
+  is_compacted?: boolean
   created_at: string
+}
+
+export interface CompactStatus {
+  should_compact: boolean
+  event_count: number
+  threshold: number
 }
 
 export interface ThreadLineage {

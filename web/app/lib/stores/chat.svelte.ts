@@ -18,6 +18,9 @@ import type {
   TokenUsage,
   ThreadStatus,
   ThreadLineage,
+  ThreadEvent,
+  ThreadRef,
+  CompactStatus,
 } from '$lib/types/chat'
 import type { ServerMessage } from '$lib/types/protocol'
 import { fetchBoard } from '$lib/stores/kanban.svelte'
@@ -242,6 +245,61 @@ export async function getThreadLineage(threadId: string): Promise<ThreadLineage 
     return await apiFetch<ThreadLineage>(`/api/threads/${threadId}/lineage`)
   } catch {
     return null
+  }
+}
+
+/**
+ * Fetch thread events (unified timeline).
+ * Excludes compacted events by default unless includeCompacted is true.
+ */
+export async function getThreadEvents(threadId: string, includeCompacted = false): Promise<ThreadEvent[]> {
+  try {
+    const qs = includeCompacted ? '?include_compacted=true' : ''
+    return await apiFetch<ThreadEvent[]>(`/api/threads/${threadId}/events${qs}`)
+  } catch {
+    return []
+  }
+}
+
+/**
+ * Fetch thread refs (linked issues, PRs, commits, branches).
+ */
+export async function getThreadRefs(threadId: string): Promise<ThreadRef[]> {
+  try {
+    const thread = await apiFetch<{ refs?: ThreadRef[] }>(`/api/threads/${threadId}`)
+    return thread.refs || []
+  } catch {
+    return []
+  }
+}
+
+/**
+ * Check if a thread should be compacted (event count vs threshold).
+ */
+export async function getCompactStatus(threadId: string): Promise<CompactStatus | null> {
+  try {
+    return await apiFetch<CompactStatus>(`/api/threads/${threadId}/compact-status`)
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Compact a thread (in-place). Summarizes older events and keeps recent ones.
+ */
+export async function compactThread(threadId: string, keepRecent = 10): Promise<void> {
+  try {
+    await fetch(`/api/threads/${threadId}/compact`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: 'in-place', keep_recent: keepRecent }),
+    })
+    // Reload messages to reflect compacted state
+    if (activeConversationId === threadId) {
+      await loadMessages(threadId)
+    }
+  } catch (err) {
+    console.error('[chat] Compact failed:', err)
   }
 }
 

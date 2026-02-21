@@ -123,9 +123,24 @@
 
   function channelIcon(channel: string): string {
     switch (channel) {
+      case 'telegram': return '📱'
+      case 'webhook': return '⚡'
+      case 'web': return '💬'
+      case 'gitea_comment': return '💬'
+      case 'gitea_review': return '👀'
+      case 'system': return '⚙️'
+      default: return '💬'
+    }
+  }
+
+  function channelLabel(channel: string): string {
+    switch (channel) {
       case 'telegram': return 'TG'
       case 'webhook': return 'WH'
       case 'web': return 'WB'
+      case 'gitea_comment': return 'GI'
+      case 'gitea_review': return 'RV'
+      case 'system': return 'SY'
       default: return 'WB'
     }
   }
@@ -153,7 +168,7 @@
     >
       <!-- Row 1: channel icon + title + spinner + actions -->
       <div class="chat-item-header">
-        <span class="channel-icon" title={conv.channel}>{channelIcon(conv.channel)}</span>
+        <span class="channel-icon" title={conv.channel}>{channelIcon(conv.channel)}<span class="channel-label">{channelLabel(conv.channel)}</span></span>
         <span class="status-badge {statusClass(conv)}" title={statusTooltip(conv)}></span>
         <span class="chat-title">{displayTitle(conv)}</span>
         {#if isAgentRunning(conv.id)}
@@ -356,7 +371,10 @@
   }
 
   .channel-icon {
-    font-size: 8px;
+    display: inline-flex;
+    align-items: center;
+    gap: 1px;
+    font-size: 9px;
     font-weight: 700;
     color: var(--gigi-text-muted);
     background: var(--gigi-bg-tertiary);
@@ -364,6 +382,11 @@
     border-radius: 2px;
     flex-shrink: 0;
     letter-spacing: 0.02em;
+  }
+
+  .channel-label {
+    font-size: 7px;
+    opacity: 0.7;
   }
 
   .status-badge {

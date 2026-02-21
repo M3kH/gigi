@@ -10,7 +10,7 @@
     getActiveConversation,
   } from '$lib/stores/chat.svelte'
   import { getViewContext, type ViewContext } from '$lib/stores/navigation.svelte'
-  import ChatMessages from '$components/chat/ChatMessages.svelte'
+  import ThreadTimeline from '$components/chat/ThreadTimeline.svelte'
   import ChatInput from '$components/chat/ChatInput.svelte'
 
   const state: PanelState = $derived(getPanelState('chatOverlay'))
@@ -63,7 +63,7 @@
   </header>
 
   {#if state !== 'hidden'}
-    <ChatMessages />
+    <ThreadTimeline />
 
     {#if contextLabel}
       <div class="context-pill">
