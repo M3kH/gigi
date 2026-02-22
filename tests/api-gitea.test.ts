@@ -169,6 +169,7 @@ describe('lib/api-gitea', () => {
     })
 
     it('should throw GiteaApiError on bad auth', async () => {
+      if (!GITEA_TOKEN) return // need a reachable Gitea instance
       const bad = createGiteaClient(GITEA_URL, 'invalid-token-xxx')
       try {
         await bad.users.me()
