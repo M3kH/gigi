@@ -73,6 +73,7 @@
 
     <ChatInput
       onsend={handleSend}
+      conversationId={activeConvId}
       disabled={false}
       placeholder={activeConvId ? 'Continue conversation...' : 'Message Gigi...'}
       autofocus={!activeConvId}
