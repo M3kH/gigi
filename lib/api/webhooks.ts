@@ -68,7 +68,21 @@ export const handleWebhook = async (c: Context): Promise<Response> => {
 
   const isSelfGenerated = await isSelfEvent(event, payload)
   if (isSelfGenerated) {
-    console.log(`Skipping self-generated ${event}`)
+    console.log(`Self-generated ${event}`)
+    // For issue/PR creation, still route to create conversation/thread
+    // so later @gigi mentions have a conversation to attach to
+    const isCreation = (
+      (event === 'issues' && payload.action === 'opened') ||
+      (event === 'pull_request' && payload.action === 'opened')
+    )
+    if (isCreation) {
+      try {
+        await routeWebhook(event, payload)
+        console.log(`[webhook] Created conversation for self-generated ${event}`)
+      } catch (err) {
+        console.warn(`[webhook] Failed to route self-generated ${event}:`, (err as Error).message)
+      }
+    }
     return c.json({ ok: true, skipped: 'self-generated' })
   }
 
