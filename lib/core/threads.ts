@@ -521,7 +521,7 @@ export const forkThread = async (
 
   // 3. Build topic for the fork
   const forkTopic = opts.topic
-    ?? (source.topic ? `Fork of: ${source.topic}` : null)
+    ?? (source.topic ? `Fork of: ${source.topic}` : undefined)
 
   // 4. Create the new thread
   const newThread = await createThread({
