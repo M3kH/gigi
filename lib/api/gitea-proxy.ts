@@ -255,19 +255,27 @@ export const createGiteaProxy = (): Hono => {
         )
       ).flat()
 
-      // Build PR cross-reference: repo+issueNumber → PR count
+      // Build PR cross-reference: repo+issueNumber → PR details
       const prLinks = new Map<string, number>()
+      const prDetails = new Map<string, { repo: string; number: number; title: string }[]>()
       for (const pr of allPRs) {
         const body = (pr.body ?? '') + ' ' + (pr.title ?? '')
         const matches = body.matchAll(/(?:closes?|fixes?|resolves?)\s+#(\d+)/gi)
         for (const m of matches) {
           const key = `${pr._repo}#${m[1]}`
           prLinks.set(key, (prLinks.get(key) ?? 0) + 1)
+          const details = prDetails.get(key) ?? []
+          // Avoid duplicates
+          if (!details.some(d => d.repo === pr._repo && d.number === pr.number)) {
+            details.push({ repo: pr._repo, number: pr.number, title: pr.title ?? '' })
+          }
+          prDetails.set(key, details)
         }
       }
 
       // Fetch conversations for chat cross-reference (issue-specific via tags)
       let chatLinks = new Map<string, number>()
+      let chatDetails = new Map<string, { id: string; topic: string }[]>()
       try {
         const convs = await listConversations(null, 200)
         for (const conv of convs) {
@@ -276,6 +284,9 @@ export const createGiteaProxy = (): Hono => {
               // Tags like "reponame#42" link to specific issues
               if (tag.includes('#')) {
                 chatLinks.set(tag, (chatLinks.get(tag) ?? 0) + 1)
+                const details = chatDetails.get(tag) ?? []
+                details.push({ id: conv.id, topic: conv.topic || 'Untitled' })
+                chatDetails.set(tag, details)
               }
             }
           }
@@ -311,14 +322,19 @@ export const createGiteaProxy = (): Hono => {
           milestone: issue.milestone ? { title: issue.milestone.title } : null,
           comments: issue.comments ?? 0,
           linked_prs: prLinks.get(`${issue._repo}#${issue.number}`) ?? 0,
+          linked_pr_details: prDetails.get(`${issue._repo}#${issue.number}`) ?? [],
           linked_chats: chatLinks.get(`${issue._repo}#${issue.number}`) ?? 0,
+          linked_chat_details: chatDetails.get(`${issue._repo}#${issue.number}`) ?? [],
           created_at: issue.created_at,
           updated_at: issue.updated_at,
           html_url: issue.html_url,
         })),
       }))
 
-      return c.json({ org, columns: board, totalIssues: allIssues.length })
+      // Include repo names for quick-create feature
+      const repoNames = repos.filter(r => !r.archived).map(r => r.name).sort()
+
+      return c.json({ org, columns: board, totalIssues: allIssues.length, repos: repoNames })
     } catch (err) {
       console.error('[gitea-proxy] board error:', (err as Error).message)
       return c.json({ error: (err as Error).message }, 500)
@@ -373,6 +389,62 @@ export const createGiteaProxy = (): Hono => {
       return c.json({ ok: true, labels: newLabels })
     } catch (err) {
       console.error('[gitea-proxy] board/move error:', (err as Error).message)
+      return c.json({ error: (err as Error).message }, 500)
+    }
+  })
+
+  /**
+   * POST /api/gitea/board/create
+   *
+   * Quick-create an issue from the kanban board.
+   * Optionally places it in a target column via status label.
+   */
+  api.post('/board/create', async (c) => {
+    try {
+      const gitea = await getClient()
+      const org = await getOrg()
+      const { repo, title, body, targetColumn } = await c.req.json<{
+        repo: string
+        title: string
+        body?: string
+        targetColumn?: string
+      }>()
+
+      if (!repo || !title) {
+        return c.json({ error: 'repo and title are required' }, 400)
+      }
+
+      // Create the issue
+      const issue = await gitea.issues.create(org, repo, { title, body })
+
+      // If a target column is specified, add the status label
+      if (targetColumn && targetColumn !== 'backlog') {
+        const columnStatuses: Record<string, string> = {
+          'ready': 'status/ready',
+          'in-progress': 'status/in-progress',
+          'review': 'status/review',
+          'blocked': 'status/blocked',
+          'done': 'status/done',
+        }
+        const statusLabel = columnStatuses[targetColumn]
+        if (statusLabel) {
+          await ensureStatusLabels(gitea, org, repo)
+          await gitea.issues.setLabelsByName(org, repo, issue.number, [statusLabel])
+        }
+      }
+
+      return c.json({
+        ok: true,
+        issue: {
+          id: issue.id,
+          number: issue.number,
+          title: issue.title,
+          repo,
+          html_url: issue.html_url,
+        },
+      })
+    } catch (err) {
+      console.error('[gitea-proxy] board/create error:', (err as Error).message)
       return c.json({ error: (err as Error).message }, 500)
     }
   })
