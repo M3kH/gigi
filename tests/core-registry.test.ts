@@ -111,12 +111,14 @@ describe('Tool Registry', () => {
       assert.equal(def.name, 'test.greet')
       assert.equal(def.description, 'Echo input back')
       assert.deepEqual(def.inputSchema, {
+        $schema: 'https://json-schema.org/draft/2020-12/schema',
         type: 'object',
         properties: {
           name: { type: 'string' },
           age: { type: 'number' },
         },
         required: ['name'],
+        additionalProperties: false,
       })
     })
 

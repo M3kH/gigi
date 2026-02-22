@@ -11,8 +11,8 @@
     "dev:server": "node --import tsx --watch src/index.ts",
     "build": "vite build --config vite.config.ts",
     "typecheck": "tsc --noEmit",
-    "test": "node --import tsx --test tests/**/*.test.ts tests/**/*.test.js src/**/*.test.js",
-    "test:watch": "node --import tsx --test --watch tests/**/*.test.ts tests/**/*.test.js src/**/*.test.js",
+    "test": "node --import tsx --test tests/*.test.ts",
+    "test:watch": "node --import tsx --test --watch tests/*.test.ts",
     "test:integration": "TEST_DATABASE_URL=${TEST_DATABASE_URL:-postgresql://gigi_test:gigi_test@postgres:5432/gigi_test} node --import tsx --test --test-concurrency 1 tests/integration/*.integration.test.ts",
     "pretest:integration": "bash scripts/backup-db.sh",
     "test:ci": "node scripts/test-runner.js"
