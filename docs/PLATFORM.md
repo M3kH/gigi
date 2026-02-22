@@ -653,7 +653,7 @@ Options:
 
 ### The current Gigi repo
 
-Currently licensed GPL-2.0 in package.json. Since we're starting a new project that extracts modules (and Mauro is the sole author), we can relicense freely.
+Currently licensed GPL-2.0 in package.json. Since we're starting a new project that extracts modules (and the original author retains copyright), we can relicense freely.
 
 ---
 

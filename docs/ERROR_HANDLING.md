@@ -42,7 +42,7 @@ hooks: {
       // After 3 failures, ask for help
       if (retryCount >= 3) {
         return {
-          systemMessage: `Tool has failed ${retryCount} times. Explain the issue to Mauro and ask for guidance.`
+          systemMessage: `Tool has failed ${retryCount} times. Explain the issue to the operator and ask for guidance.`
         }
       }
 
@@ -114,7 +114,7 @@ Agent: Error: Invalid flag (attempt 2/3)
 Agent: [checks node version]
 Agent: [tries: npm run test:unit or searches for test files]
 Agent: Error: Still failing (attempt 3/3)
-Agent: "Mauro, I've tried 3 approaches to run tests but they're all failing because:
+Agent: "I've tried 3 approaches to run tests but they're all failing because:
        1. No 'test' script in package.json
        2. Node version doesn't support --test flag
        3. No test files found

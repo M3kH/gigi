@@ -11,21 +11,21 @@ This document explains the Caddy reverse proxy configuration required for Gigi t
 ## Configuration Explained
 
 ```caddyfile
-claude.cluster.local {
+gigi.example.com {
 	# Handle WebSocket connections for browser control on /ws path
 	@browserws {
 		path /ws
 		header Connection *Upgrade*
 		header Upgrade websocket
 	}
-	reverse_proxy @browserws idea-biancifiore-gigi_gigi:3001
+	reverse_proxy @browserws gigi-service:3001
 
 	# Ensure SSE/EventSource works properly
 	@sse {
 		path /api/events
 	}
 	handle @sse {
-		reverse_proxy idea-biancifiore-gigi_gigi:3000 {
+		reverse_proxy gigi-service:3000 {
 			# Disable buffering for SSE
 			flush_interval -1
 			# Long timeout for persistent connections
@@ -37,12 +37,14 @@ claude.cluster.local {
 	}
 
 	# Main application (all other requests)
-	reverse_proxy idea-biancifiore-gigi_gigi:3000 {
+	reverse_proxy gigi-service:3000 {
 		# Flush immediately for potential streaming responses
 		flush_interval -1
 	}
 }
 ```
+
+> **Note:** Replace `gigi.example.com` with your domain and `gigi-service` with your Docker service name or container hostname.
 
 ## Why This Configuration?
 
@@ -62,12 +64,12 @@ claude.cluster.local {
 
 1. **WebSocket**: Open browser console and check:
    ```javascript
-   new WebSocket('wss://claude.cluster.local/ws')
+   new WebSocket('wss://gigi.example.com/ws')
    ```
 
 2. **SSE**: Test EventSource:
    ```javascript
-   new EventSource('https://claude.cluster.local/api/events')
+   new EventSource('https://gigi.example.com/api/events')
    ```
 
 ## Common Issues

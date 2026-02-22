@@ -3,7 +3,7 @@
 ## The Problem (gigi#11)
 
 **Before:** Gigi relied on system prompts to complete tasks. This created a race condition:
-- System prompt says "create a PR and notify Mauro"
+- System prompt says "create a PR and notify the operator"
 - Agent might stop mid-task due to context limits, conversation end, or just "forgetting"
 - Prompts are **suggestions**, not **enforced contracts**
 
@@ -25,7 +25,7 @@ The Task Enforcer is a **state machine** that:
 ```
 ┌─────────────────────────────────────────────────────┐
 │                    User Input                        │
-│              "Mauro: /issue gigi#11"                 │
+│              "Operator: /issue gigi#11"                     │
 └───────────────────┬─────────────────────────────────┘
                     │
                     ▼
@@ -165,7 +165,7 @@ Gigi: [Sends notification via telegram_send]
 
 1. Add enforcer for general tasks (not just `/issue`)
 2. Detect PR creation via Gitea API instead of git branch check
-3. Add timeout: if task incomplete after 1 hour, notify Mauro
+3. Add timeout: if task incomplete after 1 hour, notify the operator
 4. Support multi-repo tasks (e.g., changes in `gigi` + `deploy-docker-compose`)
 
 ## Design Philosophy

@@ -19,7 +19,7 @@ This typically means the WebRTC connection cannot establish due to NAT traversal
 
    ```env
    # In your .env file
-   NEKO_NAT1TO1=192.168.1.80  # Your host's IP address
+   NEKO_NAT1TO1=<your-host-ip>  # Your host's LAN IP address
    ```
 
 2. **Ensure UDP Ports Are Open**
@@ -50,7 +50,7 @@ This typically means the WebRTC connection cannot establish due to NAT traversal
 2. **Verify Connectivity**
    ```bash
    # Test if neko service is running
-   curl http://neko.cluster.local
+   curl http://neko.example.com
 
    # Check if UDP ports are listening
    sudo netstat -tulpn | grep 52000
@@ -80,7 +80,7 @@ The signaling happens over WebSocket through Caddy, but the actual media streams
 
 ### Testing WebRTC
 
-1. Access the browser control at https://claude.cluster.local/browser-control.html
+1. Access the browser control at https://gigi.example.com/browser-control.html
 2. Switch to "Interactive" mode
 3. Check browser console for any errors
 4. If connection fails, verify NAT1TO1 is set correctly
