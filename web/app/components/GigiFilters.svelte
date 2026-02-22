@@ -321,35 +321,7 @@
     </button>
   </div>
 
-  <!-- Row 2: Repo filter chips (hidden on Overview where they don't apply) -->
-  {#if repos.length > 0 && currentView.view !== 'overview'}
-    <div class="filter-row chips-row" class:collapsed={!filtersExpanded}>
-      <span class="filter-label" title="Filter issues and activity by repository">Repos:</span>
-      <button
-        class="chip"
-        class:active={selectedRepo === null}
-        onclick={() => selectRepo(null)}
-      >All</button>
-      {#each repos as repo}
-        <button
-          class="chip"
-          class:active={selectedRepo === repo.name}
-          onclick={() => selectRepo(repo.name)}
-        >
-          {repo.name}
-          {#if repo.open_issues_count > 0}
-            <span class="chip-count">{repo.open_issues_count}</span>
-          {/if}
-        </button>
-      {/each}
-
-      <button
-        class="collapse-toggle"
-        onclick={() => filtersExpanded = !filtersExpanded}
-        title={filtersExpanded ? 'Collapse filters' : 'Expand filters'}
-      >{filtersExpanded ? '▲' : '▼'}</button>
-    </div>
-  {/if}
+  <!-- Row 2: Repo filter chips (removed — unused for now) -->
 
   <!-- Row 3: Context bar — linked chats for current issue/PR -->
   {#if isIssuePrView}

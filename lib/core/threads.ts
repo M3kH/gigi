@@ -558,6 +558,14 @@ export const forkThread = async (
     // Fork-compact: use the source summary (or generate a placeholder)
     const summary = source.summary ?? `Forked from thread "${source.topic ?? sourceId}" (compact — original events not copied)`
     await updateThreadSummary(newThread.id, summary)
+    // Also create a summary event so the timeline shows the summary
+    await addThreadEvent(newThread.id, {
+      channel: 'system',
+      direction: 'internal',
+      actor: 'gigi',
+      content: summary,
+      message_type: 'summary',
+    })
   } else if (forkPointEventId) {
     // Copy events up to and including the fork point
     // We get the fork point's created_at to determine the cutoff

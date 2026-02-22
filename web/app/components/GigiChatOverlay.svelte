@@ -190,6 +190,7 @@
       onsend={handleSend}
       disabled={false}
       placeholder={activeConvId ? 'Continue conversation...' : 'Message Gigi...'}
+      autofocus={!activeConvId}
     />
   {/if}
 </div>

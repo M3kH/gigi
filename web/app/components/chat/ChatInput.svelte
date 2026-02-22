@@ -13,12 +13,32 @@
     onsend: (message: string) => void
     placeholder?: string
     disabled?: boolean
+    autofocus?: boolean
   }
 
-  const { onsend, placeholder = 'Message Gigi...', disabled = false }: Props = $props()
+  const { onsend, placeholder = 'Message Gigi...', disabled = false, autofocus = false }: Props = $props()
 
   let inputValue = $state('')
   let inputEl: HTMLTextAreaElement | undefined = $state()
+
+  // Focus the textarea when autofocus becomes true (e.g. new chat)
+  $effect(() => {
+    if (autofocus && inputEl) {
+      requestAnimationFrame(() => inputEl?.focus())
+    }
+  })
+
+  // Allow parent to set initial value (e.g. pre-filled fork summary)
+  export function setValue(text: string): void {
+    inputValue = text
+    requestAnimationFrame(() => {
+      if (inputEl) {
+        inputEl.style.height = 'auto'
+        inputEl.style.height = Math.min(inputEl.scrollHeight, 200) + 'px'
+        inputEl.focus()
+      }
+    })
+  }
 
   // Restore draft from localStorage on mount
   onMount(() => {

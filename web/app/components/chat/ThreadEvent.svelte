@@ -192,13 +192,14 @@
     align-items: center;
     gap: var(--gigi-space-sm);
     padding: var(--gigi-space-xs) var(--gigi-space-md);
-    margin: var(--gigi-space-xs) 0;
+    margin: var(--gigi-space-xs) auto;
     background: var(--gigi-bg-tertiary);
     border: 1px solid var(--gigi-border-muted);
     border-radius: var(--gigi-radius-md);
     font-size: var(--gigi-font-size-xs);
     color: var(--gigi-text-muted);
     max-width: 90%;
+    justify-content: center;
   }
 
   .system-text {

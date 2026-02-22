@@ -220,7 +220,7 @@ export async function forkConversation(convId: string, opts?: { topic?: string; 
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         topic: opts?.topic,
-        compact: opts?.compact ?? false,
+        compact: opts?.compact ?? true,
       }),
     })
     if (!res.ok) {
@@ -300,6 +300,13 @@ export async function compactThread(idOrConvId: string, keepRecent = 10): Promis
       console.error('[chat] Compact failed:', res.status)
       return
     }
+    const result = await res.json().catch(() => null)
+    // Show a system event in the live stream so the user sees feedback
+    const count = result?.compacted_count ?? '?'
+    streamSegments = [...streamSegments, {
+      type: 'system' as const,
+      text: `📦 Thread compacted — ${count} events summarized`,
+    }]
     // Reload messages to reflect compacted state
     if (activeConversationId) {
       await loadMessages(activeConversationId)

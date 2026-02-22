@@ -1,6 +1,6 @@
 <script lang="ts">
   /** Section B: Chat list / conversation sidebar */
-  import { getPanelState, togglePanel, type PanelState } from '$lib/stores/panels.svelte'
+  import { getPanelState, setPanelState, togglePanel, type PanelState } from '$lib/stores/panels.svelte'
   import { newConversation, loadConversations } from '$lib/stores/chat.svelte'
   import ChatList from '$components/chat/ChatList.svelte'
   import { onMount } from 'svelte'
@@ -13,6 +13,11 @@
 
   function handleNewChat() {
     newConversation()
+    // Ensure chat overlay is visible so the user sees the textarea
+    const chatState = getPanelState('chatOverlay')
+    if (chatState === 'hidden') {
+      setPanelState('chatOverlay', 'compact')
+    }
   }
 
   function handleCollapse() {

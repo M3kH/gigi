@@ -66,7 +66,8 @@ export async function fetchBoard(): Promise<void> {
     const res = await fetch('/api/gitea/board')
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     const data: BoardData = await res.json()
-    columns = data.columns
+    // Filter out Done column — done issues are never visible on the board
+    columns = data.columns.filter(col => col.id !== 'done')
     orgName = data.org
     totalIssues = data.totalIssues
     lastFetch = Date.now()
