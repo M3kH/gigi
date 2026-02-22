@@ -208,20 +208,20 @@
     <ForkIndicator parent={lineage.parent} forkPoint={lineage.fork_point} />
   {/if}
 
-  <!-- Thread refs bar -->
-  {#if threadRefs.length > 0 || (activeId && hasThreadEvents)}
-    <ThreadRefsBar refs={threadRefs} onAddRef={handleAddRef} />
-  {/if}
-
-  <!-- Thread actions (only show when we have an active thread) -->
-  {#if activeId && hasThreadEvents}
-    <ThreadActions
-      threadId={activeId}
-      {compactStatus}
-      onFork={handleFork}
-      onCompact={handleCompact}
-      onAddRef={handleAddRef}
-    />
+  <!-- Sticky toolbar: refs + actions -->
+  {#if activeId}
+    <div class="sticky-toolbar">
+      {#if threadRefs.length > 0}
+        <ThreadRefsBar refs={threadRefs} onAddRef={handleAddRef} />
+      {/if}
+      <ThreadActions
+        threadId={activeId}
+        {compactStatus}
+        onFork={handleFork}
+        onCompact={handleCompact}
+        onAddRef={handleAddRef}
+      />
+    </div>
   {/if}
 
   <!-- Children forks banner -->
@@ -337,6 +337,18 @@
     flex: 1;
     overflow-y: auto;
     padding: var(--gigi-space-md);
+  }
+
+  /* ── Sticky toolbar ─────────────────────────────────────────────── */
+
+  .sticky-toolbar {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: var(--gigi-bg-secondary);
+    margin: 0 calc(-1 * var(--gigi-space-md));
+    padding: var(--gigi-space-xs) var(--gigi-space-md);
+    border-bottom: var(--gigi-border-width) solid var(--gigi-border-muted);
   }
 
   .empty-state {

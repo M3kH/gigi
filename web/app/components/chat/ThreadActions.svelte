@@ -45,7 +45,6 @@
   .thread-actions {
     display: flex;
     gap: var(--gigi-space-xs);
-    padding: var(--gigi-space-xs) 0;
     flex-wrap: wrap;
   }
 
