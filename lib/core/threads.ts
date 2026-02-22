@@ -561,7 +561,7 @@ export const forkThread = async (
     // Also create a summary event so the timeline shows the summary
     await addThreadEvent(newThread.id, {
       channel: 'system',
-      direction: 'internal',
+      direction: 'outbound',
       actor: 'gigi',
       content: summary,
       message_type: 'summary',
