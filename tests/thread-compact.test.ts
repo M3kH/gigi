@@ -387,8 +387,8 @@ describe('formatChannelAttribution', () => {
   })
 
   it('includes actor name for non-user/gigi actors', () => {
-    const event = makeEvent({ channel: 'gitea_comment', actor: '@mauro' })
-    assert.equal(formatChannelAttribution(event), '[via Gitea comment by @mauro]')
+    const event = makeEvent({ channel: 'gitea_comment', actor: '@testuser' })
+    assert.equal(formatChannelAttribution(event), '[via Gitea comment by @testuser]')
   })
 
   it('does not include actor for gigi', () => {
@@ -552,7 +552,7 @@ describe('buildContextFromEvents (with attribution)', () => {
     const events = [
       makeEvent({ channel: 'telegram', direction: 'inbound', content: [{ type: 'text', text: 'Add dark mode' }] }),
       makeEvent({ channel: 'web', direction: 'outbound', actor: 'gigi', content: [{ type: 'text', text: 'Sure!' }] }),
-      makeEvent({ channel: 'gitea_comment', direction: 'inbound', actor: '@mauro', content: [{ type: 'text', text: 'Also add persistence' }] }),
+      makeEvent({ channel: 'gitea_comment', direction: 'inbound', actor: '@testuser', content: [{ type: 'text', text: 'Also add persistence' }] }),
     ]
     const result = buildContextWithAttribution(events)
     assert.equal(result.messages.length, 3)
@@ -561,7 +561,7 @@ describe('buildContextFromEvents (with attribution)', () => {
     // Outbound from gigi: no attribution
     assert.ok(!(result.messages[1].content as Array<{ text: string }>)[0].text.includes('[via'))
     // Inbound gitea: attribution with actor
-    assert.ok((result.messages[2].content as Array<{ text: string }>)[0].text.includes('[via Gitea comment by @mauro]'))
+    assert.ok((result.messages[2].content as Array<{ text: string }>)[0].text.includes('[via Gitea comment by @testuser]'))
   })
 
   it('includes linked refs as first message', () => {

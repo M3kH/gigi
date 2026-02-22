@@ -18,14 +18,14 @@ gigi.example.com {
 		header Connection *Upgrade*
 		header Upgrade websocket
 	}
-	reverse_proxy @browserws gigi-service:3001
+	reverse_proxy @browserws gigi_gigi:3001
 
 	# Ensure SSE/EventSource works properly
 	@sse {
 		path /api/events
 	}
 	handle @sse {
-		reverse_proxy gigi-service:3000 {
+		reverse_proxy gigi_gigi:3000 {
 			# Disable buffering for SSE
 			flush_interval -1
 			# Long timeout for persistent connections
@@ -37,14 +37,12 @@ gigi.example.com {
 	}
 
 	# Main application (all other requests)
-	reverse_proxy gigi-service:3000 {
+	reverse_proxy gigi_gigi:3000 {
 		# Flush immediately for potential streaming responses
 		flush_interval -1
 	}
 }
 ```
-
-> **Note:** Replace `gigi.example.com` with your domain and `gigi-service` with your Docker service name or container hostname.
 
 ## Why This Configuration?
 

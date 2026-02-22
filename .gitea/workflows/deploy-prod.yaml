@@ -7,9 +7,9 @@ on:
         required: false
 
 env:
-  REGISTRY: prod.gigi.local
+  REGISTRY: ${{ secrets.REGISTRY_HOST || 'localhost:3000' }}
   IMAGE: gigi/gigi
-  DEPLOY_HOST: 192.168.1.110
+  DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
   SSH_OPTS: "-i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=accept-new"
 
 jobs:
@@ -38,7 +38,7 @@ jobs:
       - name: Login to Gitea registry
         run: |
           docker login ${{ env.REGISTRY }} \
-            -u gigi-admin -p "${{ secrets.REGISTRY_TOKEN }}"
+            -u ${{ secrets.REGISTRY_USER || 'gigi-admin' }} -p "${{ secrets.REGISTRY_TOKEN }}"
 
       - name: Retag and push as prod
         run: |
@@ -49,13 +49,13 @@ jobs:
 
       - name: Deploy prod
         run: |
-          ssh $SSH_OPTS m@${{ env.DEPLOY_HOST }} "
+          ssh $SSH_OPTS ${{ secrets.DEPLOY_USER }}@${{ env.DEPLOY_HOST }} "
             sudo docker service update \
               --image ${{ env.REGISTRY }}/${{ env.IMAGE }}:aio \
-              --with-registry-auth gigi-prod_gigi"
+              --with-registry-auth ${{ secrets.PROD_STACK_NAME || 'gigi-prod' }}_gigi"
 
       - name: Verify prod health
         run: |
           sleep 30
-          ssh $SSH_OPTS m@${{ env.DEPLOY_HOST }} \
+          ssh $SSH_OPTS ${{ secrets.DEPLOY_USER }}@${{ env.DEPLOY_HOST }} \
             "curl -sf http://localhost:3000/health" || echo "Health check pending"

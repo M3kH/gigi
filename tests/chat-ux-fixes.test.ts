@@ -92,20 +92,20 @@ describe('extractGiteaPath', () => {
   })
 
   it('same-origin absolute URLs match', () => {
-    const origin = 'https://prod.gigi.local'
-    const href = 'https://prod.gigi.local/gitea/idea/gigi/issues/5'
+    const origin = 'https://gigi.example.com'
+    const href = 'https://gigi.example.com/gitea/org/repo/issues/5'
     const url = new URL(href)
     assert.equal(url.origin, origin)
     const path = url.pathname.replace(/^\/gitea/, '')
-    assert.equal(path, '/idea/gigi/issues/5')
+    assert.equal(path, '/org/repo/issues/5')
   })
 
   it('cross-origin URLs with /gitea/ prefix are intercepted', () => {
-    const href = 'https://dev.gigi.local/gitea/idea/gigi/pulls/10'
+    const href = 'https://dev.gigi.example.com/gitea/org/repo/pulls/10'
     const url = new URL(href)
     assert.ok(url.pathname.startsWith('/gitea/'))
     const path = url.pathname.replace(/^\/gitea/, '')
-    assert.equal(path, '/idea/gigi/pulls/10')
+    assert.equal(path, '/org/repo/pulls/10')
   })
 
   it('domain suffix extraction works', () => {
@@ -113,9 +113,9 @@ describe('extractGiteaPath', () => {
       const parts = hostname.split('.')
       return parts.length >= 2 ? parts.slice(-2).join('.') : hostname
     }
-    assert.equal(getSuffix('dev.gigi.local'), 'gigi.local')
-    assert.equal(getSuffix('prod.gigi.local'), 'gigi.local')
-    assert.equal(getSuffix('gigi.local'), 'gigi.local')
+    assert.equal(getSuffix('dev.example.com'), 'example.com')
+    assert.equal(getSuffix('prod.example.com'), 'example.com')
+    assert.equal(getSuffix('example.com'), 'example.com')
     assert.equal(getSuffix('localhost'), 'localhost')
   })
 

@@ -24,7 +24,7 @@ $COMPOSE up --wait init 2>/dev/null || $COMPOSE up -d --force-recreate init && $
 export DATABASE_URL=postgresql://gigi:gigi@localhost:5432/gigi
 export GITEA_URL=http://localhost:3300
 export GITEA_PASSWORD=gigi-local-dev
-export ADMIN_USER=${ADMIN_USER:-mauro}
+export ADMIN_USER=${ADMIN_USER:-admin}
 export WORKSPACE_DIR="${HOME}/work"
 export BROWSER_MODE=chrome
 export BROWSER_VIEW_URL=/browser/

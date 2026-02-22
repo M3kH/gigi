@@ -141,7 +141,7 @@
         <form onsubmit={(e) => { e.preventDefault(); handleSubmit('gitea') }}>
           <input
             type="url"
-            placeholder="http://192.168.1.80:3000"
+            placeholder="http://localhost:3300"
             bind:value={giteaUrl}
             disabled={submitting === 'gitea'}
           />

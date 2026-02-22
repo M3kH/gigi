@@ -309,7 +309,7 @@ const CHANNEL_LABELS: Record<string, string> = {
 
 /**
  * Format a channel attribution prefix for an event.
- * Returns e.g., "[via Telegram]" or "[via Gitea comment by @mauro]"
+ * Returns e.g., "[via Telegram]" or "[via Gitea comment by @someuser]"
  */
 const formatChannelAttribution = (event: ThreadEvent): string => {
   const label = CHANNEL_LABELS[event.channel] ?? event.channel

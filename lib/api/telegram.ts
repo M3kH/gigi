@@ -33,7 +33,7 @@ export const startTelegram = async (): Promise<Bot | null> => {
     throw err
   }
 
-  // Lock to Mauro's chat ID
+  // Lock to the operator's chat ID
   bot.use(async (ctx, next) => {
     const chatId = String(ctx.chat?.id)
     const stored = await getConfig('telegram_chat_id')
@@ -53,7 +53,7 @@ export const startTelegram = async (): Promise<Bot | null> => {
   })
 
   bot.command('start', async (ctx) => {
-    await ctx.reply('Hey Mauro! Gigi here. What can I do for you?')
+    await ctx.reply('Hey! Gigi here. What can I do for you?')
   })
 
   bot.command('new', async (ctx) => {
@@ -108,7 +108,7 @@ export const startTelegram = async (): Promise<Bot | null> => {
 
     const oauthToken = await getConfig('claude_oauth_token')
     if (!oauthToken) {
-      await ctx.reply('Claude is not configured yet. Open claude.cluster.local to complete setup.')
+      await ctx.reply('Claude is not configured yet. Open the web UI to complete setup.')
       return
     }
 

@@ -25,7 +25,7 @@ The Task Enforcer is a **state machine** that:
 ```
 ┌─────────────────────────────────────────────────────┐
 │                    User Input                        │
-│              "Operator: /issue gigi#11"                     │
+│              "User: /issue gigi#11"                   │
 └───────────────────┬─────────────────────────────────┘
                     │
                     ▼

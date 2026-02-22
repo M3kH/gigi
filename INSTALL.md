@@ -32,7 +32,7 @@ Create an API token with **org owner** permissions:
 Then run the label creation script:
 
 ```bash
-export GITEA_URL="http://192.168.1.80:3000"
+export GITEA_URL="http://localhost:3300"
 export GITEA_TOKEN="your-owner-token-here"
 
 # Use the provided script

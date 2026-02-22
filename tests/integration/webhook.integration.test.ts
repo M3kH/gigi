@@ -80,7 +80,7 @@ describe('Webhook Mock: Payload Generation', () => {
       repo: 'gigi',
       issueNumber: 42,
       issueTitle: 'Add feature X',
-      author: 'mauro',
+      author: 'testuser',
     })
 
     assert.equal(request.event, 'issues')
@@ -88,7 +88,7 @@ describe('Webhook Mock: Payload Generation', () => {
     assert.equal(request.payload.repository?.name, 'gigi')
     assert.equal(request.payload.issue?.number, 42)
     assert.equal(request.payload.issue?.title, 'Add feature X')
-    assert.equal(request.payload.issue?.user?.login, 'mauro')
+    assert.equal(request.payload.issue?.user?.login, 'testuser')
   })
 
   it('should generate issue comment payload', () => {
@@ -136,7 +136,7 @@ describe('Webhook Mock: Payload Generation', () => {
   it('should generate push payload', () => {
     const request = pushEvent({
       repo: 'gigi',
-      author: 'mauro',
+      author: 'testuser',
       ref: 'refs/heads/feat/new-feature',
       commits: [
         { id: 'abc123', message: 'First commit' },
@@ -146,7 +146,7 @@ describe('Webhook Mock: Payload Generation', () => {
 
     assert.equal(request.event, 'push')
     assert.equal(request.payload.ref, 'refs/heads/feat/new-feature')
-    assert.equal(request.payload.pusher?.login, 'mauro')
+    assert.equal(request.payload.pusher?.login, 'testuser')
     assert.equal(request.payload.commits?.length, 2)
   })
 
@@ -159,7 +159,7 @@ describe('Webhook Mock: Payload Generation', () => {
 
     assert.equal(request.event, 'issue_comment')
     assert.equal(request.payload.comment?.body, '@gigi please review this code')
-    assert.equal(request.payload.comment?.user?.login, 'mauro')
+    assert.equal(request.payload.comment?.user?.login, 'testuser')
   })
 
   it('should generate merged PR payload', () => {

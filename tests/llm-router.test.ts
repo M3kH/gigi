@@ -165,6 +165,6 @@ describe('MINIMAL_SYSTEM_PROMPT', () => {
 
   it('should contain Gigi identity', () => {
     assert.ok(MINIMAL_SYSTEM_PROMPT.includes('Gigi'))
-    assert.ok(MINIMAL_SYSTEM_PROMPT.includes('Mauro'))
+    assert.ok(MINIMAL_SYSTEM_PROMPT.includes('operator'))
   })
 })

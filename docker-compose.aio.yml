@@ -5,7 +5,7 @@ services:
       dockerfile: Dockerfile.aio
     environment:
       DATABASE_URL: postgresql://gigi:gigi@postgres:5432/gigi
-      ADMIN_USER: mauro
+      ADMIN_USER: admin
       ADMIN_PASSWORD: admin
       ORG_NAME: idea
     ports:

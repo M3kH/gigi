@@ -40,7 +40,7 @@ export function extractGiteaPath(href: string): string | null {
     const url = new URL(href)
     const origin = window.location.origin
 
-    // Same origin (e.g. https://prod.gigi.local)
+    // Same origin
     if (url.origin === origin) {
       let path = url.pathname
       if (path.startsWith('/gitea/')) path = path.replace(/^\/gitea/, '')
@@ -48,14 +48,14 @@ export function extractGiteaPath(href: string): string | null {
     }
 
     // Cross-origin but has /gitea/ path prefix → likely our Gitea proxy on another host
-    // This handles dev.gigi.local links showing in prod.gigi.local and vice versa
+    // This handles cross-origin links between dev/prod instances of the same Gitea
     if (url.pathname.startsWith('/gitea/')) {
       return url.pathname.replace(/^\/gitea/, '')
     }
 
     // Cross-origin Gitea instance (e.g., webhook URLs from a different host)
     // Match URLs that look like Gitea pages (issues, PRs, commits, etc.)
-    // Only match hostnames in the same domain family (*.gigi.local, *.gigi.casa, etc.)
+    // Only match hostnames in the same domain family
     const currentHost = window.location.hostname
     const linkHost = url.hostname
     const isSameDomainFamily =
@@ -80,7 +80,7 @@ export function extractGiteaPath(href: string): string | null {
 
 /**
  * Get the domain suffix (last two segments) for comparison.
- * e.g., "dev.gigi.local" → "gigi.local", "prod.gigi.local" → "gigi.local"
+ * e.g., "dev.example.com" → "example.com", "prod.example.com" → "example.com"
  */
 function getSuffix(hostname: string): string {
   const parts = hostname.split('.')

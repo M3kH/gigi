@@ -1,7 +1,7 @@
 /**
  * MCP Tool — Telegram Send
  *
- * Sends messages to Mauro on Telegram via the bot instance.
+ * Sends messages to the operator on Telegram via the bot instance.
  */
 
 import { z } from 'zod'
@@ -17,7 +17,7 @@ export const setBotInstance = (b: Bot): void => {
 
 export const telegramTool = {
   name: 'telegram_send',
-  description: 'Send a message to Mauro on Telegram. Use for notifications, status updates, PR links, alerts.',
+  description: 'Send a message to the operator on Telegram. Use for notifications, status updates, PR links, alerts.',
   input_schema: {
     type: 'object',
     properties: {
@@ -35,7 +35,7 @@ export const runTelegram = async ({ text }: { text: string }): Promise<string> =
 
   try {
     await bot.api.sendMessage(chatId, text, { parse_mode: 'Markdown' })
-    return 'Message sent to Mauro on Telegram'
+    return 'Message sent to the operator on Telegram'
   } catch {
     // Fallback without markdown if it fails
     try {
@@ -56,7 +56,7 @@ const TelegramSendSchema = z.object({
 export const agentTools: AgentTool[] = [
   {
     name: 'telegram_send',
-    description: 'Send a message to Mauro on Telegram. Use for notifications, status updates, PR links.',
+    description: 'Send a message to the operator on Telegram. Use for notifications, status updates, PR links.',
     schema: TelegramSendSchema,
     handler: runTelegram,
     context: 'server',

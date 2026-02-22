@@ -172,7 +172,7 @@ Each `lib/*` is self-contained. Frontend features (`feat-*`, `ui-*`) and backend
 
 | Layer | Choice | Why |
 |-------|--------|-----|
-| Runtime | Bun (or Node.js 20+ fallback) | Native TS, faster startup, built-in test runner. ARM64 Linux supported. Node as fallback if Bun has edge-case issues on TuringPi. |
+| Runtime | Bun (or Node.js 20+ fallback) | Native TS, faster startup, built-in test runner. ARM64 Linux supported. Node as fallback if Bun has edge-case issues on ARM64 SBCs. |
 | Language | TypeScript | Type checking, Zod for runtime validation |
 | HTTP | Hono | Already using, fast, works on both Bun and Node |
 | Validation | Zod | Runtime schemas, type inference, API boundary validation |
@@ -202,7 +202,7 @@ One WebSocket connection per session replaces both SSE and REST for real-time op
 - `Bun.serve()` with native WebSocket support (no `ws` library needed)
 - ARM64 Linux support since Bun 1.0
 
-**Risk:** Bun on ARM64 SBCs (RK3588 on TuringPi) is less battle-tested than Node. Keep Hono as the HTTP layer so we can swap runtimes if needed — Hono runs on both.
+**Risk:** Bun on ARM64 SBCs (RK3588 on the cluster) is less battle-tested than Node. Keep Hono as the HTTP layer so we can swap runtimes if needed — Hono runs on both.
 
 #### tRPC-inspired, not tRPC
 
@@ -238,7 +238,7 @@ Same end-to-end type safety as tRPC, but over WebSocket with discriminated union
 ### 1. Landing → Login/Subscribe
 
 ```
-GET gigi.ai → landing page
+GET example.com → landing page
 POST /auth/login → OAuth2 (Gitea is the OAuth2 provider)
 POST /auth/register → creates Gitea user + platform user
 ```
@@ -441,7 +441,7 @@ Already partially built. Extend:
 
 - Agent can spin up containers (e.g., `docker run -p 8080:80 myapp`)
 - Platform auto-creates a reverse proxy route via Caddy API
-- User gets a URL: `https://{user}-{service}.gigi.ai` (SaaS) or `https://{service}.cluster.local` (self-hosted)
+- User gets a URL: `https://{user}-{service}.example.com` (SaaS) or `https://{service}.your-domain` (self-hosted)
 - Timeout/cleanup: containers auto-stop after inactivity
 - Use case: "Gigi, deploy this branch so I can test it"
 
@@ -618,7 +618,7 @@ services:
 
 One `docker compose up` and you have the full platform.
 
-### SaaS (gigi.ai)
+### SaaS (example.com)
 
 Same stack, but:
 - Multi-tenant routing (user isolation via Gitea orgs)
@@ -653,7 +653,7 @@ Options:
 
 ### The current Gigi repo
 
-Currently licensed GPL-2.0 in package.json. Since we're starting a new project that extracts modules (and the original author retains copyright), we can relicense freely.
+Currently licensed GPL-2.0 in package.json. Since we're starting a new project that extracts modules (and the original author is the sole contributor), we can relicense freely.
 
 ---
 

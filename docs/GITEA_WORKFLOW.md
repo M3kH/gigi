@@ -142,7 +142,7 @@ if (card) {
 curl -X POST \
   -H "Authorization: token $GITEA_TOKEN" \
   -H "Content-Type: application/json" \
-  "$GITEA_URL/api/v1/projects/2/issues" \
+  "http://your-host-ip:3000/api/v1/projects/2/issues" \
   -d '{"issue_id": 123}'
 ```
 
@@ -150,7 +150,7 @@ curl -X POST \
 
 ```bash
 curl -H "Authorization: token $GITEA_TOKEN" \
-  "$GITEA_URL/api/v1/projects/2/columns"
+  "http://your-host-ip:3000/api/v1/projects/2/columns"
 ```
 
 ### Move Card to Column
@@ -158,7 +158,7 @@ curl -H "Authorization: token $GITEA_TOKEN" \
 ```bash
 curl -X POST \
   -H "Authorization: token $GITEA_TOKEN" \
-  "$GITEA_URL/api/v1/projects/2/columns/{column_id}/cards/{card_id}/move" \
+  "http://your-host-ip:3000/api/v1/projects/2/columns/{column_id}/cards/{card_id}/move" \
   -d '{"position": 0}'
 ```
 
@@ -168,7 +168,7 @@ curl -X POST \
 curl -X PUT \
   -H "Authorization: token $GITEA_TOKEN" \
   -H "Content-Type: application/json" \
-  "$GITEA_URL/api/v1/repos/idea/{repo}/issues/{number}/labels" \
+  "http://your-host-ip:3000/api/v1/repos/idea/{repo}/issues/{number}/labels" \
   -d '{"labels": [1, 2, 3]}'  # Label IDs
 ```
 

@@ -139,7 +139,7 @@ const autoLinkRefs = async (
 // ── View Context Enrichment ──────────────────────────────────────────
 
 const getGiteaClient = async () => {
-  const baseUrl = process.env.GITEA_URL || await store.getConfig('gitea_url') || 'http://192.168.1.80:3000'
+  const baseUrl = process.env.GITEA_URL || await store.getConfig('gitea_url') || 'http://localhost:3300'
   const token = process.env.GITEA_TOKEN || await store.getConfig('gitea_token')
   if (!token) return null
   return createGiteaClient(baseUrl, token)

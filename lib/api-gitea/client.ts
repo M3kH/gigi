@@ -5,7 +5,7 @@
  * Thin wrapper — no business logic, just typed HTTP calls.
  *
  * Usage:
- *   const gitea = createGiteaClient('http://192.168.1.80:3000', token)
+ *   const gitea = createGiteaClient('http://localhost:3300', token)
  *   const repos = await gitea.repos.list()
  *   const issue = await gitea.issues.get('idea', 'gigi', 56)
  */

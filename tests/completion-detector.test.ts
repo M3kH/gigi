@@ -14,7 +14,7 @@ import { detectUnfinishedWork } from '../lib/core/completion-detector'
 
 describe('detectUnfinishedWork — completed responses', () => {
   it('should NOT flag a response with a PR link', () => {
-    const text = `Done! Here's the PR: https://prod.gigi.local/gitea/idea/gigi/pulls/28`
+    const text = `Done! Here's the PR: https://gitea.example.com/org/repo/pulls/28`
     const result = detectUnfinishedWork(text, true)
     assert.equal(result.hasUnfinishedWork, false)
   })
@@ -178,7 +178,7 @@ describe('detectUnfinishedWork — signal tracking', () => {
   })
 
   it('should return empty signals for clean responses', () => {
-    const text = 'Hello Mauro!'
+    const text = 'Hello there!'
     const result = detectUnfinishedWork(text, false)
     assert.deepEqual(result.signals, [])
   })

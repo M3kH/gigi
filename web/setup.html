@@ -52,7 +52,7 @@
     <div class="step" id="step-gitea">
       <h2><span class="check" id="check-gitea">○</span> Gitea</h2>
       <p>Create a user for Gigi on Gitea and generate an API token.</p>
-      <input type="text" id="gitea-url" placeholder="http://192.168.1.80:3000" value="http://192.168.1.80:3000" />
+      <input type="text" id="gitea-url" placeholder="http://localhost:3300" value="http://localhost:3300" />
       <input type="text" id="gitea-token" placeholder="Gitea API token" />
       <button onclick="setup('gitea', { url: document.getElementById('gitea-url').value, token: document.getElementById('gitea-token').value })">Connect</button>
       <div class="msg" id="msg-gitea" hidden></div>

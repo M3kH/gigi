@@ -7,7 +7,7 @@
 
 import { execSync } from 'node:child_process'
 
-const GITEA_URL = process.env.GITEA_URL || 'http://192.168.1.80:3000'
+const GITEA_URL = process.env.GITEA_URL || 'http://localhost:3300'
 const GITEA_TOKEN = process.env.GITEA_TOKEN
 const PROJECT_ID = 2 // idea Command Center
 

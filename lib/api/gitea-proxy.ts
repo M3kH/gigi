@@ -17,7 +17,7 @@ let orgName: string | null = null
 
 const getClient = async (): Promise<GiteaClient> => {
   if (!client) {
-    const baseUrl = process.env.GITEA_URL || await getConfig('gitea_url') || 'http://192.168.1.80:3000'
+    const baseUrl = process.env.GITEA_URL || await getConfig('gitea_url') || 'http://localhost:3300'
     const token = process.env.GITEA_TOKEN || await getConfig('gitea_token')
     if (!token) throw new Error('GITEA_TOKEN not set')
     client = createGiteaClient(baseUrl, token)

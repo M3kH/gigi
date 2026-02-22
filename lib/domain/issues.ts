@@ -41,7 +41,7 @@ export const parseIssueCommand = (text: string): IssueCommand | null => {
 // ─── Issue Loading ──────────────────────────────────────────────────
 
 export const loadIssue = async (repo: string, number: number): Promise<IssueContext> => {
-  const giteaUrl = process.env.GITEA_URL || 'http://192.168.1.80:3000'
+  const giteaUrl = process.env.GITEA_URL || 'http://localhost:3300'
   const giteaToken = process.env.GITEA_TOKEN
 
   if (!giteaToken) throw new Error('GITEA_TOKEN not set')

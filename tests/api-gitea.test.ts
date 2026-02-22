@@ -10,7 +10,7 @@ import assert from 'node:assert/strict'
 import { createGiteaClient, GiteaApiError } from '../lib/api-gitea/index'
 import type { GiteaClient } from '../lib/api-gitea/index'
 
-const GITEA_URL = process.env.GITEA_URL || 'http://192.168.1.80:3000'
+const GITEA_URL = process.env.GITEA_URL || 'http://localhost:3300'
 const GITEA_TOKEN = process.env.GITEA_TOKEN || ''
 
 describe('lib/api-gitea', () => {

@@ -8,10 +8,10 @@ backup:
     - org: idea
 
   targets:
-    # Git mirror to git.lab.local (secondary Gitea)
+    # Git mirror to secondary Gitea (optional)
     - type: git-mirror
-      name: git-lab-mirror
-      url: ${MIRROR_GIT_URL:-http://git.lab.local:3000}
+      name: git-mirror
+      url: ${MIRROR_GIT_URL:-}
       auth: token
       token: ${MIRROR_GIT_TOKEN}
       api_token: ${MIRROR_GIT_TOKEN}

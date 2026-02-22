@@ -19,7 +19,7 @@ This typically means the WebRTC connection cannot establish due to NAT traversal
 
    ```env
    # In your .env file
-   NEKO_NAT1TO1=<your-host-ip>  # Your host's LAN IP address
+   NEKO_NAT1TO1=your-host-ip  # Your host's IP address
    ```
 
 2. **Ensure UDP Ports Are Open**

@@ -174,7 +174,7 @@ export const gigiMentionEvent = (opts: WebhookOptions = {}): WebhookRequest => {
   return issueCommentEvent({
     ...opts,
     commentBody: opts.commentBody || '@gigi What do you think about this?',
-    author: opts.author || 'mauro',
+    author: opts.author || 'testuser',
   })
 }
 

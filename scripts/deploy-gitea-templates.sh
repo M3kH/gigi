@@ -8,7 +8,7 @@
 
 set -e
 
-GITEA_HOST="${1:-192.168.1.80}"
+GITEA_HOST="${1:?Usage: $0 <gitea-host>}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 TEMPLATES_DIR="${SCRIPT_DIR}/../gitea/custom/templates"
 

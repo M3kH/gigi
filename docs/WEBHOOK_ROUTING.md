@@ -61,14 +61,14 @@ http://gitea.example.com/idea/gigi/pulls/7
 
 ### Comments
 ```
-💬 @mauro commented on issue #16:
+💬 @user commented on issue #16:
 "This looks great! Let's merge it."
 http://gitea.example.com/idea/gigi/issues/16#comment-123
 ```
 
 ### Push Events
 ```
-📤 @mauro pushed 3 commit(s) to refs/heads/main:
+📤 @user pushed 3 commit(s) to refs/heads/main:
   • Add webhook routing
   • Update docs
   • Fix tests

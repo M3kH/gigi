@@ -44,10 +44,8 @@ const DEFAULT_KNOWLEDGE = `## Codebase Knowledge (auto-updated)
 - Webhook handler: lib/api/webhookRouter.ts
 
 ### Infrastructure
-- Docker Swarm on TuringPi v2 (3 ARM64 nodes: worker-0 .110, worker-1 .111, worker-2 .112)
-- Gitea at $GITEA_URL with repos under idea/ org
+- Gitea at $GITEA_URL with repos under the configured org
 - Caddy reverse proxy with TLS
-- Dev: dev.gigi.local, Prod: prod.gigi.local
 
 ### Troubleshooting
 - If MCP tools fail: check CHROME_CDP_URL for browser, GITEA_TOKEN for Gitea

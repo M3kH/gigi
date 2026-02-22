@@ -129,9 +129,9 @@ EOINI
   done
 
   # Create admin user
-  ADMIN_USER="${ADMIN_USER:-mauro}"
+  ADMIN_USER="${ADMIN_USER:-admin}"
   ADMIN_PASSWORD="${ADMIN_PASSWORD:-admin}"
-  ADMIN_EMAIL="${ADMIN_EMAIL:-mauro@localhost}"
+  ADMIN_EMAIL="${ADMIN_EMAIL:-admin@localhost}"
   ORG_NAME="${ORG_NAME:-idea}"
   GIGI_PASSWORD="gigi-local-dev"
 
@@ -251,7 +251,7 @@ EOINI
   done
 
   # SSH known hosts (scan the deploy target)
-  KNOWN_HOSTS=$(ssh-keyscan -H 192.168.1.110 2>/dev/null || true)
+  KNOWN_HOSTS=$(ssh-keyscan -H ${DEPLOY_HOST:-localhost} 2>/dev/null || true)
   if [ -n "$KNOWN_HOSTS" ]; then
     create_secret "SSH_KNOWN_HOSTS" "$KNOWN_HOSTS"
     echo "[aio] Set SSH_KNOWN_HOSTS secret"
@@ -294,11 +294,12 @@ EOINI
 
   # Reconfigure for production: subpath + SSH
   GITEA_CONF="/data/gitea/conf/app.ini"
-  INSTANCE_URL="${GIGI_INSTANCE_URL:-https://prod.gigi.local}"
+  INSTANCE_URL="${GIGI_INSTANCE_URL:-http://localhost:3000}"
   sed -i "s|ROOT_URL = http://localhost:3300/|ROOT_URL = ${INSTANCE_URL}/gitea/|" "$GITEA_CONF"
   sed -i 's/START_SSH_SERVER = false/START_SSH_SERVER = true/' "$GITEA_CONF"
   if ! grep -q "SSH_PORT" "$GITEA_CONF"; then
-    sed -i '/START_SSH_SERVER/a SSH_PORT = 2222\nSSH_LISTEN_PORT = 2222\nSSH_DOMAIN = prod.gigi.local\nBUILTIN_SSH_SERVER_USER = git' "$GITEA_CONF"
+    DOMAIN=$(echo "$INSTANCE_URL" | sed 's|^https\?://||; s|/.*||; s|:.*||')
+    sed -i "/START_SSH_SERVER/a SSH_PORT = 2222\nSSH_LISTEN_PORT = 2222\nSSH_DOMAIN = ${DOMAIN}\nBUILTIN_SSH_SERVER_USER = git" "$GITEA_CONF"
   fi
 
   touch "$MARKER"

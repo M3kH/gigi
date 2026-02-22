@@ -54,32 +54,32 @@ describe('webhook notifier — event filtering', () => {
   // ── Issues ──────────────────────────────────────────────────────
 
   it('should notify for issue opened', () => {
-    assert.ok(shouldNotify('issues', { action: 'opened', sender: { login: 'mauro' } }))
+    assert.ok(shouldNotify('issues', { action: 'opened', sender: { login: 'testuser' } }))
   })
 
   it('should notify for issue closed', () => {
-    assert.ok(shouldNotify('issues', { action: 'closed', sender: { login: 'mauro' } }))
+    assert.ok(shouldNotify('issues', { action: 'closed', sender: { login: 'testuser' } }))
   })
 
   it('should NOT notify for issue edited', () => {
-    assert.equal(shouldNotify('issues', { action: 'edited', sender: { login: 'mauro' } }), false)
+    assert.equal(shouldNotify('issues', { action: 'edited', sender: { login: 'testuser' } }), false)
   })
 
   it('should NOT notify for issue labeled', () => {
-    assert.equal(shouldNotify('issues', { action: 'label_updated', sender: { login: 'mauro' } }), false)
+    assert.equal(shouldNotify('issues', { action: 'label_updated', sender: { login: 'testuser' } }), false)
   })
 
   // ── Pull Requests ──────────────────────────────────────────────
 
   it('should notify for PR opened', () => {
-    assert.ok(shouldNotify('pull_request', { action: 'opened', sender: { login: 'mauro' } }))
+    assert.ok(shouldNotify('pull_request', { action: 'opened', sender: { login: 'testuser' } }))
   })
 
   it('should notify for PR merged', () => {
     assert.ok(shouldNotify('pull_request', {
       action: 'closed',
       pull_request: { merged: true },
-      sender: { login: 'mauro' },
+      sender: { login: 'testuser' },
     }))
   })
 
@@ -87,12 +87,12 @@ describe('webhook notifier — event filtering', () => {
     assert.ok(shouldNotify('pull_request', {
       action: 'closed',
       pull_request: { merged: false },
-      sender: { login: 'mauro' },
+      sender: { login: 'testuser' },
     }))
   })
 
   it('should NOT notify for PR synchronized (new push)', () => {
-    assert.equal(shouldNotify('pull_request', { action: 'synchronized', sender: { login: 'mauro' } }), false)
+    assert.equal(shouldNotify('pull_request', { action: 'synchronized', sender: { login: 'testuser' } }), false)
   })
 
   // ── Comments ───────────────────────────────────────────────────
@@ -100,47 +100,47 @@ describe('webhook notifier — event filtering', () => {
   it('should notify for ALL new issue comments (not just @gigi)', () => {
     assert.ok(shouldNotify('issue_comment', {
       action: 'created',
-      comment: { body: 'This looks good!', user: { login: 'mauro' } },
-      sender: { login: 'mauro' },
+      comment: { body: 'This looks good!', user: { login: 'testuser' } },
+      sender: { login: 'testuser' },
     }))
   })
 
   it('should notify for @gigi mention comments', () => {
     assert.ok(shouldNotify('issue_comment', {
       action: 'created',
-      comment: { body: '@gigi please fix this', user: { login: 'mauro' } },
-      sender: { login: 'mauro' },
+      comment: { body: '@gigi please fix this', user: { login: 'testuser' } },
+      sender: { login: 'testuser' },
     }))
   })
 
   it('should notify for PR review comments', () => {
     assert.ok(shouldNotify('pull_request_review_comment', {
       action: 'created',
-      comment: { body: 'Needs a refactor here', user: { login: 'mauro' } },
-      sender: { login: 'mauro' },
+      comment: { body: 'Needs a refactor here', user: { login: 'testuser' } },
+      sender: { login: 'testuser' },
     }))
   })
 
   it('should NOT notify for edited comments', () => {
-    assert.equal(shouldNotify('issue_comment', { action: 'edited', sender: { login: 'mauro' } }), false)
+    assert.equal(shouldNotify('issue_comment', { action: 'edited', sender: { login: 'testuser' } }), false)
   })
 
   it('should NOT notify for deleted comments', () => {
-    assert.equal(shouldNotify('issue_comment', { action: 'deleted', sender: { login: 'mauro' } }), false)
+    assert.equal(shouldNotify('issue_comment', { action: 'deleted', sender: { login: 'testuser' } }), false)
   })
 
   // ── Push ───────────────────────────────────────────────────────
 
   it('should notify for push to main', () => {
-    assert.ok(shouldNotify('push', { ref: 'refs/heads/main', pusher: { login: 'mauro' } }))
+    assert.ok(shouldNotify('push', { ref: 'refs/heads/main', pusher: { login: 'testuser' } }))
   })
 
   it('should notify for push to master', () => {
-    assert.ok(shouldNotify('push', { ref: 'refs/heads/master', pusher: { login: 'mauro' } }))
+    assert.ok(shouldNotify('push', { ref: 'refs/heads/master', pusher: { login: 'testuser' } }))
   })
 
   it('should NOT notify for push to feature branch', () => {
-    assert.equal(shouldNotify('push', { ref: 'refs/heads/feat/my-feature', pusher: { login: 'mauro' } }), false)
+    assert.equal(shouldNotify('push', { ref: 'refs/heads/feat/my-feature', pusher: { login: 'testuser' } }), false)
   })
 
   // ── Self-event filtering ───────────────────────────────────────
@@ -156,11 +156,11 @@ describe('webhook notifier — event filtering', () => {
   // ── Unknown events ─────────────────────────────────────────────
 
   it('should NOT notify for unknown event types', () => {
-    assert.equal(shouldNotify('repository', { action: 'created', sender: { login: 'mauro' } }), false)
+    assert.equal(shouldNotify('repository', { action: 'created', sender: { login: 'testuser' } }), false)
   })
 
   it('should NOT notify for fork events', () => {
-    assert.equal(shouldNotify('fork', { sender: { login: 'mauro' } }), false)
+    assert.equal(shouldNotify('fork', { sender: { login: 'testuser' } }), false)
   })
 })
 

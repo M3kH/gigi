@@ -2,7 +2,7 @@
 set -e
 
 ORG="${1:-idea}"
-GITEA_URL="${GITEA_URL:-http://192.168.1.80:3000}"
+GITEA_URL="${GITEA_URL:?Set GITEA_URL env var}"
 GITEA_TOKEN="${GITEA_TOKEN:?GITEA_TOKEN environment variable is required}"
 
 echo "Creating org-level labels for: $ORG"

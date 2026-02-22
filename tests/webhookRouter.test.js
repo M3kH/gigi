@@ -9,7 +9,7 @@ describe('webhookRouter', () => {
       const payload = {
         action: 'opened',
         repository: { name: 'gigi', full_name: 'idea/gigi' },
-        issue: { number: 16, title: 'Test issue', user: { login: 'mauro' } }
+        issue: { number: 16, title: 'Test issue', user: { login: 'testuser' } }
       }
 
       // Create a conversation first to test against
@@ -32,7 +32,7 @@ describe('webhookRouter', () => {
         action: 'opened',
         number: 7,
         repository: { name: 'gigi', full_name: 'idea/gigi' },
-        pull_request: { number: 7, title: 'Test PR', user: { login: 'mauro' } }
+        pull_request: { number: 7, title: 'Test PR', user: { login: 'testuser' } }
       }
 
       const result = await routeWebhook('pull_request', payload)
@@ -52,7 +52,7 @@ describe('webhookRouter', () => {
         issue: {
           number: 42,
           title: 'New feature request',
-          user: { login: 'mauro' },
+          user: { login: 'testuser' },
           html_url: 'http://gitea/issues/42'
         }
       }
@@ -77,7 +77,7 @@ describe('webhookRouter', () => {
         pull_request: {
           number: 8,
           title: 'Add dark mode',
-          user: { login: 'mauro' },
+          user: { login: 'testuser' },
           html_url: 'http://gitea/pr/8'
         }
       }
@@ -105,7 +105,7 @@ describe('webhookRouter', () => {
         issue: {
           number: 99,
           title: 'Closed issue',
-          user: { login: 'mauro' }
+          user: { login: 'testuser' }
         }
       }
 
@@ -145,7 +145,7 @@ describe('webhookRouter', () => {
         pull_request: {
           number: 7,
           title: 'Add feature',
-          user: { login: 'mauro' },
+          user: { login: 'testuser' },
           merged: true,
           html_url: 'http://gitea/pr/7'
         }
@@ -172,7 +172,7 @@ describe('webhookRouter', () => {
         repository: { name: 'gigi', full_name: 'idea/gigi' },
         issue: { number: 16 },
         comment: {
-          user: { login: 'mauro' },
+          user: { login: 'testuser' },
           body: 'This looks good!',
           html_url: 'http://gitea/comment/123'
         }
@@ -181,7 +181,7 @@ describe('webhookRouter', () => {
       const result = await routeWebhook('issue_comment', payload)
 
       assert.ok(result.systemMessage.includes('💬'), 'Should have comment emoji')
-      assert.ok(result.systemMessage.includes('@mauro'), 'Should include commenter')
+      assert.ok(result.systemMessage.includes('@testuser'), 'Should include commenter')
       assert.ok(result.systemMessage.includes('This looks good!'), 'Should include comment text')
     })
   })

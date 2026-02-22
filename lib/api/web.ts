@@ -588,7 +588,7 @@ export const createApp = (): Hono => {
   // Forwards /gitea/* to Gitea (which serves at /gitea/ subpath via ROOT_URL)
   // Injects auth token so the user appears logged in
   app.all('/gitea/*', async (c) => {
-    const giteaUrl = process.env.GITEA_URL || await store.getConfig('gitea_url') || 'http://192.168.1.80:3000'
+    const giteaUrl = process.env.GITEA_URL || await store.getConfig('gitea_url') || 'http://localhost:3300'
     const giteaToken = process.env.GITEA_TOKEN || await store.getConfig('gitea_token')
     const giteaPassword = process.env.GITEA_PASSWORD || await store.getConfig('gitea_password')
     const path = c.req.path.replace(/^\/gitea/, '') || '/'
@@ -604,7 +604,7 @@ export const createApp = (): Hono => {
 
     // Reverse proxy auth — Gitea trusts X-WEBAUTH-USER for session creation
     // The iframe shows the human user's session (admin), not the AI (gigi)
-    const adminUser = process.env.ADMIN_USER || await store.getConfig('admin_user') || 'mauro'
+    const adminUser = process.env.ADMIN_USER || await store.getConfig('admin_user') || 'admin'
     headers.set('X-WEBAUTH-USER', adminUser)
 
     const hasBody = c.req.method !== 'GET' && c.req.method !== 'HEAD'

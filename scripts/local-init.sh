@@ -6,8 +6,8 @@ set -e
 
 MARKER="/data/local-init-done"
 GITEA_URL="${GITEA_URL:-http://gitea:3000}"
-ADMIN_USER="${ADMIN_USER:-mauro}"
-ADMIN_EMAIL="${ADMIN_EMAIL:-mauro@localhost}"
+ADMIN_USER="${ADMIN_USER:-admin}"
+ADMIN_EMAIL="${ADMIN_EMAIL:-admin@localhost}"
 ADMIN_PASSWORD="${ADMIN_PASSWORD:-admin}"
 ORG_NAME="${ORG_NAME:-idea}"
 GITEA_CONFIG="/data/gitea/conf/app.ini"
