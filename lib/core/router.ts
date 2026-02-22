@@ -175,6 +175,32 @@ const enrichWithContext = async (text: string, context: ViewContext): Promise<st
     if (context.type === 'repo' && context.owner && context.repo) {
       return `[Viewing repository ${context.owner}/${context.repo}]\n${text}`
     }
+
+    if (context.type === 'actions' && context.owner && context.repo) {
+      const run = context.subId ? ` run #${context.subId}` : ''
+      return `[Viewing Actions${run} for ${context.owner}/${context.repo}]\n${text}`
+    }
+
+    if (context.type === 'releases' && context.owner && context.repo) {
+      return `[Viewing releases for ${context.owner}/${context.repo}]\n${text}`
+    }
+
+    if (context.type === 'wiki' && context.owner && context.repo) {
+      return `[Viewing wiki for ${context.owner}/${context.repo}]\n${text}`
+    }
+
+    if (context.type === 'org' && context.owner) {
+      return `[Viewing org ${context.owner}]\n${text}`
+    }
+
+    if (context.type === 'admin') {
+      return `[Viewing admin panel]\n${text}`
+    }
+
+    // Generic fallback for other sub-pages (milestones, labels, settings, etc.)
+    if (context.owner && context.repo) {
+      return `[Viewing ${context.type} for ${context.owner}/${context.repo}]\n${text}`
+    }
   } catch (err) {
     console.warn('[router] Context enrichment failed:', (err as Error).message)
   }

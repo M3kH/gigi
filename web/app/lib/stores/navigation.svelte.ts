@@ -21,57 +21,120 @@ export interface NavigationTarget {
   giteaPath?: string
 }
 
+export type ViewContextType =
+  | 'overview'
+  | 'repo'
+  | 'issue'
+  | 'pull'
+  | 'file'
+  | 'commit'
+  | 'actions'
+  | 'releases'
+  | 'wiki'
+  | 'milestones'
+  | 'labels'
+  | 'settings'
+  | 'activity'
+  | 'projects'
+  | 'org'
+  | 'admin'
+  | 'unknown'
+
 export interface ViewContext {
-  type: 'overview' | 'repo' | 'issue' | 'pull' | 'file' | 'commit' | 'unknown'
+  type: ViewContextType
   owner?: string
   repo?: string
   number?: number
   filepath?: string
   branch?: string
   commitSha?: string
+  /** Sub-page identifier, e.g. actions run number or release tag */
+  subId?: string
   rawPath?: string
 }
 
 // ── View Context Parser ──────────────────────────────────────────────
 
+/**
+ * Map of repo sub-page prefixes → ViewContext types.
+ * Checked before the generic fallback so we get specific context.
+ */
+const REPO_SUBPAGE_TYPES: Record<string, ViewContextType> = {
+  actions:    'actions',
+  releases:   'releases',
+  wiki:       'wiki',
+  milestones: 'milestones',
+  labels:     'labels',
+  settings:   'settings',
+  activity:   'activity',
+  projects:   'projects',
+}
+
 export function parseGiteaPath(path: string): ViewContext {
   // Strip /gitea prefix if present
   const clean = path.replace(/^\/gitea/, '')
 
-  // /owner/repo/issues/N
+  // ── Admin pages ──────────────────────────────────────────────────
+  if (clean.startsWith('/-/admin')) {
+    return { type: 'admin', rawPath: path }
+  }
+
+  // ── /owner/repo/issues/N ────────────────────────────────────────
   const issueMatch = clean.match(/^\/([^/]+)\/([^/]+)\/issues\/(\d+)/)
   if (issueMatch) {
     return { type: 'issue', owner: issueMatch[1], repo: issueMatch[2], number: parseInt(issueMatch[3], 10), rawPath: path }
   }
 
-  // /owner/repo/pulls/N
+  // ── /owner/repo/pulls/N ─────────────────────────────────────────
   const pullMatch = clean.match(/^\/([^/]+)\/([^/]+)\/pulls\/(\d+)/)
   if (pullMatch) {
     return { type: 'pull', owner: pullMatch[1], repo: pullMatch[2], number: parseInt(pullMatch[3], 10), rawPath: path }
   }
 
-  // /owner/repo/src/branch/branchName/filepath...
+  // ── /owner/repo/src/branch/branchName/filepath... ───────────────
   const fileMatch = clean.match(/^\/([^/]+)\/([^/]+)\/src\/branch\/([^/]+)\/(.+)/)
   if (fileMatch) {
     return { type: 'file', owner: fileMatch[1], repo: fileMatch[2], branch: fileMatch[3], filepath: fileMatch[4], rawPath: path }
   }
 
-  // /owner/repo/commit/sha
+  // ── /owner/repo/commit/sha ──────────────────────────────────────
   const commitMatch = clean.match(/^\/([^/]+)\/([^/]+)\/commit\/([a-f0-9]+)/)
   if (commitMatch) {
     return { type: 'commit', owner: commitMatch[1], repo: commitMatch[2], commitSha: commitMatch[3], rawPath: path }
   }
 
-  // /owner/repo (bare repo page — no further path segments that indicate sub-pages)
+  // ── /owner/repo/actions/runs/N ──────────────────────────────────
+  const actionsRunMatch = clean.match(/^\/([^/]+)\/([^/]+)\/actions\/runs\/(\d+)/)
+  if (actionsRunMatch) {
+    return { type: 'actions', owner: actionsRunMatch[1], repo: actionsRunMatch[2], subId: actionsRunMatch[3], rawPath: path }
+  }
+
+  // ── /owner/repo/{subpage}/... — known sub-page types ────────────
+  const subpageMatch = clean.match(/^\/([^/]+)\/([^/]+)\/([^/]+)/)
+  if (subpageMatch) {
+    const subpage = subpageMatch[3]
+    const contextType = REPO_SUBPAGE_TYPES[subpage]
+    if (contextType) {
+      return { type: contextType, owner: subpageMatch[1], repo: subpageMatch[2], rawPath: path }
+    }
+  }
+
+  // ── /owner/repo (bare repo page) ────────────────────────────────
   const repoMatch = clean.match(/^\/([^/]+)\/([^/]+)\/?$/)
   if (repoMatch) {
     return { type: 'repo', owner: repoMatch[1], repo: repoMatch[2], rawPath: path }
   }
 
-  // Fallback: if we have /owner/repo/... it's still a repo context
+  // ── Fallback: /owner/repo/... still provides repo context ───────
   const repoFallback = clean.match(/^\/([^/]+)\/([^/]+)/)
   if (repoFallback) {
     return { type: 'unknown', owner: repoFallback[1], repo: repoFallback[2], rawPath: path }
+  }
+
+  // ── /owner (org page) ───────────────────────────────────────────
+  const orgMatch = clean.match(/^\/([^/]+)\/?$/)
+  if (orgMatch) {
+    return { type: 'org', owner: orgMatch[1], rawPath: path }
   }
 
   return { type: 'overview', rawPath: path }

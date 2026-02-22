@@ -9,16 +9,18 @@
 import { navigateToGitea } from '$lib/stores/navigation.svelte'
 
 /**
- * Gitea URL patterns that identify a Gitea instance.
- * Matches paths like /owner/repo/issues/N, /owner/repo/pulls/N, etc.
+ * Gitea URL patterns that identify a Gitea page.
+ *
+ * Rather than enumerating every sub-page (issues, actions, releases, etc.),
+ * we match broadly: any /owner/repo path, org pages, and admin pages.
+ * Non-page prefixes (API, assets, etc.) are filtered out separately.
  */
+const GITEA_NON_PAGE_PREFIXES = ['/api/', '/assets/', '/swagger', '/-/health']
+
 const GITEA_PAGE_PATTERNS = [
-  /^\/[^/]+\/[^/]+\/issues\/\d+/,       // /owner/repo/issues/N
-  /^\/[^/]+\/[^/]+\/pulls\/\d+/,        // /owner/repo/pulls/N
-  /^\/[^/]+\/[^/]+\/commit\/[a-f0-9]+/, // /owner/repo/commit/sha
-  /^\/[^/]+\/[^/]+\/src\//,             // /owner/repo/src/...
-  /^\/[^/]+\/[^/]+\/wiki\//,            // /owner/repo/wiki/...
-  /^\/[^/]+\/[^/]+\/?$/,                // /owner/repo (bare repo)
+  /^\/[^/]+\/[^/]+/,   // /owner/repo (and any sub-path: issues, actions, releases, etc.)
+  /^\/[^/]+\/?$/,       // /owner (org page)
+  /^\/-\/admin/,         // /-/admin/... (admin pages)
 ]
 
 /**
@@ -66,8 +68,11 @@ export function extractGiteaPath(href: string): string | null {
       const path = url.pathname
       // Strip /gitea prefix if present in the URL
       const cleanPath = path.startsWith('/gitea/') ? path.replace(/^\/gitea/, '') : path
-      // Check if the path looks like a Gitea page
-      if (GITEA_PAGE_PATTERNS.some(p => p.test(cleanPath))) {
+      // Check if the path looks like a Gitea page (not an API/asset endpoint)
+      if (
+        !GITEA_NON_PAGE_PREFIXES.some(prefix => cleanPath.startsWith(prefix)) &&
+        GITEA_PAGE_PATTERNS.some(p => p.test(cleanPath))
+      ) {
         return cleanPath
       }
     }

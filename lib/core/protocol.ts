@@ -9,13 +9,20 @@ import { z } from 'zod'
 // ─── View Context ───────────────────────────────────────────────────
 
 export const ViewContextSchema = z.object({
-  type: z.enum(['overview', 'repo', 'issue', 'pull', 'file', 'commit', 'unknown']),
+  type: z.enum([
+    'overview', 'repo', 'issue', 'pull', 'file', 'commit',
+    'actions', 'releases', 'wiki', 'milestones', 'labels',
+    'settings', 'activity', 'projects', 'org', 'admin',
+    'unknown',
+  ]),
   owner: z.string().optional(),
   repo: z.string().optional(),
   number: z.number().optional(),
   filepath: z.string().optional(),
   branch: z.string().optional(),
   commitSha: z.string().optional(),
+  /** Sub-page identifier, e.g. actions run number or release tag */
+  subId: z.string().optional(),
   rawPath: z.string().optional(),
 })
 
