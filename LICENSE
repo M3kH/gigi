@@ -1,3 +1,27 @@
+Gigi — AI Coordinator
+Copyright (C) 2025 Mauro Mandracchia
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+As a special exception, you may link this program with the Anthropic Claude
+Agent SDK without that SDK being subject to the AGPL-3.0 obligations,
+provided that all other terms of this License continue to apply.
+
+For commercial licensing options, contact: info@ideabile.com
+
+---
+
                     GNU AFFERO GENERAL PUBLIC LICENSE
                        Version 3, 19 November 2007
 
