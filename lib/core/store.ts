@@ -563,6 +563,121 @@ export const findByTag = async (tag: string): Promise<Conversation[]> => {
   return rows
 }
 
+export interface SearchResult {
+  conversationId: string
+  topic: string | null
+  channel: string
+  status: string
+  createdAt: string
+  updatedAt: string
+  matchType: 'topic' | 'message'
+  matchPreview: string
+  messageRole?: string
+}
+
+/**
+ * Search across conversation topics and message content.
+ * Uses case-insensitive LIKE matching.
+ * Returns deduplicated results: one per conversation, prioritizing topic matches.
+ */
+export const searchConversations = async (
+  query: string,
+  limit: number = 20,
+): Promise<SearchResult[]> => {
+  const pattern = `%${query}%`
+
+  // Search conversation topics
+  const { rows: topicMatches } = await pool.query(`
+    SELECT
+      c.id AS conversation_id,
+      c.topic,
+      c.channel,
+      c.status,
+      c.created_at,
+      c.updated_at,
+      'topic' AS match_type,
+      c.topic AS match_preview,
+      NULL AS message_role
+    FROM conversations c
+    WHERE c.topic ILIKE $1
+    ORDER BY c.updated_at DESC
+    LIMIT $2
+  `, [pattern, limit])
+
+  // Search message content (text blocks within JSONB)
+  const { rows: messageMatches } = await pool.query(`
+    SELECT DISTINCT ON (c.id)
+      c.id AS conversation_id,
+      c.topic,
+      c.channel,
+      c.status,
+      c.created_at,
+      c.updated_at,
+      'message' AS match_type,
+      LEFT(
+        CASE
+          WHEN jsonb_typeof(m.content) = 'string' THEN m.content #>> '{}'
+          WHEN jsonb_typeof(m.content) = 'array' THEN (
+            SELECT string_agg(elem->>'text', ' ')
+            FROM jsonb_array_elements(m.content) elem
+            WHERE elem->>'type' = 'text'
+          )
+          ELSE ''
+        END, 150
+      ) AS match_preview,
+      m.role AS message_role
+    FROM messages m
+    JOIN conversations c ON c.id = m.conversation_id
+    WHERE (
+      (jsonb_typeof(m.content) = 'string' AND m.content #>> '{}' ILIKE $1)
+      OR
+      (jsonb_typeof(m.content) = 'array' AND EXISTS (
+        SELECT 1 FROM jsonb_array_elements(m.content) elem
+        WHERE elem->>'type' = 'text' AND elem->>'text' ILIKE $1
+      ))
+    )
+    AND m.role IN ('user', 'assistant')
+    ORDER BY c.id, c.updated_at DESC
+    LIMIT $2
+  `, [pattern, limit])
+
+  // Merge and deduplicate: topic matches first, then message matches (skip dupes)
+  const seen = new Set<string>()
+  const results: SearchResult[] = []
+
+  for (const row of topicMatches) {
+    seen.add(row.conversation_id)
+    results.push({
+      conversationId: row.conversation_id,
+      topic: row.topic,
+      channel: row.channel,
+      status: row.status,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      matchType: 'topic',
+      matchPreview: row.match_preview || '',
+    })
+  }
+
+  for (const row of messageMatches) {
+    if (seen.has(row.conversation_id)) continue
+    seen.add(row.conversation_id)
+    results.push({
+      conversationId: row.conversation_id,
+      topic: row.topic,
+      channel: row.channel,
+      status: row.status,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      matchType: 'message',
+      matchPreview: row.match_preview || '',
+      messageRole: row.message_role,
+    })
+  }
+
+  return results.slice(0, limit)
+}
+
 export const findLatest = async (channel: string): Promise<Conversation | null> => {
   const { rows } = await pool.query(
     `SELECT * FROM conversations WHERE channel = $1 AND status IN ('active', 'paused') ORDER BY updated_at DESC LIMIT 1`,

@@ -60,6 +60,17 @@ export const createApp = (): Hono => {
     return c.json(convs)
   })
 
+  // Search conversations and message content
+  app.get('/api/conversations/search', async (c) => {
+    const q = c.req.query('q')?.trim()
+    if (!q || q.length < 2) {
+      return c.json({ error: 'query must be at least 2 characters' }, 400)
+    }
+    const limit = Math.min(parseInt(c.req.query('limit') || '20'), 50)
+    const results = await store.searchConversations(q, limit)
+    return c.json(results)
+  })
+
   app.get('/api/conversations/:id/messages', async (c) => {
     const messages = await store.getMessages(c.req.param('id'))
     return c.json(messages)

@@ -21,6 +21,7 @@ import type {
   ThreadEvent,
   ThreadRef,
   CompactStatus,
+  SearchResult,
 } from '$lib/types/chat'
 import type { ServerMessage } from '$lib/types/protocol'
 import { fetchBoard } from '$lib/stores/kanban.svelte'
@@ -45,6 +46,11 @@ let awaitingConversation = $state(false)
 
 // System prompt prepended to the next user message (e.g. from greeting flow)
 let pendingPrompt = $state<string | null>(null)
+
+// Search state
+let searchQuery = $state('')
+let searchResults = $state<SearchResult[]>([])
+let searchLoading = $state(false)
 
 // ── REST API helpers ──────────────────────────────────────────────────
 
@@ -354,6 +360,56 @@ export async function reopenThread(convId: string): Promise<void> {
   } catch (err) {
     console.error('[chat] Reopen thread failed:', err)
   }
+}
+
+// ── Search ─────────────────────────────────────────────────────────────
+
+let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null
+
+export function setSearchQuery(query: string): void {
+  searchQuery = query
+  if (searchDebounceTimer) clearTimeout(searchDebounceTimer)
+
+  if (!query.trim() || query.trim().length < 2) {
+    searchResults = []
+    searchLoading = false
+    return
+  }
+
+  searchLoading = true
+  searchDebounceTimer = setTimeout(async () => {
+    try {
+      const encoded = encodeURIComponent(query.trim())
+      searchResults = await apiFetch<SearchResult[]>(`/api/conversations/search?q=${encoded}`)
+    } catch (err) {
+      console.error('[chat] Search failed:', err)
+      searchResults = []
+    } finally {
+      searchLoading = false
+    }
+  }, 300)
+}
+
+export function clearSearch(): void {
+  searchQuery = ''
+  searchResults = []
+  searchLoading = false
+  if (searchDebounceTimer) {
+    clearTimeout(searchDebounceTimer)
+    searchDebounceTimer = null
+  }
+}
+
+export function getSearchQuery(): string {
+  return searchQuery
+}
+
+export function getSearchResults(): SearchResult[] {
+  return searchResults
+}
+
+export function getSearchLoading(): boolean {
+  return searchLoading
 }
 
 // ── Event handler (called from connection store) ──────────────────────

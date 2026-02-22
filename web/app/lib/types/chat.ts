@@ -142,6 +142,20 @@ export interface ThreadLineage {
   children: ThreadLineageThread[]
 }
 
+// ── Search result ───────────────────────────────────────────────────
+
+export interface SearchResult {
+  conversationId: string
+  topic: string | null
+  channel: string
+  status: string
+  createdAt: string
+  updatedAt: string
+  matchType: 'topic' | 'message'
+  matchPreview: string
+  messageRole?: string
+}
+
 // ── Chat dialog state ───────────────────────────────────────────────
 
 export type DialogState = 'idle' | 'thinking' | 'streaming' | 'tool_running' | 'waiting_for_user'

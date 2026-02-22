@@ -17,14 +17,22 @@
     stopThread,
     reopenThread,
     forkConversation,
+    getSearchQuery,
+    getSearchResults,
+    getSearchLoading,
+    clearSearch,
   } from '$lib/stores/chat.svelte'
   import { getPanelState, setPanelState } from '$lib/stores/panels.svelte'
   import { formatRelativeTime, formatCost, formatTokens } from '$lib/utils/format'
-  import type { Conversation } from '$lib/types/chat'
+  import type { Conversation, SearchResult } from '$lib/types/chat'
 
   const conversations = $derived(getConversations())
   const archived = $derived(getArchivedConversations())
   const activeId = $derived(getActiveConversationId())
+  const searchQuery = $derived(getSearchQuery())
+  const searchResults = $derived(getSearchResults())
+  const searchLoading = $derived(getSearchLoading())
+  const isSearchActive = $derived(searchQuery.trim().length >= 2)
 
   // Filter state: hide error-only conversations
   let hideErrors = $state(false)
@@ -144,9 +152,64 @@
       default: return 'WB'
     }
   }
+
+  function handleSearchResultSelect(result: SearchResult) {
+    selectConversation(result.conversationId)
+    clearSearch()
+    if (getPanelState('chatOverlay') === 'hidden') {
+      setPanelState('chatOverlay', 'compact')
+    }
+  }
 </script>
 
 <div class="chat-list">
+  <!-- Search results mode -->
+  {#if isSearchActive}
+    {#if searchLoading}
+      <div class="search-status">
+        <span class="search-spinner">&#x27F3;</span> Searching...
+      </div>
+    {:else if searchResults.length === 0}
+      <div class="search-status">
+        <span class="search-empty-icon">🔍</span>
+        No results for "{searchQuery}"
+      </div>
+    {:else}
+      <div class="search-header">
+        {searchResults.length} result{searchResults.length !== 1 ? 's' : ''}
+      </div>
+      {#each searchResults as result (result.conversationId)}
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <div
+          class="chat-item search-result"
+          class:active={result.conversationId === activeId}
+          onclick={() => handleSearchResultSelect(result)}
+          onkeydown={(e) => e.key === 'Enter' && handleSearchResultSelect(result)}
+          tabindex="0"
+          role="button"
+        >
+          <div class="chat-item-header">
+            <span class="channel-icon" title={result.channel}>{channelIcon(result.channel)}<span class="channel-label">{channelLabel(result.channel)}</span></span>
+            <span class="match-badge {result.matchType}">{result.matchType === 'topic' ? 'title' : 'msg'}</span>
+            <span class="chat-title">{result.topic || 'Untitled'}</span>
+          </div>
+          {#if result.matchPreview}
+            <div class="chat-preview search-preview">{result.matchPreview}</div>
+          {/if}
+          <div class="chat-meta">
+            {#if result.updatedAt}
+              <span class="meta-time">{formatRelativeTime(result.updatedAt)}</span>
+            {/if}
+            {#if result.messageRole}
+              <span class="meta-role">{result.messageRole}</span>
+            {/if}
+          </div>
+        </div>
+      {/each}
+    {/if}
+  {:else}
+  <!-- Normal conversation list mode -->
+
   <!-- Error filter toggle -->
   {#if errorCount > 0}
     <button class="filter-toggle" onclick={() => hideErrors = !hideErrors}>
@@ -307,6 +370,7 @@
         </div>
       {/each}
     {/if}
+  {/if}
   {/if}
 </div>
 
@@ -619,5 +683,69 @@
   .empty-text {
     color: var(--gigi-text-muted);
     font-size: var(--gigi-font-size-xs);
+  }
+
+  /* ── Search results ────────────────────────────────────────── */
+
+  .search-status {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--gigi-space-xs);
+    padding: var(--gigi-space-lg) var(--gigi-space-md);
+    color: var(--gigi-text-muted);
+    font-size: var(--gigi-font-size-xs);
+  }
+
+  .search-spinner {
+    animation: spin 1s linear infinite;
+    font-size: 0.85rem;
+  }
+
+  .search-empty-icon {
+    font-size: 0.85rem;
+  }
+
+  .search-header {
+    padding: var(--gigi-space-xs) var(--gigi-space-md);
+    font-size: 10px;
+    color: var(--gigi-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-bottom: var(--gigi-border-width) solid var(--gigi-border-muted);
+    background: var(--gigi-bg-tertiary);
+  }
+
+  .match-badge {
+    font-size: 8px;
+    font-weight: 600;
+    padding: 0 4px;
+    border-radius: var(--gigi-radius-full);
+    flex-shrink: 0;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+
+  .match-badge.topic {
+    color: var(--gigi-accent-blue);
+    background: rgba(88, 166, 255, 0.12);
+  }
+
+  .match-badge.message {
+    color: var(--gigi-accent-green);
+    background: rgba(63, 185, 80, 0.12);
+  }
+
+  .search-preview {
+    color: var(--gigi-text-secondary);
+  }
+
+  .meta-role {
+    font-size: 9px;
+    color: var(--gigi-text-muted);
+    background: var(--gigi-bg-tertiary);
+    padding: 0 4px;
+    border-radius: 3px;
+    flex-shrink: 0;
   }
 </style>
