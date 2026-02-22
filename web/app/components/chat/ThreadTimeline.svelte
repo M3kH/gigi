@@ -3,8 +3,9 @@
    * Thread timeline — unified view showing events from all channels.
    *
    * Replaces the simple ChatMessages view with a cross-channel timeline
-   * that includes channel badges, compacted sections, fork indicators,
-   * refs bar, and thread actions.
+   * that includes channel badges, compacted sections, and fork indicators.
+   * Thread actions toolbar (refs, fork, compact, link) is rendered by
+   * GigiChatOverlay in the non-scrolling header area.
    *
    * Falls back to legacy ChatMessages rendering when no thread events
    * are available (backward compat).
@@ -14,8 +15,6 @@
     ChatMessage as ChatMessageType,
     ThreadLineage,
     ThreadEvent as ThreadEventType,
-    ThreadRef,
-    CompactStatus,
   } from '$lib/types/chat'
   import {
     getMessages,
@@ -24,11 +23,7 @@
     getActiveConversationId,
     getThreadLineage,
     getThreadEvents,
-    getThreadRefs,
-    getCompactStatus,
     selectConversation,
-    forkConversation,
-    compactThread,
   } from '$lib/stores/chat.svelte'
   import { renderMarkdown, highlightAll } from '$lib/utils/markdown'
   import { getToolDescription } from '$lib/utils/tool-descriptions'
@@ -37,13 +32,10 @@
   import ThreadEventComponent from './ThreadEvent.svelte'
   import CompactedSection from './CompactedSection.svelte'
   import ForkIndicator from './ForkIndicator.svelte'
-  import ThreadRefsBar from './ThreadRefsBar.svelte'
-  import ThreadActions from './ThreadActions.svelte'
   import ToolBlock from './ToolBlock.svelte'
   import AskUser from './AskUser.svelte'
   import SystemMessage from './SystemMessage.svelte'
   import ChannelBadge from './ChannelBadge.svelte'
-  import AddRefDialog from './AddRefDialog.svelte'
 
   const messages = $derived(getMessages())
   const dialogState = $derived(getDialogState())
@@ -53,10 +45,7 @@
   // Thread-specific state
   let lineage = $state<ThreadLineage | null>(null)
   let threadEvents = $state<ThreadEventType[]>([])
-  let threadRefs = $state<ThreadRef[]>([])
-  let compactStatus = $state<CompactStatus | null>(null)
   let hasThreadEvents = $state(false)
-  let showAddRefDialog = $state(false)
 
   // Track previous dialog state to detect agent completion
   let prevDialogState = $state<string>('idle')
@@ -71,13 +60,9 @@
         threadEvents = evts
         hasThreadEvents = evts.length > 0
       })
-      getThreadRefs(id).then(refs => { threadRefs = refs })
-      getCompactStatus(id).then(status => { compactStatus = status })
     } else {
       lineage = null
       threadEvents = []
-      threadRefs = []
-      compactStatus = null
       hasThreadEvents = false
     }
   })
@@ -86,13 +71,11 @@
   $effect(() => {
     const ds = dialogState
     if (prevDialogState !== 'idle' && ds === 'idle' && activeId) {
-      // Agent just finished — reload thread events + refs
+      // Agent just finished — reload thread events
       getThreadEvents(activeId).then(evts => {
         threadEvents = evts
         hasThreadEvents = evts.length > 0
       })
-      getThreadRefs(activeId).then(refs => { threadRefs = refs })
-      getCompactStatus(activeId).then(status => { compactStatus = status })
     }
     prevDialogState = ds
   })
@@ -176,25 +159,6 @@
     }
   })
 
-  // Thread action handlers
-  function handleFork() {
-    if (activeId) forkConversation(activeId)
-  }
-
-  function handleCompact() {
-    if (activeId) compactThread(activeId)
-  }
-
-  function handleAddRef() {
-    showAddRefDialog = true
-  }
-
-  async function handleRefAdded() {
-    if (activeId) {
-      threadRefs = await getThreadRefs(activeId)
-    }
-  }
-
   async function handleLoadOriginalEvents() {
     if (!activeId) return
     const allEvts = await getThreadEvents(activeId, true)
@@ -206,22 +170,6 @@
   <!-- Fork indicator -->
   {#if lineage?.parent}
     <ForkIndicator parent={lineage.parent} forkPoint={lineage.fork_point} />
-  {/if}
-
-  <!-- Sticky toolbar: refs + actions -->
-  {#if activeId}
-    <div class="sticky-toolbar">
-      {#if threadRefs.length > 0}
-        <ThreadRefsBar refs={threadRefs} onAddRef={handleAddRef} />
-      {/if}
-      <ThreadActions
-        threadId={activeId}
-        {compactStatus}
-        onFork={handleFork}
-        onCompact={handleCompact}
-        onAddRef={handleAddRef}
-      />
-    </div>
   {/if}
 
   <!-- Children forks banner -->
@@ -322,14 +270,6 @@
     {/if}
   {/each}
 
-  <!-- Add ref dialog -->
-  {#if showAddRefDialog && activeId}
-    <AddRefDialog
-      threadId={activeId}
-      onClose={() => showAddRefDialog = false}
-      onAdded={handleRefAdded}
-    />
-  {/if}
 </div>
 
 <style>
@@ -337,18 +277,6 @@
     flex: 1;
     overflow-y: auto;
     padding: var(--gigi-space-md);
-  }
-
-  /* ── Sticky toolbar ─────────────────────────────────────────────── */
-
-  .sticky-toolbar {
-    position: sticky;
-    top: 0;
-    z-index: 10;
-    background: var(--gigi-bg-secondary);
-    margin: 0 calc(-1 * var(--gigi-space-md));
-    padding: var(--gigi-space-xs) var(--gigi-space-md);
-    border-bottom: var(--gigi-border-width) solid var(--gigi-border-muted);
   }
 
   .empty-state {

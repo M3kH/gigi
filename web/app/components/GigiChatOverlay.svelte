@@ -1,5 +1,6 @@
 <script lang="ts">
   /** Section F: Chat overlay — messages + input + stop button */
+  import type { ThreadRef, CompactStatus } from '$lib/types/chat'
   import { getPanelState, setPanelState, type PanelState } from '$lib/stores/panels.svelte'
   import PanelControls from '$components/ui/PanelControls.svelte'
   import {
@@ -8,9 +9,16 @@
     getDialogState,
     getActiveConversationId,
     getActiveConversation,
+    getThreadRefs,
+    getCompactStatus,
+    forkConversation,
+    compactThread,
   } from '$lib/stores/chat.svelte'
   import { getViewContext, type ViewContext } from '$lib/stores/navigation.svelte'
   import ThreadTimeline from '$components/chat/ThreadTimeline.svelte'
+  import ThreadRefsBar from '$components/chat/ThreadRefsBar.svelte'
+  import ThreadActions from '$components/chat/ThreadActions.svelte'
+  import AddRefDialog from '$components/chat/AddRefDialog.svelte'
   import ChatInput from '$components/chat/ChatInput.svelte'
 
   const state: PanelState = $derived(getPanelState('chatOverlay'))
@@ -19,6 +27,34 @@
   const activeConv = $derived(getActiveConversation())
   const isAgentBusy = $derived(dialogState !== 'idle')
   const viewCtx: ViewContext = $derived(getViewContext())
+
+  // Thread toolbar state (refs + compact)
+  let threadRefs = $state<ThreadRef[]>([])
+  let compactStatus = $state<CompactStatus | null>(null)
+  let showAddRefDialog = $state(false)
+  let prevDialogState = $state<string>('idle')
+
+  // Fetch toolbar data when active conversation changes
+  $effect(() => {
+    const id = activeConvId
+    if (id) {
+      getThreadRefs(id).then(refs => { threadRefs = refs })
+      getCompactStatus(id).then(status => { compactStatus = status })
+    } else {
+      threadRefs = []
+      compactStatus = null
+    }
+  })
+
+  // Refresh when agent finishes (dialogState returns to idle)
+  $effect(() => {
+    const ds = dialogState
+    if (prevDialogState !== 'idle' && ds === 'idle' && activeConvId) {
+      getThreadRefs(activeConvId).then(refs => { threadRefs = refs })
+      getCompactStatus(activeConvId).then(status => { compactStatus = status })
+    }
+    prevDialogState = ds
+  })
 
   const contextLabel = $derived.by(() => {
     const ctx = viewCtx
@@ -37,6 +73,24 @@
 
   function handleStop() {
     stopAgent()
+  }
+
+  function handleFork() {
+    if (activeConvId) forkConversation(activeConvId)
+  }
+
+  function handleCompact() {
+    if (activeConvId) compactThread(activeConvId)
+  }
+
+  function handleAddRef() {
+    showAddRefDialog = true
+  }
+
+  async function handleRefAdded() {
+    if (activeConvId) {
+      threadRefs = await getThreadRefs(activeConvId)
+    }
   }
 </script>
 
@@ -63,6 +117,22 @@
   </header>
 
   {#if state !== 'hidden'}
+    <!-- Thread toolbar: refs + actions (in header area, not scrollable) -->
+    {#if activeConvId}
+      <div class="thread-toolbar">
+        {#if threadRefs.length > 0}
+          <ThreadRefsBar refs={threadRefs} onAddRef={handleAddRef} />
+        {/if}
+        <ThreadActions
+          threadId={activeConvId}
+          {compactStatus}
+          onFork={handleFork}
+          onCompact={handleCompact}
+          onAddRef={handleAddRef}
+        />
+      </div>
+    {/if}
+
     <ThreadTimeline />
 
     {#if contextLabel}
@@ -77,6 +147,15 @@
       disabled={false}
       placeholder={activeConvId ? 'Continue conversation...' : 'Message Gigi...'}
       autofocus={!activeConvId}
+    />
+  {/if}
+
+  <!-- Add ref dialog -->
+  {#if showAddRefDialog && activeConvId}
+    <AddRefDialog
+      threadId={activeConvId}
+      onClose={() => showAddRefDialog = false}
+      onAdded={handleRefAdded}
     />
   {/if}
 </div>
@@ -145,6 +224,18 @@
 
   .stop-btn:hover {
     filter: brightness(1.2);
+  }
+
+  /* ── Thread toolbar (below header, non-scrolling) ────────────────── */
+
+  .thread-toolbar {
+    display: flex;
+    flex-direction: column;
+    gap: var(--gigi-space-xs);
+    padding: var(--gigi-space-xs) var(--gigi-space-md);
+    border-bottom: var(--gigi-border-width) solid var(--gigi-border-muted);
+    background: var(--gigi-bg-secondary);
+    flex-shrink: 0;
   }
 
   /* ── Context pill ────────────────────────────────────────────────── */
