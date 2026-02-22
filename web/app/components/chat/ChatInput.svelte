@@ -7,9 +7,7 @@
    * refreshes and conversation switches. Drafts expire after 30 minutes.
    */
   import { onMount } from 'svelte'
-
-  const DRAFT_PREFIX = 'gigi:draft:'
-  const DRAFT_MAX_AGE_MS = 30 * 60 * 1000 // 30 minutes
+  import { saveDraft, loadDraft, clearDraft, cleanStaleDrafts } from '$lib/utils/draft'
 
   interface Props {
     onsend: (message: string) => void
@@ -33,11 +31,6 @@
   // Track previous conversation ID for save-on-switch
   let prevConvId: string | null | undefined = undefined
 
-  /** Derive the localStorage key for a given conversation */
-  function draftKey(convId: string | null | undefined): string {
-    return `${DRAFT_PREFIX}${convId ?? 'new'}`
-  }
-
   // Focus the textarea when autofocus becomes true (e.g. new chat)
   $effect(() => {
     if (autofocus && inputEl) {
@@ -58,10 +51,10 @@
     // If conversation actually changed
     if (currentId !== prevConvId) {
       // Save draft for the conversation we're leaving
-      saveDraft(prevConvId)
+      saveDraft(localStorage, prevConvId, inputValue)
 
       // Load draft for the conversation we're entering
-      const restored = loadDraft(currentId)
+      const restored = loadDraft(localStorage, currentId)
       inputValue = restored ?? ''
 
       // Resize textarea to fit restored content
@@ -90,9 +83,9 @@
 
   // Restore draft from localStorage on mount + clean stale drafts
   onMount(() => {
-    cleanStaleDrafts()
+    cleanStaleDrafts(localStorage)
 
-    const restored = loadDraft(conversationId)
+    const restored = loadDraft(localStorage, conversationId)
     if (restored) {
       inputValue = restored
       requestAnimationFrame(() => {
@@ -104,65 +97,9 @@
     }
   })
 
-  /** Save draft text + timestamp to localStorage */
-  function saveDraft(convId: string | null | undefined) {
-    try {
-      const key = draftKey(convId)
-      const text = inputValue.trim()
-      if (text) {
-        localStorage.setItem(key, JSON.stringify({ text: inputValue, ts: Date.now() }))
-      } else {
-        localStorage.removeItem(key)
-      }
-    } catch { /* ignore quota errors */ }
-  }
-
-  /** Load draft text from localStorage, returning null if stale or missing */
-  function loadDraft(convId: string | null | undefined): string | null {
-    try {
-      const key = draftKey(convId)
-      const raw = localStorage.getItem(key)
-      if (!raw) return null
-      const { text, ts } = JSON.parse(raw)
-      if (Date.now() - ts > DRAFT_MAX_AGE_MS) {
-        localStorage.removeItem(key)
-        return null
-      }
-      return text ?? null
-    } catch {
-      return null
-    }
-  }
-
-  /** Remove all draft entries older than 30 minutes */
-  function cleanStaleDrafts() {
-    try {
-      const now = Date.now()
-      const keysToRemove: string[] = []
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i)
-        if (!key?.startsWith(DRAFT_PREFIX)) continue
-        try {
-          const { ts } = JSON.parse(localStorage.getItem(key)!)
-          if (now - ts > DRAFT_MAX_AGE_MS) keysToRemove.push(key)
-        } catch {
-          keysToRemove.push(key) // corrupt entry, remove it
-        }
-      }
-      keysToRemove.forEach((k) => localStorage.removeItem(k))
-    } catch { /* ignore */ }
-  }
-
-  /** Clear the draft for the current conversation */
-  function clearDraft() {
-    try {
-      localStorage.removeItem(draftKey(conversationId))
-    } catch { /* ignore */ }
-  }
-
   // Sync draft to localStorage on every input change
   function syncDraft() {
-    saveDraft(conversationId)
+    saveDraft(localStorage, conversationId, inputValue)
   }
 
   function handleSend() {
@@ -171,7 +108,7 @@
 
     onsend(msg)
     inputValue = ''
-    clearDraft()
+    clearDraft(localStorage, conversationId)
 
     if (inputEl) {
       inputEl.style.height = 'auto'
