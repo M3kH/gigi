@@ -131,9 +131,9 @@
   <!-- Summary events are handled by CompactedSection, skip here -->
 {:else if isSystemEvent}
   <!-- Compact system/webhook event card -->
-  <div class="system-event">
+  <div class="system-event" use:interceptLinks>
     <ChannelBadge channel={event.channel} direction={event.direction} />
-    <span class="system-text">{textContent}</span>
+    <span class="system-text">{@html renderMarkdown(textContent)}</span>
     {#if event.created_at}
       <span class="system-time">{formatTime(event.created_at)}</span>
     {/if}
@@ -204,9 +204,12 @@
   .system-text {
     flex: 1;
     overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    min-width: 0;
   }
+
+  .system-text :global(p) { margin: 0; }
+  .system-text :global(a) { color: var(--gigi-accent-blue); text-decoration: none; }
+  .system-text :global(a:hover) { text-decoration: underline; }
 
   .system-time {
     font-size: 0.6rem;

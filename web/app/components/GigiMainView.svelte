@@ -11,6 +11,7 @@
   import OverviewDashboard from '$components/dashboard/OverviewDashboard.svelte'
   import GiteaFrame from '$components/GiteaFrame.svelte'
   import NekoBrowser from '$components/NekoBrowser.svelte'
+  import LinkedConversationsBar from '$components/LinkedConversationsBar.svelte'
 
   const view = $derived(getCurrentView())
 </script>
@@ -19,6 +20,7 @@
   {#if view.view === 'overview'}
     <OverviewDashboard />
   {:else if view.view === 'gitea' && view.giteaPath}
+    <LinkedConversationsBar />
     {#key view.giteaPath}
       <GiteaFrame src={view.giteaPath} />
     {/key}

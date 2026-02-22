@@ -138,6 +138,12 @@ export type ThreadStatusEvent = {
   status: ThreadStatus
 }
 
+export type ConversationUpdatedEvent = {
+  type: 'conversation_updated'
+  conversationId: string
+  reason?: 'webhook_message' | 'new_message'
+}
+
 export type ServerMessage =
   | AgentStartEvent
   | TextChunkEvent
@@ -150,3 +156,4 @@ export type ServerMessage =
   | GiteaEvent
   | AskUserEvent
   | ThreadStatusEvent
+  | ConversationUpdatedEvent

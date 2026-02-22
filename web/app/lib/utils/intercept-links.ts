@@ -1,7 +1,7 @@
 /**
  * Svelte action to intercept link clicks and route them in-app.
  *
- * - Gitea links (matching the current origin or /gitea paths) → navigate in Section D iframe
+ * - Gitea links (matching the current origin, /gitea paths, or known Gitea URL patterns) → navigate in Section D iframe
  * - External links → pass through normally
  * - Relative paths → navigate via Gitea iframe
  */
@@ -9,10 +9,25 @@
 import { navigateToGitea } from '$lib/stores/navigation.svelte'
 
 /**
+ * Gitea URL patterns that identify a Gitea instance.
+ * Matches paths like /owner/repo/issues/N, /owner/repo/pulls/N, etc.
+ */
+const GITEA_PAGE_PATTERNS = [
+  /^\/[^/]+\/[^/]+\/issues\/\d+/,       // /owner/repo/issues/N
+  /^\/[^/]+\/[^/]+\/pulls\/\d+/,        // /owner/repo/pulls/N
+  /^\/[^/]+\/[^/]+\/commit\/[a-f0-9]+/, // /owner/repo/commit/sha
+  /^\/[^/]+\/[^/]+\/src\//,             // /owner/repo/src/...
+  /^\/[^/]+\/[^/]+\/wiki\//,            // /owner/repo/wiki/...
+  /^\/[^/]+\/[^/]+\/?$/,                // /owner/repo (bare repo)
+]
+
+/**
  * Extract a Gitea-relative path from an absolute or relative URL.
  * Returns the path (e.g. "/idea/gigi/pulls/5") or null if not a Gitea link.
+ *
+ * Exported for testing.
  */
-function extractGiteaPath(href: string): string | null {
+export function extractGiteaPath(href: string): string | null {
   // Relative internal paths
   if (href.startsWith('/') && !href.startsWith('//')) {
     // Strip /gitea prefix if present
@@ -32,17 +47,44 @@ function extractGiteaPath(href: string): string | null {
       return path
     }
 
-    // Also match common Gitea URL patterns in the path
-    // e.g. links like https://prod.gigi.local/gitea/idea/gigi/issues/5
-    const giteaMatch = url.pathname.match(/^\/gitea(\/.+)/)
-    if (giteaMatch && url.origin === origin) {
-      return giteaMatch[1]
+    // Cross-origin but has /gitea/ path prefix → likely our Gitea proxy on another host
+    // This handles dev.gigi.local links showing in prod.gigi.local and vice versa
+    if (url.pathname.startsWith('/gitea/')) {
+      return url.pathname.replace(/^\/gitea/, '')
+    }
+
+    // Cross-origin Gitea instance (e.g., webhook URLs from a different host)
+    // Match URLs that look like Gitea pages (issues, PRs, commits, etc.)
+    // Only match hostnames in the same domain family (*.gigi.local, *.gigi.casa, etc.)
+    const currentHost = window.location.hostname
+    const linkHost = url.hostname
+    const isSameDomainFamily =
+      currentHost === linkHost ||
+      getSuffix(currentHost) === getSuffix(linkHost)
+
+    if (isSameDomainFamily) {
+      const path = url.pathname
+      // Strip /gitea prefix if present in the URL
+      const cleanPath = path.startsWith('/gitea/') ? path.replace(/^\/gitea/, '') : path
+      // Check if the path looks like a Gitea page
+      if (GITEA_PAGE_PATTERNS.some(p => p.test(cleanPath))) {
+        return cleanPath
+      }
     }
   } catch {
     // Invalid URL — ignore
   }
 
   return null
+}
+
+/**
+ * Get the domain suffix (last two segments) for comparison.
+ * e.g., "dev.gigi.local" → "gigi.local", "prod.gigi.local" → "gigi.local"
+ */
+function getSuffix(hostname: string): string {
+  const parts = hostname.split('.')
+  return parts.length >= 2 ? parts.slice(-2).join('.') : hostname
 }
 
 export function interceptLinks(node: HTMLElement) {

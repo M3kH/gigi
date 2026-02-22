@@ -511,6 +511,33 @@ export const createApp = (): Hono => {
     }
   })
 
+  // Find conversations linked to a specific issue/PR ref
+  app.get('/api/threads/by-ref/:repo/:refType/:number', async (c) => {
+    const repo = c.req.param('repo')
+    const refType = c.req.param('refType') as 'issue' | 'pr'
+    const number = parseInt(c.req.param('number'))
+
+    if (!repo || !refType || isNaN(number)) {
+      return c.json({ error: 'invalid params' }, 400)
+    }
+
+    try {
+      const pool = store.getPool()
+      const { rows } = await pool.query(
+        `SELECT DISTINCT c.id, c.topic, c.status, c.created_at, c.updated_at
+         FROM conversations c
+         JOIN threads t ON t.conversation_id = c.id
+         JOIN thread_refs r ON r.thread_id = t.id
+         WHERE r.repo = $1 AND r.ref_type = $2 AND r.number = $3
+         ORDER BY c.updated_at DESC`,
+        [repo, refType, number]
+      )
+      return c.json(rows)
+    } catch (err) {
+      return c.json({ error: (err as Error).message }, 500)
+    }
+  })
+
   // Gitea proxy endpoints (for frontend SPA)
   app.route('/api/gitea', createGiteaProxy())
 

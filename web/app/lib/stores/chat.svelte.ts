@@ -494,10 +494,17 @@ export function handleServerEvent(event: ServerMessage): void {
     case 'gitea_event': {
       // Notify listeners that Gitea state changed
       for (const fn of giteaEventListeners) fn(event as { type: 'gitea_event'; event: string; action?: string; repo?: string })
-      // Also push a system segment into the chat
-      if (activeConversationId) {
-        streamSegments = applyEvent(streamSegments, event)
+      break
+    }
+
+    case 'conversation_updated': {
+      const updatedConvId = (event as { conversationId: string }).conversationId
+      // Reload messages if the updated conversation is currently active
+      if (updatedConvId && updatedConvId === activeConversationId) {
+        loadMessages(activeConversationId)
       }
+      // Also refresh the conversation list (for updated preview)
+      loadConversations()
       break
     }
 

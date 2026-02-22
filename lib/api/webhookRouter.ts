@@ -276,6 +276,9 @@ export const routeWebhook = async (event: string, payload: WebhookPayload): Prom
     message_type: 'webhook',
   })
 
+  // Notify frontend that this conversation has new messages
+  emit({ type: 'conversation_updated', conversationId: conversation.id, reason: 'webhook_message' })
+
   // Store as thread event with delivery metadata
   if (threadId) {
     try {
