@@ -364,6 +364,11 @@ export const createApp = (): Hono => {
 
   // ── Thread API ─────────────────────────────────────────────────────
 
+  // Helper: resolve :id param from thread ID or conversation ID
+  async function resolveId(c: { req: { param: (k: string) => string } }) {
+    return threads.resolveThreadId(c.req.param('id'))
+  }
+
   // List threads
   app.get('/api/threads', async (c) => {
     const status = c.req.query('status') as threads.ThreadStatus | undefined
@@ -383,7 +388,8 @@ export const createApp = (): Hono => {
 
   // Get thread events (timeline)
   app.get('/api/threads/:id/events', async (c) => {
-    const threadId = c.req.param('id')
+    const threadId = await resolveId(c)
+    if (!threadId) return c.json({ error: 'thread not found' }, 404)
     const includeCompacted = c.req.query('include_compacted') === 'true'
     const channel = c.req.query('channel') as threads.ThreadEventChannel | undefined
     const limit = parseInt(c.req.query('limit') || '100')
@@ -400,7 +406,8 @@ export const createApp = (): Hono => {
 
   // Compact a thread (in-place or fork)
   app.post('/api/threads/:id/compact', async (c) => {
-    const threadId = c.req.param('id')
+    const threadId = await resolveId(c)
+    if (!threadId) return c.json({ error: 'thread not found' }, 404)
     const body = await c.req.json<{ mode?: 'in-place' | 'fork'; keep_recent?: number; topic?: string }>()
     const mode = body.mode || 'in-place'
 
@@ -421,7 +428,8 @@ export const createApp = (): Hono => {
 
   // Check if a thread should be compacted
   app.get('/api/threads/:id/compact-status', async (c) => {
-    const threadId = c.req.param('id')
+    const threadId = await resolveId(c)
+    if (!threadId) return c.json({ error: 'thread not found' }, 404)
     const threshold = parseInt(c.req.query('threshold') || '20')
     const status = await shouldCompact(threadId, threshold)
     return c.json(status)
@@ -429,7 +437,8 @@ export const createApp = (): Hono => {
 
   // Build context for a thread (useful for debugging)
   app.get('/api/threads/:id/context', async (c) => {
-    const threadId = c.req.param('id')
+    const threadId = await resolveId(c)
+    if (!threadId) return c.json({ error: 'thread not found' }, 404)
     const context = await buildThreadContext(threadId)
     return c.json({
       messages: context.messages,
@@ -441,14 +450,16 @@ export const createApp = (): Hono => {
 
   // Thread usage analytics
   app.get('/api/threads/:id/usage', async (c) => {
-    const threadId = c.req.param('id')
+    const threadId = await resolveId(c)
+    if (!threadId) return c.json({ error: 'thread not found' }, 404)
     const usage = await threads.getThreadUsage(threadId)
     return c.json(usage)
   })
 
   // Fork a thread (full copy or compact)
   app.post('/api/threads/:id/fork', async (c) => {
-    const sourceId = c.req.param('id')
+    const sourceId = await resolveId(c)
+    if (!sourceId) return c.json({ error: 'thread not found' }, 404)
     const body = await c.req.json().catch(() => ({}))
     const { topic, at_event_id, compact } = body as {
       topic?: string
@@ -468,7 +479,8 @@ export const createApp = (): Hono => {
 
   // Thread lineage (parent, children, fork point)
   app.get('/api/threads/:id/lineage', async (c) => {
-    const threadId = c.req.param('id')
+    const threadId = await resolveId(c)
+    if (!threadId) return c.json({ error: 'thread not found' }, 404)
     try {
       const lineage = await threads.getThreadLineage(threadId)
       return c.json(lineage)
@@ -481,7 +493,8 @@ export const createApp = (): Hono => {
 
   // Add a ref to a thread
   app.post('/api/threads/:id/refs', async (c) => {
-    const threadId = c.req.param('id')
+    const threadId = await resolveId(c)
+    if (!threadId) return c.json({ error: 'thread not found' }, 404)
     const body = await c.req.json<{ ref_type: string; repo: string; number?: number; ref?: string; url?: string; status?: string }>()
     try {
       const ref = await threads.addThreadRef(threadId, {

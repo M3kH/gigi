@@ -144,16 +144,38 @@ export const createThread = async (opts: CreateThreadOpts = {}): Promise<Thread>
 }
 
 /**
- * Get a thread by ID, optionally with its refs.
+ * Resolve a thread ID from either a thread UUID or a conversation UUID.
+ * Tries direct thread lookup first, then falls back to conversation_id lookup.
+ * Returns the actual thread ID or null if not found.
+ */
+export const resolveThreadId = async (idOrConversationId: string): Promise<string | null> => {
+  const pool = getPool()
+  // Try direct thread ID first
+  const { rows: direct } = await pool.query('SELECT id FROM threads WHERE id = $1', [idOrConversationId])
+  if (direct[0]) return direct[0].id
+  // Fall back to conversation_id lookup
+  const { rows: byConv } = await pool.query(
+    'SELECT id FROM threads WHERE conversation_id = $1 LIMIT 1',
+    [idOrConversationId]
+  )
+  return byConv[0]?.id ?? null
+}
+
+/**
+ * Get a thread by ID (or conversation ID), optionally with its refs.
+ * Supports resolution from conversation_id for frontend compatibility.
  */
 export const getThread = async (id: string): Promise<ThreadWithRefs | null> => {
   const pool = getPool()
-  const { rows } = await pool.query('SELECT * FROM threads WHERE id = $1', [id])
+  const resolvedId = await resolveThreadId(id)
+  if (!resolvedId) return null
+
+  const { rows } = await pool.query('SELECT * FROM threads WHERE id = $1', [resolvedId])
   if (!rows[0]) return null
 
   const { rows: refs } = await pool.query(
     'SELECT * FROM thread_refs WHERE thread_id = $1 ORDER BY created_at ASC',
-    [id]
+    [resolvedId]
   )
 
   return { ...rows[0], refs }

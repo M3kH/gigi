@@ -211,6 +211,7 @@ export async function deleteConversation(convId: string): Promise<void> {
 /**
  * Fork a conversation/thread — creates a copy to explore alternate directions.
  * Navigates to the forked thread after creation.
+ * Accepts conversation ID — backend resolves to thread ID automatically.
  */
 export async function forkConversation(convId: string, opts?: { topic?: string; compact?: boolean }): Promise<string | null> {
   try {
@@ -286,17 +287,22 @@ export async function getCompactStatus(threadId: string): Promise<CompactStatus 
 
 /**
  * Compact a thread (in-place). Summarizes older events and keeps recent ones.
+ * Accepts either a thread ID or conversation ID (backend resolves both).
  */
-export async function compactThread(threadId: string, keepRecent = 10): Promise<void> {
+export async function compactThread(idOrConvId: string, keepRecent = 10): Promise<void> {
   try {
-    await fetch(`/api/threads/${threadId}/compact`, {
+    const res = await fetch(`/api/threads/${idOrConvId}/compact`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ mode: 'in-place', keep_recent: keepRecent }),
     })
+    if (!res.ok) {
+      console.error('[chat] Compact failed:', res.status)
+      return
+    }
     // Reload messages to reflect compacted state
-    if (activeConversationId === threadId) {
-      await loadMessages(threadId)
+    if (activeConversationId) {
+      await loadMessages(activeConversationId)
     }
   } catch (err) {
     console.error('[chat] Compact failed:', err)
