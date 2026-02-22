@@ -5,7 +5,7 @@
 <h1 align="center">Gigi</h1>
 
 <p align="center">
-  <strong>Mission control for autonomous AI development.</strong><br/>
+  <strong>The control plane for autonomous AI development.</strong><br/>
   <em>Not assisted. Autonomous.</em>
 </p>
 
@@ -24,7 +24,7 @@
 
 IDEs and CLIs were designed for **humans** — a person typing code, reading diffs, clicking buttons. When AI entered the picture, we bolted copilots onto these human-centric tools and called it "AI-assisted development."
 
-But **autonomous development** is a different game entirely. When an AI agent works independently — reading issues, writing code, creating PRs, verifying its own output — it doesn't need syntax highlighting or keybindings. It needs **task tracking, completion enforcement, real-time visibility, and budget control.**
+But **autonomous development** is a different game. When an AI agent works independently — reading issues, writing code, creating PRs, verifying its own output — it doesn't need syntax highlighting or keybindings. It needs **task tracking, completion enforcement, real-time visibility, and budget control.**
 
 Running autonomous agents through a terminal is like managing a factory floor through a typewriter. You can make it work, but you're burning tokens, losing context, and flying blind.
 
@@ -35,8 +35,9 @@ Gigi is the **control plane** for autonomous AI development. Instead of watching
 - **A Kanban board** that updates in real-time as the agent moves through tasks
 - **Task enforcement** that prevents the agent from stopping mid-work — enforced by code, not prompts
 - **Conversations linked to issues** — every webhook, every PR, every comment routed to the right thread
-- **A shared browser** you can watch live as the agent inspects, debugs, and verifies
+- **A shared browser** the agent uses to debug live websites, inspect the DOM, read console errors, run scripts, and trigger events — powered by Google Chrome DevTools Protocol (MCP)
 - **Token and cost tracking** so you know exactly what you're spending
+- **Always with you** — Telegram integration means your agent is reachable from anywhere, on any device
 - **Self-extension** — the agent evolves its own capabilities through PRs to its own repo
 
 Self-hosted. Open source. Your hardware, your data, your agent.
@@ -46,10 +47,10 @@ Self-hosted. Open source. Your hardware, your data, your agent.
 ### Docker Compose (recommended)
 
 ```bash
-git clone https://your-gitea/idea/gigi.git
+git clone https://github.com/user/gigi.git
 cd gigi
 cp .env.example .env
-# Edit .env — set DATABASE_URL and your host IP for NEKO_NAT1TO1
+# Edit .env — set DATABASE_URL and your ANTHROPIC_API_KEY
 docker compose up -d
 ```
 
@@ -60,7 +61,7 @@ Open `http://localhost:3100` — the setup wizard walks you through connecting y
 | Service | Description |
 |---------|-------------|
 | `gigi` | AI agent + real-time web UI |
-| `gigi-neko` | Shared Chromium browser (WebRTC, optional) |
+| `chrome` | Headless Chrome with DevTools Protocol for browser automation |
 
 You'll also need a **PostgreSQL** instance and a **Gitea** instance (or any Gitea-compatible forge). See [Configuration](#configuration) for details.
 
@@ -106,18 +107,33 @@ Every issue and PR gets its own persistent conversation. Gitea webhooks automati
 
 You chat with the agent about a specific issue, and all context — code changes, reviews, deployments — stays linked in one place.
 
-### Shared Browser
+### Live Browser Debugging
 
-Gigi runs a persistent Chromium instance via [neko](https://github.com/m1k1o/neko) that both the agent and you can see simultaneously:
+Gigi runs a persistent Chrome instance with full **DevTools Protocol** access via the [Chrome DevTools MCP](https://developer.chrome.com/docs/devtools/). The agent can:
 
-- The agent navigates pages, inspects DOM, reads `console.error`, takes screenshots
-- You watch the browser live via WebRTC in the Browser tab
-- Either of you can take control at any time
-- The agent **verifies its own work visually** — it doesn't need you to keep a tab open
+- **Navigate pages** and inspect the live DOM
+- **Read `console.error`** and other console output in real-time
+- **Execute JavaScript** in the page context — trigger events, extract data, manipulate state
+- **Take screenshots** and DOM snapshots for visual verification
+- **Monitor network requests** — inspect headers, payloads, and response bodies
+- **Click, fill forms, and interact** with page elements programmatically
+
+The agent debugs live websites — including its own UI. You watch it happen in the Browser tab. This isn't a simulated environment; it's a real Chrome instance the agent controls through the same protocol your browser DevTools use.
 
 ### Token & Cost Tracking
 
 Every message tracks input/output tokens and estimated cost. Per-conversation and aggregate views show exactly where your budget is going. No surprise bills from runaway agent loops.
+
+### Always With You — Telegram Integration
+
+Gigi isn't trapped in a browser tab. With Telegram integration, your agent is **always running, always reachable**:
+
+- **Get notified** when tasks complete, PRs are created, or issues need attention
+- **Send instructions** to your agent from your phone, on the train, from bed — anywhere
+- **Full two-way chat** — same agent, same context, different channel
+- **Cross-channel routing** — start a conversation on the web, continue it on Telegram
+
+Your autonomous development pipeline doesn't stop when you close your laptop.
 
 ### Self-Extension
 
@@ -130,11 +146,6 @@ Gigi's source code lives in a Gitea repo that the agent itself can modify:
 5. Notifies you via Telegram or Web UI
 
 After you merge, CI/CD deploys the update automatically. The agent evolves itself — new tools, prompt improvements, UI features, bug fixes.
-
-### Multi-Channel Communication
-
-- **Web UI** — real-time dashboard with Kanban, chat, Gitea integration, shared browser
-- **Telegram** — message your agent on the go, get notifications on task completion
 
 ## Architecture
 
@@ -152,14 +163,16 @@ After you merge, CI/CD deploys the update automatically. The agent evolves itsel
 │        ├── Task enforcer (state machine)                 │
 │        ├── Webhook router (events → conversations)       │
 │        │                                                 │
-│        ├──► Neko (shared Chromium browser)                │
-│        │    ↕ WebRTC stream to user                      │
+│        ├──► Chrome (DevTools Protocol via MCP)            │
+│        │    ↕ Live browser visible in UI                  │
 │        │                                                 │
 │        └──► Svelte 5 Web UI                              │
 │             ├── Kanban board (real-time)                  │
 │             ├── Chat (conversations + tool output)        │
 │             ├── Gitea views (issues, PRs, code)           │
-│             └── Browser tab (live neko stream)            │
+│             └── Browser tab (live Chrome stream)          │
+│                                                          │
+│        ◄──► Telegram (two-way, always reachable)         │
 └──────────────────────────────────────────────────────────┘
 ```
 
@@ -188,8 +201,8 @@ After you merge, CI/CD deploys the update automatically. The agent evolves itsel
 | Frontend | [Svelte 5](https://svelte.dev/) + [Vite](https://vitejs.dev/) |
 | Validation | [Zod](https://zod.dev/) |
 | Database | PostgreSQL |
-| Browser | [Neko](https://github.com/m1k1o/neko) (Chromium via WebRTC) |
-| Telegram | [grammY](https://grammy.dev/) |
+| Browser | Chrome + [DevTools Protocol MCP](https://developer.chrome.com/docs/devtools/) |
+| Messaging | [grammY](https://grammy.dev/) (Telegram) |
 | Deployment | Docker Swarm, Gitea Actions CI/CD |
 
 ### Project Structure
@@ -230,8 +243,7 @@ Configuration is stored in PostgreSQL and managed via the web UI setup wizard at
 
 | Service | Purpose |
 |---------|---------|
-| **Neko** | Shared browser for visual verification |
-| **Telegram Bot** | Mobile notifications and chat |
+| **Telegram Bot** | Mobile notifications and two-way chat from anywhere |
 | **Backup Gitea** | Repository mirroring to secondary instance |
 
 ### Environment Variables
@@ -240,11 +252,10 @@ Configuration is stored in PostgreSQL and managed via the web UI setup wizard at
 |----------|-------------|---------|
 | `DATABASE_URL` | PostgreSQL connection string | *required* |
 | `PORT` | HTTP server port | `3000` |
-| `BROWSER_MODE` | `headless` (Playwright) or `neko` (shared browser) | `headless` |
-| `CHROME_CDP_URL` | Chrome DevTools Protocol URL for browser control | — |
+| `CHROME_CDP_URL` | Chrome DevTools Protocol URL for browser automation | — |
 | `GITEA_URL` | Gitea instance base URL | — |
 | `GITEA_TOKEN` | Gitea API token for agent operations | — |
-| `NEKO_NAT1TO1` | External IP/hostname for WebRTC connectivity | — |
+| `TELEGRAM_BOT_TOKEN` | Telegram bot token for mobile access | — |
 
 ## MCP Tools
 
@@ -254,8 +265,8 @@ The agent operates through these tool servers:
 |------|-------------|
 | **gitea** | Create repos, manage issues/PRs, update labels, post comments |
 | **ask_user** | Ask the operator a question via web UI (blocks until answered) |
-| **telegram_send** | Send Markdown-formatted notifications |
-| **Chrome DevTools** | Navigate, screenshot, evaluate JS, click, fill, inspect network |
+| **telegram_send** | Send Markdown-formatted notifications to Telegram |
+| **Chrome DevTools** | Navigate, screenshot, evaluate JS, click, fill, inspect network, read console |
 
 ## How It Compares
 
@@ -266,6 +277,8 @@ The agent operates through these tool servers:
 | **Task completion** | Hope the agent finishes | State machine enforcement |
 | **Context** | Lost between sessions | Persistent, linked to issues/PRs |
 | **Cost awareness** | Check your bill later | Real-time token tracking |
+| **Browser debugging** | You open DevTools manually | Agent runs Chrome DevTools autonomously |
+| **Availability** | Only when your IDE is open | Always on — web + Telegram |
 | **Self-improvement** | You update the config | Agent PRs its own repo |
 | **Hosting** | Cloud vendor | Self-hosted, your hardware |
 
