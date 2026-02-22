@@ -5,6 +5,8 @@
  * Fetches from /api/gitea/board (live Gigi backend proxy).
  */
 
+import { sortCardsByPriority } from '../kanban-utils'
+
 // ── Types ─────────────────────────────────────────────────────────────
 
 export interface KanbanLabel {
@@ -75,25 +77,11 @@ let dragState = $state<DragState>({ card: null, sourceColumnId: null })
 let lastFetch = $state(0)
 let sortMode = $state<SortMode>('default')
 
-// ── Priority sorting ──────────────────────────────────────────────────
-
-const PRIORITY_ORDER: Record<string, number> = {
-  'priority/critical': 0,
-  'priority/high': 1,
-  'priority/medium': 2,
-  'priority/low': 3,
-}
-
-function getPriorityScore(card: KanbanCard): number {
-  for (const label of card.labels) {
-    if (label.name in PRIORITY_ORDER) return PRIORITY_ORDER[label.name]
-  }
-  return 99 // no priority = lowest
-}
+// ── Priority sorting (logic lives in ../kanban-utils.ts for testability) ──
 
 function sortCards(cards: KanbanCard[]): KanbanCard[] {
   if (sortMode !== 'priority') return cards
-  return [...cards].sort((a, b) => getPriorityScore(a) - getPriorityScore(b))
+  return sortCardsByPriority(cards)
 }
 
 // ── Data Fetching ─────────────────────────────────────────────────────
