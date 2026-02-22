@@ -44,8 +44,8 @@
 
 <div class="compacted-section">
   <button class="compacted-header" onclick={() => expanded = !expanded}>
-    <svg class="compacted-chevron" class:open={expanded} viewBox="0 0 16 16" width="12" height="12" fill="currentColor">
-      <path d="M6.22 3.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042L9.94 8 6.22 4.28a.75.75 0 0 1 0-1.06Z"/>
+    <svg class="compacted-chevron" class:open={expanded} viewBox="0 0 24 24" width="12" height="12" fill="currentColor">
+      <path d="M8 5v2h2V5H8zm4 4V7h-2v2h2zm2 2V9h-2v2h2zm0 2h2v-2h-2v2zm-2 2v-2h2v2h-2zm0 0h-2v2h2v-2zm-4 4v-2h2v2H8z"/>
     </svg>
     <span class="compacted-icon">📋</span>
     <span class="compacted-label">

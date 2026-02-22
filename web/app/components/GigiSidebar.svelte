@@ -48,12 +48,12 @@
 
 <aside class="gigi-sidebar">
   <header class="section-header">
-    <span class="section-icon">💬</span>
+    <span class="section-icon"><svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M20 2H2v20h2V4h16v12H6v2H4v2h2v-2h16V2h-2z"/></svg></span>
     <h2>Chats</h2>
     <div class="header-spacer"></div>
     <button class="collapse-btn" onclick={handleCollapse} title="Collapse sidebar (Ctrl+B)">
-      <svg viewBox="0 0 24 24" fill="none" width="14" height="14">
-        <path d="M15 19l-7-7 7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
+        <path d="M16 5v2h-2V5h2zm-4 4V7h2v2h-2zm-2 2V9h2v2h-2zm0 2H8v-2h2v2zm2 2v-2h-2v2h2zm0 0h2v2h-2v-2zm4 4v-2h-2v2h2z"/>
       </svg>
     </button>
   </header>

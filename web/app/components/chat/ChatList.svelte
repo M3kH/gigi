@@ -244,8 +244,8 @@
               title="Stop thread (mark as done)"
               onclick={(e) => handleStopThread(e, conv)}
             >
-              <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor">
-                <path d="M4.5 2A2.5 2.5 0 002 4.5v7A2.5 2.5 0 004.5 14h7a2.5 2.5 0 002.5-2.5v-7A2.5 2.5 0 0011.5 2h-7z"/>
+              <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor">
+                <path d="M2 2h20v20H2V2zm2 2v16h16V4H4z"/>
               </svg>
             </button>
           {/if}
@@ -261,8 +261,8 @@
             title="Fork thread (explore alternate direction)"
             onclick={(e) => handleFork(e, conv)}
           >
-            <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor">
-              <path d="M5 3.25a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Zm-1.72 1.97a2.25 2.25 0 1 0-1.06 0C2.08 6.45 2 7.69 2 8v.75c0 1.107.608 2.076 1.508 2.585a2.25 2.25 0 1 0 1.042-.044A1.75 1.75 0 0 1 3.5 9.75V8c0-.536.034-1.058.272-1.78h-.002ZM5 12.75a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Zm7.772-1.72a.75.75 0 1 0-1.042.044c.9.509 1.508 1.478 1.508 2.585v.341h-.002A2.25 2.25 0 1 0 14 12.75v-.75c0-.311-.08-1.55-.228-2.78ZM11.25 3a.75.75 0 1 1 0 1.5.75.75 0 0 1 0-1.5Zm0 10.5a.75.75 0 1 1 0 1.5.75.75 0 0 1 0-1.5Z"/>
+            <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor">
+              <path d="M5 2h2v12h3v3h7v-7h-3V2h8v8h-3v9h-9v3H2v-8h3V2zm15 6V4h-4v4h4zM8 19v-3H4v4h4v-1z"/>
             </svg>
           </button>
           <button
@@ -270,8 +270,8 @@
             title="Archive conversation"
             onclick={(e) => handleArchive(e, conv)}
           >
-            <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor">
-              <path d="M1.75 2.5a.25.25 0 0 0-.25.25v1.5c0 .138.112.25.25.25h12.5a.25.25 0 0 0 .25-.25v-1.5a.25.25 0 0 0-.25-.25Zm0-1.5h12.5A1.75 1.75 0 0 1 16 2.75v1.5A1.75 1.75 0 0 1 14.25 6H1.75A1.75 1.75 0 0 1 0 4.25v-1.5A1.75 1.75 0 0 1 1.75 1ZM1.5 7.75v6.5c0 .138.112.25.25.25h12.5a.25.25 0 0 0 .25-.25v-6.5a.25.25 0 0 0-.25-.25H1.75a.25.25 0 0 0-.25.25ZM1.75 6A1.75 1.75 0 0 0 0 7.75v6.5C0 15.216.784 16 1.75 16h12.5A1.75 1.75 0 0 0 16 14.25v-6.5A1.75 1.75 0 0 0 14.25 6Zm4.75 3.5h3a.75.75 0 0 1 0 1.5h-3a.75.75 0 0 1 0-1.5Z"/>
+            <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor">
+              <path d="M4 4h8v2h10v14H2V4h2zm16 4H10V6H4v12h16V8z"/>
             </svg>
           </button>
           <button
@@ -318,8 +318,8 @@
   <!-- Archived section -->
   {#if archived.length > 0}
     <button class="archive-toggle" onclick={() => showArchived = !showArchived}>
-      <svg class="archive-chevron" class:open={showArchived} viewBox="0 0 16 16" width="10" height="10" fill="currentColor">
-        <path d="M6.22 3.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042L9.94 8 6.22 4.28a.75.75 0 0 1 0-1.06Z"/>
+      <svg class="archive-chevron" class:open={showArchived} viewBox="0 0 24 24" width="10" height="10" fill="currentColor">
+        <path d="M8 5v2h2V5H8zm4 4V7h-2v2h2zm2 2V9h-2v2h2zm0 2h2v-2h-2v2zm-2 2v-2h2v2h-2zm0 0h-2v2h2v-2zm-4 4v-2h2v2H8z"/>
       </svg>
       Archived ({archived.length})
     </button>
@@ -344,8 +344,8 @@
                 title="Unarchive"
                 onclick={(e) => handleUnarchive(e, conv)}
               >
-                <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor">
-                  <path d="M3.5 6.5a.5.5 0 0 1 .5-.5h8a.5.5 0 0 1 0 1h-8a.5.5 0 0 1-.5-.5Zm4-4.5a.5.5 0 0 1 .5.5v5.793l1.146-1.147a.5.5 0 1 1 .708.708l-2 2a.5.5 0 0 1-.708 0l-2-2a.5.5 0 0 1 .708-.708L7.5 8.293V2.5a.5.5 0 0 1 .5-.5Z"/>
+                <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor">
+                  <path d="M4 4h8v2h10v14H2V4h2zm16 4H10V6H4v12h16V8z"/>
                 </svg>
               </button>
               <button

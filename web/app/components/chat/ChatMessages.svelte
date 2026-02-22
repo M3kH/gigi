@@ -116,8 +116,8 @@
     <div class="lineage-banner">
       {#if lineage?.parent}
         <span class="lineage-item">
-          <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor" class="lineage-icon">
-            <path d="M5 3.25a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Zm-1.72 1.97a2.25 2.25 0 1 0-1.06 0C2.08 6.45 2 7.69 2 8v.75c0 1.107.608 2.076 1.508 2.585a2.25 2.25 0 1 0 1.042-.044A1.75 1.75 0 0 1 3.5 9.75V8c0-.536.034-1.058.272-1.78h-.002ZM5 12.75a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Zm7.772-1.72a.75.75 0 1 0-1.042.044c.9.509 1.508 1.478 1.508 2.585v.341h-.002A2.25 2.25 0 1 0 14 12.75v-.75c0-.311-.08-1.55-.228-2.78ZM11.25 3a.75.75 0 1 1 0 1.5.75.75 0 0 1 0-1.5Zm0 10.5a.75.75 0 1 1 0 1.5.75.75 0 0 1 0-1.5Z"/>
+          <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" class="lineage-icon">
+            <path d="M5 2h2v12h3v3h7v-7h-3V2h8v8h-3v9h-9v3H2v-8h3V2zm15 6V4h-4v4h4zM8 19v-3H4v4h4v-1z"/>
           </svg>
           Forked from
           <button class="lineage-link" onclick={() => navigateToThread(lineage!.parent!.id)}>

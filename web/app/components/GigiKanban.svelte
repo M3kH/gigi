@@ -319,19 +319,19 @@
                   <div class="card-meta">
                     {#if card.linked_prs > 0}
                       <span class="card-prs" title="{card.linked_prs} linked PRs">
-                        <svg viewBox="0 0 16 16" width="11" height="11" fill="currentColor"><path d="M5 3.254V3.25a.75.75 0 0 1 .75.75v5.5a.75.75 0 0 1-1.5 0V5.377A3.251 3.251 0 0 0 5 12.75a.75.75 0 0 0 1.5 0 1.75 1.75 0 0 1 3.5 0 .75.75 0 0 0 1.5 0A3.25 3.25 0 0 0 8.25 9.5h-.025a.75.75 0 0 1 0-1.5H8.5a1.75 1.75 0 0 1 0-3.5H7.25A.75.75 0 0 1 5 3.254z"/></svg>
+                        <svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor"><path d="M2 2h8v8H7v12H5V10H2V2zm2 2v4h4V4H4zm8 1h7.09v9H22v8h-8v-8h3.09V7H12V5zm4 11v4h4v-4h-4z"/></svg>
                         {card.linked_prs}
                       </span>
                     {/if}
                     {#if card.linked_chats > 0}
                       <span class="card-chats" title="{card.linked_chats} linked chats">
-                        <svg viewBox="0 0 16 16" width="11" height="11" fill="currentColor"><path d="M1 2.75A.75.75 0 0 1 1.75 2h12.5a.75.75 0 0 1 .75.75v8.5a.75.75 0 0 1-.75.75h-3.19l-3.06 2.3V12H1.75a.75.75 0 0 1-.75-.75v-8.5z"/></svg>
+                        <svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor"><path d="M20 2H2v20h2V4h16v12H6v2H4v2h2v-2h16V2h-2z"/></svg>
                         {card.linked_chats}
                       </span>
                     {/if}
                     {#if card.comments > 0}
                       <span class="card-comments" title="{card.comments} comments">
-                        💬 {card.comments}
+                        <svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor"><path d="M22 2H2v14h2V4h16v12h-8v2h-2v2H8v-4H2v2h4v4h4v-2h2v-2h10V2z"/></svg> {card.comments}
                       </span>
                     {/if}
                     {#if card.updated_at}

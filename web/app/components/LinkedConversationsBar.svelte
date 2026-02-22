@@ -58,7 +58,7 @@
 
 {#if linkedConvs.length > 0}
   <div class="linked-conversations-bar">
-    <span class="bar-label">💬 Conversations:</span>
+    <span class="bar-label"><svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12" style="vertical-align: middle; margin-right: 2px;"><path d="M20 2H2v20h2V4h16v12H6v2H4v2h2v-2h16V2h-2z"/></svg> Conversations:</span>
     {#each linkedConvs as conv}
       <button class="conv-chip" onclick={() => handleConvClick(conv)} title={conv.topic}>
         <span class="conv-status">{statusIcon(conv.status)}</span>

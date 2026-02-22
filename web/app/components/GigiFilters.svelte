@@ -6,11 +6,9 @@
    * Row 2 — Repo filter chips: fetched from /api/gitea/overview
    */
   import type { ConnectionState } from '$lib/services/ws-client'
-  import type { Conversation } from '$lib/types/chat'
   import { getPanelState, setPanelState, togglePanel, type PanelState } from '$lib/stores/panels.svelte'
   import { getTheme, toggleTheme, type Theme } from '$lib/stores/theme.svelte'
-  import { goHome, navigateToGitea, navigateToBrowser, getCurrentView, getViewContext } from '$lib/stores/navigation.svelte'
-  import { selectConversation } from '$lib/stores/chat.svelte'
+  import { goHome, navigateToGitea, navigateToBrowser, getCurrentView } from '$lib/stores/navigation.svelte'
   import { getBudget, refreshBudget, saveBudget as saveBudgetToStore } from '$lib/stores/budget.svelte'
   import { onMount } from 'svelte'
 
@@ -198,47 +196,6 @@
     }
   }
 
-  // ── Linked conversations for current issue/PR ──────────────────────
-  const viewCtx = $derived(getViewContext())
-  const isIssuePrView = $derived(viewCtx.type === 'issue' || viewCtx.type === 'pull')
-
-  // Build a tag like "reponame#42" to query linked conversations
-  const contextTag = $derived(
-    isIssuePrView && viewCtx.repo && viewCtx.number
-      ? `${viewCtx.repo}#${viewCtx.number}`
-      : null
-  )
-
-  let linkedChats = $state<Conversation[]>([])
-  let linkedChatsLoading = $state(false)
-  let lastFetchedTag = $state<string | null>(null)
-
-  // Fetch linked conversations when the context tag changes
-  $effect(() => {
-    const tag = contextTag
-    if (tag && tag !== lastFetchedTag) {
-      lastFetchedTag = tag
-      linkedChatsLoading = true
-      fetch(`/api/conversations/by-tag/${encodeURIComponent(tag)}`)
-        .then(r => r.ok ? r.json() : [])
-        .then((convs: Conversation[]) => { linkedChats = convs })
-        .catch(() => { linkedChats = [] })
-        .finally(() => { linkedChatsLoading = false })
-    } else if (!tag) {
-      linkedChats = []
-      lastFetchedTag = null
-    }
-  })
-
-  function handleOpenChat(convId: string) {
-    // Open chat panel if hidden, then select the conversation
-    const chatState = getPanelState('chatOverlay')
-    if (chatState === 'hidden') {
-      setPanelState('chatOverlay', 'compact')
-    }
-    selectConversation(convId)
-  }
-
   export function getSelectedRepo(): string | null {
     return selectedRepo
   }
@@ -253,8 +210,9 @@
   <div class="filter-row menu-row">
     {#if sidebarState === 'hidden'}
       <button class="menu-btn" onclick={handleToggleSidebar} title="Show sidebar">
+        <!-- pixelarticons: menu -->
         <svg viewBox="0 0 24 24" fill="none" width="16" height="16">
-          <path d="M3 6h18v2H3V6zm0 5h18v2H3v-2zm0 5h18v2H3v-2z" fill="currentColor"/>
+          <path d="M4 6h16v2H4V6zm0 5h16v2H4v-2zm16 5H4v2h16v-2z" fill="currentColor"/>
         </svg>
       </button>
     {/if}
@@ -298,12 +256,14 @@
       title={mainExpanded ? 'Restore panels' : 'Expand main view (hide board & chat)'}
     >
       {#if mainExpanded}
+        <!-- pixelarticons: collapse -->
         <svg viewBox="0 0 24 24" fill="none" width="16" height="16">
-          <path d="M4 14h6v6H4v-6zm10-10h6v6h-6V4zM4 4h6v6H4V4zm10 10h6v6h-6v-6z" fill="currentColor" opacity="0.6"/>
+          <path d="M17 3h-2v2h-2v2h-2V5H9V3H7v2h2v2h2v2h2V7h2V5h2V3zM4 13h16v-2H4v2zm9 4h-2v-2h2v2zm2 2h-2v-2h2v2zm0 0h2v2h-2v-2zm-6 0h2v-2H9v2zm0 0H7v2h2v-2z" fill="currentColor"/>
         </svg>
       {:else}
+        <!-- pixelarticons: expand -->
         <svg viewBox="0 0 24 24" fill="none" width="16" height="16">
-          <path d="M3 3h18v18H3V3zm2 2v14h14V5H5z" fill="currentColor"/>
+          <path d="M11 5h2v2h2v2h2V7h-2V5h-2V3h-2v2zM9 7V5h2v2H9zm0 0v2H7V7h2zm-5 6h16v-2H4v2zm9 6h-2v-2H9v-2H7v2h2v2h2v2h2v-2zm2-2h-2v2h2v-2zm0 0h2v-2h-2v2z" fill="currentColor"/>
         </svg>
       {/if}
     </button>
@@ -315,43 +275,12 @@
       onclick={handleToggleSettings}
       title="Settings"
     >
+      <!-- pixelarticons: sliders -->
       <svg viewBox="0 0 24 24" fill="none" width="16" height="16">
-        <path d="M12 15.5A3.5 3.5 0 1 0 12 8.5a3.5 3.5 0 0 0 0 7zm7.43-2.53c.04-.32.07-.64.07-.97s-.03-.65-.07-.97l2.11-1.65a.5.5 0 0 0 .12-.64l-2-3.46a.5.5 0 0 0-.61-.22l-2.49 1a7.4 7.4 0 0 0-1.67-.97l-.38-2.65A.49.49 0 0 0 14 2h-4a.49.49 0 0 0-.49.42l-.38 2.65c-.61.25-1.17.59-1.67.97l-2.49-1a.5.5 0 0 0-.61.22l-2 3.46a.49.49 0 0 0 .12.64l2.11 1.65c-.04.32-.07.65-.07.97s.03.65.07.97l-2.11 1.65a.5.5 0 0 0-.12.64l2 3.46a.5.5 0 0 0 .61.22l2.49-1c.5.38 1.06.72 1.67.97l.38 2.65c.05.24.26.42.49.42h4c.24 0 .44-.18.49-.42l.38-2.65c.61-.25 1.17-.59 1.67-.97l2.49 1a.5.5 0 0 0 .61-.22l2-3.46a.49.49 0 0 0-.12-.64l-2.11-1.65z" fill="currentColor"/>
+        <path d="M17 4h2v10h-2V4zm0 12h-2v2h2v2h2v-2h2v-2h-4zm-4-6h-2v10h2V10zm-8 2H3v2h2v6h2v-6h2v-2H5zm8-8h-2v2H9v2h6V6h-2V4zM5 4h2v6H5V4z" fill="currentColor"/>
       </svg>
     </button>
   </div>
-
-  <!-- Row 2: Repo filter chips (removed — unused for now) -->
-
-  <!-- Row 3: Context bar — linked chats for current issue/PR -->
-  {#if isIssuePrView}
-    <div class="filter-row context-row">
-      <span class="context-label">
-        {viewCtx.type === 'issue' ? '📋' : '🔀'}
-        {viewCtx.repo}#{viewCtx.number}
-      </span>
-      <div class="context-spacer"></div>
-      {#if linkedChatsLoading}
-        <span class="context-hint">Loading...</span>
-      {:else if linkedChats.length > 0}
-        {#each linkedChats as chat}
-          <button
-            class="context-chat-btn"
-            onclick={() => handleOpenChat(chat.id)}
-            title="Open conversation: {chat.topic}"
-          >
-            <svg viewBox="0 0 24 24" fill="none" width="12" height="12">
-              <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z" fill="currentColor"/>
-            </svg>
-            {chat.topic || 'Chat'}
-            <span class="chat-status-dot" class:open={chat.status === 'open' || chat.status === 'active'} class:closed={chat.status === 'closed'}></span>
-          </button>
-        {/each}
-      {:else}
-        <span class="context-hint">No linked chats</span>
-      {/if}
-    </div>
-  {/if}
 
   <!-- Settings Panel (F1) -->
   {#if showSettings}
@@ -816,77 +745,6 @@
   .settings-save-btn:disabled {
     opacity: 0.6;
     cursor: not-allowed;
-  }
-
-  /* ── Context bar (issue/PR linked chats) ──────────────────────── */
-
-  .context-row {
-    background: var(--gigi-bg-tertiary);
-    border-top: var(--gigi-border-width) solid var(--gigi-border-muted);
-    gap: var(--gigi-space-sm);
-    padding: var(--gigi-space-xs) var(--gigi-space-md);
-    min-height: 28px;
-  }
-
-  .context-label {
-    font-size: var(--gigi-font-size-xs);
-    font-weight: 600;
-    color: var(--gigi-text-primary);
-    white-space: nowrap;
-    flex-shrink: 0;
-  }
-
-  .context-spacer {
-    flex: 1;
-  }
-
-  .context-hint {
-    font-size: var(--gigi-font-size-xs);
-    color: var(--gigi-text-muted);
-    font-style: italic;
-  }
-
-  .context-chat-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    padding: 2px 8px;
-    background: var(--gigi-accent-blue);
-    border: none;
-    border-radius: var(--gigi-radius-full);
-    color: #fff;
-    font-size: var(--gigi-font-size-xs);
-    font-family: var(--gigi-font-sans);
-    cursor: pointer;
-    white-space: nowrap;
-    transition: all var(--gigi-transition-fast);
-    max-width: 200px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .context-chat-btn:hover {
-    filter: brightness(1.1);
-  }
-
-  .context-chat-btn svg {
-    flex-shrink: 0;
-  }
-
-  .chat-status-dot {
-    display: inline-block;
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    flex-shrink: 0;
-  }
-
-  .chat-status-dot.open {
-    background: var(--gigi-accent-green);
-  }
-
-  .chat-status-dot.closed {
-    background: var(--gigi-text-muted);
   }
 
   /* ── AWM status ────────────────────────────────────────────────── */
