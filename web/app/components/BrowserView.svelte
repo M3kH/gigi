@@ -1,8 +1,8 @@
 <script lang="ts">
   /**
-   * NekoBrowser — Renders browser view in Section D via noVNC iframe
+   * BrowserView — Renders shared browser in Section D via noVNC iframe
    *
-   * Connects to a headless Chrome instance running in a custom container
+   * Connects to a Chrome instance running in a custom container
    * with Xvfb + x11vnc + noVNC. No authentication needed.
    * Both Gigi (agent via CDP) and user (via noVNC) share the same browser.
    */
@@ -36,18 +36,18 @@
   }
 </script>
 
-<div class="neko-frame-wrapper">
+<div class="browser-frame-wrapper">
   {#if error}
-    <div class="neko-frame-error">{error}</div>
+    <div class="browser-frame-error">{error}</div>
   {:else}
     {#if loading}
-      <div class="neko-frame-loading">Loading browser...</div>
+      <div class="browser-frame-loading">Loading browser...</div>
     {/if}
     {#if browserUrl}
       <iframe
         src={browserUrl}
         title="Browser"
-        class="neko-frame"
+        class="browser-frame"
         class:loaded={!loading}
         onload={onIframeLoad}
         allow="autoplay; clipboard-read; clipboard-write"
@@ -57,13 +57,13 @@
 </div>
 
 <style>
-  .neko-frame-wrapper {
+  .browser-frame-wrapper {
     flex: 1;
     position: relative;
     overflow: hidden;
   }
 
-  .neko-frame {
+  .browser-frame {
     width: 100%;
     height: 100%;
     border: none;
@@ -71,11 +71,11 @@
     transition: opacity 150ms ease;
   }
 
-  .neko-frame.loaded {
+  .browser-frame.loaded {
     opacity: 1;
   }
 
-  .neko-frame-loading {
+  .browser-frame-loading {
     position: absolute;
     inset: 0;
     display: flex;
@@ -85,7 +85,7 @@
     font-size: var(--gigi-font-size-sm);
   }
 
-  .neko-frame-error {
+  .browser-frame-error {
     position: absolute;
     inset: 0;
     display: flex;

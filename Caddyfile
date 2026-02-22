@@ -2,12 +2,11 @@
 # Replace hostnames and service names with your deployment values.
 #
 # Required DNS entries (or use env var overrides):
-#   BROWSER_DOMAIN → browser host
+#   BROWSER_DOMAIN → browser host (Chrome noVNC)
 #   GIGI_DOMAIN    → main Gigi host
-#   NEKO_DOMAIN    → Neko browser host (if using Neko)
 
 {$BROWSER_DOMAIN:browser.localhost} {
-	reverse_proxy {$GIGI_SERVICE:gigi_gigi-neko}:8080
+	reverse_proxy {$GIGI_CHROME_SERVICE:gigi_chrome}:6080
 }
 
 {$GIGI_DOMAIN:gigi.localhost} {
@@ -43,23 +42,4 @@
 		# Flush immediately for potential streaming responses
 		flush_interval -1
 	}
-}
-
-{$NEKO_DOMAIN:neko.localhost} {
-	# WebRTC signaling endpoint
-	@webrtc {
-		path /api/ws
-		header Connection *Upgrade*
-		header Upgrade websocket
-	}
-	reverse_proxy @webrtc {$GIGI_SERVICE:gigi_neko}:8080
-
-	# ICE candidates and session management
-	@api {
-		path /api/*
-	}
-	reverse_proxy @api {$GIGI_SERVICE:gigi_neko}:8080
-
-	# Static assets and main application
-	reverse_proxy {$GIGI_SERVICE:gigi_neko}:8080
 }

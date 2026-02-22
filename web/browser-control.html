@@ -63,23 +63,6 @@
       cursor: not-allowed;
     }
 
-    .mode-toggle {
-      display: flex;
-      gap: 5px;
-      background: #1e1e1e;
-      padding: 4px;
-      border-radius: 4px;
-    }
-
-    .mode-toggle button {
-      padding: 6px 12px;
-      font-size: 12px;
-    }
-
-    .mode-toggle button.active {
-      background: #28a745;
-    }
-
     .viewport {
       flex: 1;
       position: relative;
@@ -151,38 +134,26 @@
     .console-entry.info {
       color: #4dabf7;
     }
-
-    .neko-frame {
-      width: 100%;
-      height: 100%;
-      border: none;
-    }
   </style>
 </head>
 <body>
   <div class="container">
     <div class="header">
       <div class="controls">
-        <button id="back-btn" title="Go Back">←</button>
-        <button id="forward-btn" title="Go Forward">→</button>
-        <button id="refresh-btn" title="Refresh">⟲</button>
+        <button id="back-btn" title="Go Back">&larr;</button>
+        <button id="forward-btn" title="Go Forward">&rarr;</button>
+        <button id="refresh-btn" title="Refresh">&#10226;</button>
 
         <input type="text" class="url-input" id="url-input" placeholder="Enter URL...">
         <button id="go-btn">Go</button>
 
-        <div class="mode-toggle">
-          <button id="headless-mode" class="active">Headless</button>
-          <button id="interactive-mode">Interactive</button>
-        </div>
-
-        <button id="screenshot-btn">📷 Screenshot</button>
+        <button id="screenshot-btn">&#128247; Screenshot</button>
         <button id="console-btn">Console</button>
       </div>
     </div>
 
     <div class="viewport">
-      <img id="browser-display" style="display: none;">
-      <iframe id="neko-frame" class="neko-frame" style="display: none;"></iframe>
+      <img id="browser-display">
     </div>
 
     <div class="status-bar">
@@ -190,7 +161,7 @@
         <span class="status-dot" id="connection-status"></span>
         <span id="status-text">Disconnected</span>
       </div>
-      <div id="mode-indicator">Mode: Headless</div>
+      <div id="mode-indicator">Chrome DevTools Protocol</div>
     </div>
   </div>
 
@@ -203,13 +174,10 @@
     class BrowserControl {
       constructor() {
         this.ws = null;
-        this.currentMode = 'headless';
         // Use secure WebSocket if page is served over HTTPS
         const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         // Use /ws path through the main domain to avoid port issues
         this.wsUrl = `${wsProtocol}//${window.location.host}/ws`;
-        // Neko is proxied through Caddy on its own subdomain (configure BROWSER_DOMAIN)
-        this.nekoUrl = `${window.location.protocol}//${window.location.hostname.replace(/^[^.]+/, 'browser')}`;
 
         this.initializeElements();
         this.connectWebSocket();
@@ -224,13 +192,9 @@
         this.refreshBtn = document.getElementById('refresh-btn');
         this.screenshotBtn = document.getElementById('screenshot-btn');
         this.consoleBtn = document.getElementById('console-btn');
-        this.headlessModeBtn = document.getElementById('headless-mode');
-        this.interactiveModeBtn = document.getElementById('interactive-mode');
         this.browserDisplay = document.getElementById('browser-display');
-        this.nekoFrame = document.getElementById('neko-frame');
         this.statusDot = document.getElementById('connection-status');
         this.statusText = document.getElementById('status-text');
-        this.modeIndicator = document.getElementById('mode-indicator');
         this.console = document.getElementById('console');
         this.consoleOutput = document.getElementById('console-output');
       }
@@ -239,7 +203,7 @@
         try {
           this.ws = new WebSocket(this.wsUrl);
         } catch (error) {
-          this.log(`WebSocket connection error: ${error.message}. If using HTTPS, ensure WSS is available on port 3001.`, 'error');
+          this.log(`WebSocket connection error: ${error.message}. If using HTTPS, ensure WSS is available.`, 'error');
           return;
         }
 
@@ -271,8 +235,6 @@
       handleServerMessage(msg) {
         switch (msg.type) {
           case 'init':
-            this.currentMode = msg.mode;
-            this.updateModeDisplay();
             if (msg.url) {
               this.urlInput.value = msg.url;
             }
@@ -312,9 +274,6 @@
 
         this.screenshotBtn.onclick = () => this.requestScreenshot();
         this.consoleBtn.onclick = () => this.toggleConsole();
-
-        this.headlessModeBtn.onclick = () => this.switchMode('headless');
-        this.interactiveModeBtn.onclick = () => this.switchMode('interactive');
       }
 
       navigate() {
@@ -332,31 +291,6 @@
 
       toggleConsole() {
         this.console.classList.toggle('visible');
-      }
-
-      switchMode(mode) {
-        if (mode === this.currentMode) return;
-
-        this.sendCommand('switch-mode', { mode });
-        this.currentMode = mode;
-        this.updateModeDisplay();
-      }
-
-      updateModeDisplay() {
-        this.modeIndicator.textContent = `Mode: ${this.currentMode}`;
-
-        if (this.currentMode === 'headless') {
-          this.headlessModeBtn.classList.add('active');
-          this.interactiveModeBtn.classList.remove('active');
-          this.browserDisplay.style.display = 'block';
-          this.nekoFrame.style.display = 'none';
-        } else {
-          this.headlessModeBtn.classList.remove('active');
-          this.interactiveModeBtn.classList.add('active');
-          this.browserDisplay.style.display = 'none';
-          this.nekoFrame.style.display = 'block';
-          this.nekoFrame.src = this.nekoUrl;
-        }
       }
 
       displayScreenshot(data) {

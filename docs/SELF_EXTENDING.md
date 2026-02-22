@@ -31,9 +31,9 @@ Code from this repo runs in a sandbox:
 
 Implementation: each MCP server runs in its own container or V8 isolate. Skills are prompt templates — no execution risk. CLAUDE.md is just text injected into the system prompt.
 
-## Embedded Browser (Neko)
+## Embedded Browser (Chrome + CDP)
 
-A persistent headless browser running in a container (neko), accessible to both Gigi and the user.
+A persistent Chrome browser running in a custom container, accessible to both Gigi and the user.
 
 ### Why Not Iframe
 
@@ -44,14 +44,14 @@ The current iframe approach requires the user to keep a browser tab open for Gig
 - Gigi can't run e2e tests
 - Gigi can't verify visual output
 
-### Neko as Gigi's Eyes
+### Chrome as Gigi's Eyes
 
-With neko, the browser is **server-side and always running**. Gigi connects to it programmatically (Playwright/CDP), the user watches via neko's streaming UI.
+With our Chrome container, the browser is **server-side and always running**. Gigi connects to it via Chrome DevTools Protocol (CDP) through the chrome-devtools MCP server, the user watches via noVNC.
 
 **Gigi's autonomous loop:**
 1. Write code
 2. Deploy to a container
-3. Open the URL in neko
+3. Open the URL in the shared browser
 4. Inspect DOM, read console.error, take screenshots
 5. Fix issues
 6. Verify the fix visually
@@ -59,17 +59,17 @@ With neko, the browser is **server-side and always running**. Gigi connects to i
 8. Close the ticket only when verified
 
 **User's experience:**
-- See what Gigi sees in real-time (neko streams the browser)
+- See what Gigi sees in real-time (noVNC streams the browser)
 - Take over control at any time (shared mouse/keyboard)
 - User closes their tab — Gigi keeps working
 - User reopens — picks up exactly where Gigi is
 
 ### Integration
 
-- Neko runs as a sidecar container alongside Gigi
-- Gigi controls it via Playwright/CDP (programmatic access)
-- User views it via neko's WebRTC stream embedded in the Gigi UI
-- Replace or augment the current Gitea iframe with neko when debugging UI
+- Chrome runs as a sidecar container alongside Gigi
+- Gigi controls it via CDP through the chrome-devtools MCP server
+- User views it via noVNC stream embedded in the Gigi UI
+- Replace or augment the current Gitea iframe with the browser view when debugging UI
 
 ## Docker Manager
 
@@ -78,7 +78,7 @@ Gigi can spin up, manage, and tear down containers for what he's building.
 ### Capabilities
 
 - **Run containers** — Deploy built artifacts, expose ports
-- **Expose URLs** — Auto-generate URLs for running services, open them in neko
+- **Expose URLs** — Auto-generate URLs for running services, open them in the shared browser
 - **Stream logs** — Real-time container log output
 - **Terminal access** — xterm.js shell into any running container
 - **Lifecycle management** — Start, stop, restart, remove containers
@@ -92,7 +92,7 @@ Docker Manager Panel
   ├── Per-container actions (start/stop/restart/remove)
   ├── Log viewer (streaming, per-container)
   ├── Terminal (xterm.js, per-container)
-  └── URL list (clickable, opens in neko or new tab)
+  └── URL list (clickable, opens in shared browser or new tab)
 ```
 
 ### How Gigi Uses It
@@ -108,11 +108,11 @@ Example flow:
 1. User: "Build me a REST API for managing todos"
 2. Gigi writes the code, creates a Dockerfile
 3. Gigi runs `docker_run` to build and start it
-4. Gigi opens `http://localhost:8080` in neko
+4. Gigi opens `http://localhost:8080` in the shared browser
 5. Gigi runs e2e tests against the live API
-6. Gigi opens the swagger UI in neko, screenshots it
+6. Gigi opens the swagger UI in the shared browser, screenshots it
 7. User sees the running API in the Docker manager panel
-8. User can open a terminal into the container, check logs, or view in neko
+8. User can open a terminal into the container, check logs, or view in the browser
 
 ## Architecture Summary
 
@@ -131,8 +131,8 @@ Example flow:
 │       ├── controls ──┐                          │
 │       │              ▼                          │
 │       │   ┌──────────────┐                      │
-│       │   │  Neko        │ ← user watches via   │
-│       │   │  (browser)   │   WebRTC stream      │
+│       │   │  Chrome      │ ← user watches via   │
+│       │   │  (browser)   │   noVNC stream       │
 │       │   └──────────────┘                      │
 │       │                                         │
 │       ├── manages ───┐                          │
@@ -159,10 +159,10 @@ Example flow:
 - Skills loaded from `idea/gigi/skills/`
 
 ### Phase 2: Embedded Browser
-- Neko sidecar container in docker-compose
-- Playwright/CDP connection from Gigi backend
-- WebRTC stream embedded in Gigi UI (replace or alongside Gitea iframe)
-- Browser tools: `browser_open`, `browser_screenshot`, `browser_console`
+- Chrome sidecar container in docker-compose (Xvfb + Chrome + noVNC)
+- CDP connection from Gigi backend via chrome-devtools MCP server
+- noVNC stream embedded in Gigi UI (replace or alongside Gitea iframe)
+- Browser tools: `navigate_page`, `take_screenshot`, `evaluate_script`, etc.
 
 ### Phase 3: Docker Manager
 - Docker socket access (controlled) for Gigi backend
@@ -184,7 +184,7 @@ The browser, the Docker manager, the logs — these are Gigi's senses, not just 
 
 | Capability | Gigi uses it to... | User sees... |
 |------------|-------------------|--------------|
-| Neko browser | Inspect DOM, read console.error, screenshot, e2e test | Live browser stream, can take over |
+| Chrome browser (CDP) | Inspect DOM, read console.error, screenshot, e2e test | Live browser stream (noVNC), can take over |
 | Docker manager | Read logs, spot errors, restart services, check health | Container list, log viewer, terminal |
 | MCP extensions | Gain new tools at runtime (Slack, monitoring, etc.) | Extended capabilities in chat |
 | Self-extension repo | Update his own personality, skills, tools | Changes in idea/gigi repo |

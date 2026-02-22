@@ -46,9 +46,7 @@ console.log('Is secure:', window.isSecureContext);
 ## Browser Control WebSocket
 
 The browser control requires:
-- Port 3001 for WebSocket communication
-- Port 8080 for Neko interactive mode
+- Port 3001 for WebSocket communication (proxied through Caddy)
 
 When using HTTPS, ensure:
-1. WSS is available on port 3001
-2. Neko instance supports HTTPS on port 8080 (or use a proxy)
+1. WSS is available (Caddy handles TLS termination for the `/ws` path)

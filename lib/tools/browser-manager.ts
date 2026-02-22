@@ -1,8 +1,9 @@
 /**
- * Browser Manager — Headless & interactive browser automation
+ * Browser Manager — Headless browser automation
  *
- * Singleton manager supporting Playwright headless mode and
- * Neko-powered interactive mode with WebSocket relay.
+ * Singleton manager supporting Playwright headless mode.
+ * Interactive browser access is provided via Chrome DevTools Protocol (CDP)
+ * through the chrome-devtools MCP server — not managed here.
  */
 
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright'
@@ -11,10 +12,6 @@ import sharp from 'sharp'
 import WebSocket, { WebSocketServer } from 'ws'
 
 interface BrowserConfig {
-  mode: string
-  nekoHost: string
-  nekoPort: number
-  nekoPassword: string
   wsPort: number
   screenshotQuality: number
   interceptRequests?: boolean
@@ -28,15 +25,10 @@ export class BrowserManager extends EventEmitter {
   page: Page | null = null
   wsServer: WebSocketServer | null = null
   wsClients: Set<WebSocket> = new Set()
-  nekoConnection: WebSocket | null = null
 
   constructor(config: Partial<BrowserConfig> = {}) {
     super()
     this.config = {
-      mode: config.mode || 'headless',
-      nekoHost: config.nekoHost || 'localhost',
-      nekoPort: config.nekoPort || 8080,
-      nekoPassword: config.nekoPassword || 'neko',
       wsPort: config.wsPort || 3001,
       screenshotQuality: config.screenshotQuality || 80,
       ...config,
@@ -44,16 +36,8 @@ export class BrowserManager extends EventEmitter {
   }
 
   async initialize(): Promise<this> {
-    console.log(`Initializing browser in ${this.config.mode} mode...`)
-
-    if (this.config.mode === 'headless') {
-      await this.initializeHeadless()
-    } else if (this.config.mode === 'interactive') {
-      await this.initializeInteractive()
-    } else {
-      throw new Error(`Unknown browser mode: ${this.config.mode}`)
-    }
-
+    console.log('Initializing headless browser...')
+    await this.initializeHeadless()
     await this.startWebSocketServer()
     return this
   }
@@ -87,43 +71,6 @@ export class BrowserManager extends EventEmitter {
     }
   }
 
-  private async initializeInteractive(): Promise<void> {
-    const nekoWsUrl = `ws://${this.config.nekoHost}:${this.config.nekoPort}/ws`
-    this.nekoConnection = new WebSocket(nekoWsUrl)
-
-    return new Promise<void>((resolve, reject) => {
-      this.nekoConnection!.on('open', () => {
-        console.log('Connected to Neko')
-        this.nekoConnection!.send(JSON.stringify({ event: 'login', password: this.config.nekoPassword }))
-        resolve()
-      })
-      this.nekoConnection!.on('error', (err) => {
-        console.error('Neko connection error:', err)
-        reject(err)
-      })
-      this.nekoConnection!.on('message', (data) => {
-        const msg = JSON.parse(data.toString())
-        this.handleNekoMessage(msg)
-      })
-    })
-  }
-
-  private handleNekoMessage(msg: { event: string; data?: unknown }): void {
-    switch (msg.event) {
-      case 'system/admin':
-        console.log('Neko admin access granted')
-        break
-      case 'screen/resolution':
-        this.emit('resolution', msg.data)
-        break
-      case 'clipboard/update':
-        this.emit('clipboard', msg.data)
-        break
-      default:
-        this.emit('neko-message', msg)
-    }
-  }
-
   private async startWebSocketServer(): Promise<void> {
     this.wsServer = new WebSocketServer({ port: this.config.wsPort })
     this.wsServer.on('connection', (ws) => {
@@ -146,8 +93,8 @@ export class BrowserManager extends EventEmitter {
   }
 
   private async sendInitialState(ws: WebSocket): Promise<void> {
-    const state: Record<string, unknown> = { type: 'init', mode: this.config.mode, connected: true }
-    if (this.config.mode === 'headless' && this.page) {
+    const state: Record<string, unknown> = { type: 'init', mode: 'headless', connected: true }
+    if (this.page) {
       state.url = this.page.url()
       state.title = await this.page.title()
       state.screenshot = await this.captureScreenshot()
@@ -175,11 +122,6 @@ export class BrowserManager extends EventEmitter {
         ws.send(JSON.stringify({ type: 'elements', data: elements }))
         break
       }
-      case 'neko-control':
-        if (this.config.mode === 'interactive') {
-          this.nekoConnection!.send(JSON.stringify(msg.data))
-        }
-        break
       default:
         throw new Error(`Unknown message type: ${msg.type}`)
     }
@@ -187,85 +129,59 @@ export class BrowserManager extends EventEmitter {
   }
 
   async navigate(url: string, options: Record<string, unknown> = {}): Promise<void> {
-    if (this.config.mode === 'headless') {
-      await this.page!.goto(url, {
-        waitUntil: (options.waitUntil as 'networkidle') || 'networkidle',
-        timeout: (options.timeout as number) || 30000,
-      })
-    } else {
-      this.nekoConnection!.send(JSON.stringify({ event: 'control/navigate', url }))
-    }
+    await this.page!.goto(url, {
+      waitUntil: (options.waitUntil as 'networkidle') || 'networkidle',
+      timeout: (options.timeout as number) || 30000,
+    })
   }
 
   async click(selector: string, options: Record<string, unknown> = {}): Promise<void> {
-    if (this.config.mode === 'headless') {
-      await this.page!.click(selector, options)
-    } else {
-      this.emit('warning', 'Click in interactive mode requires element position mapping')
-    }
+    await this.page!.click(selector, options)
   }
 
   async type(selector: string, text: string, options: Record<string, unknown> = {}): Promise<void> {
-    if (this.config.mode === 'headless') {
-      await this.page!.type(selector, text, options)
-    } else {
-      this.nekoConnection!.send(JSON.stringify({ event: 'control/keyboard', text }))
-    }
+    await this.page!.type(selector, text, options)
   }
 
   async captureScreenshot(options: Record<string, unknown> = {}): Promise<string | Buffer> {
-    if (this.config.mode === 'headless') {
-      const buffer = await this.page!.screenshot({
-        fullPage: (options.fullPage as boolean) || false,
-        type: 'jpeg',
-        quality: this.config.screenshotQuality,
-      })
+    const buffer = await this.page!.screenshot({
+      fullPage: (options.fullPage as boolean) || false,
+      type: 'jpeg',
+      quality: this.config.screenshotQuality,
+    })
 
-      if (options.compress) {
-        return await sharp(buffer)
-          .resize((options.width as number) || 1920)
-          .jpeg({ quality: (options.quality as number) || 70 })
-          .toBuffer()
-      }
-      return buffer.toString('base64')
-    } else {
-      return new Promise<string>((resolve) => {
-        this.nekoConnection!.once('screenshot', (data: string) => resolve(data))
-        this.nekoConnection!.send(JSON.stringify({ event: 'screen/shot' }))
-      })
+    if (options.compress) {
+      return await sharp(buffer)
+        .resize((options.width as number) || 1920)
+        .jpeg({ quality: (options.quality as number) || 70 })
+        .toBuffer()
     }
+    return buffer.toString('base64')
   }
 
   async evaluate(script: string): Promise<unknown> {
-    if (this.config.mode === 'headless') {
-      return await this.page!.evaluate(script)
-    }
-    this.emit('warning', 'JavaScript evaluation not available in interactive mode')
-    return null
+    return await this.page!.evaluate(script)
   }
 
   async getElements(selector: string): Promise<Array<Record<string, unknown>>> {
-    if (this.config.mode === 'headless') {
-      return await this.page!.evaluate((sel: string) => {
-        const elements = document.querySelectorAll(sel)
-        return Array.from(elements).map((el) => {
-          const rect = el.getBoundingClientRect()
-          return {
-            tagName: el.tagName,
-            text: el.textContent,
-            href: (el as HTMLAnchorElement).href,
-            rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
-          }
-        })
-      }, selector)
-    }
-    return []
+    return await this.page!.evaluate((sel: string) => {
+      const elements = document.querySelectorAll(sel)
+      return Array.from(elements).map((el) => {
+        const rect = el.getBoundingClientRect()
+        return {
+          tagName: el.tagName,
+          text: el.textContent,
+          href: (el as HTMLAnchorElement).href,
+          rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+        }
+      })
+    }, selector)
   }
 
   private async broadcastState(): Promise<void> {
     if (this.wsClients.size === 0) return
-    const state: Record<string, unknown> = { type: 'state-update', mode: this.config.mode, timestamp: Date.now() }
-    if (this.config.mode === 'headless' && this.page) {
+    const state: Record<string, unknown> = { type: 'state-update', mode: 'headless', timestamp: Date.now() }
+    if (this.page) {
       state.url = this.page.url()
       state.title = await this.page.title()
     }
@@ -275,17 +191,8 @@ export class BrowserManager extends EventEmitter {
     })
   }
 
-  async switchMode(newMode: string): Promise<void> {
-    if (newMode === this.config.mode) return
-    console.log(`Switching from ${this.config.mode} to ${newMode} mode`)
-    await this.cleanup()
-    this.config.mode = newMode
-    await this.initialize()
-  }
-
   async cleanup(): Promise<void> {
     if (this.browser) { await this.browser.close(); this.browser = null }
-    if (this.nekoConnection) { this.nekoConnection.close(); this.nekoConnection = null }
     if (this.wsServer) {
       this.wsClients.forEach((ws) => ws.close())
       this.wsServer.close()

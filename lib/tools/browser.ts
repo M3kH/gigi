@@ -1,9 +1,12 @@
 /**
  * MCP Tool — Browser Control
  *
- * Controls headless/interactive browser via BrowserManager.
+ * Controls headless browser via BrowserManager.
  * Supports navigation, clicking, typing, screenshots, JS evaluation,
- * element queries, and mode switching.
+ * and element queries.
+ *
+ * Interactive browser access is handled by the chrome-devtools MCP server,
+ * which connects directly to our Chrome container via CDP.
  */
 
 import { z } from 'zod'
@@ -16,7 +19,6 @@ interface BrowserInput {
   selector?: string
   text?: string
   script?: string
-  mode?: 'headless' | 'interactive'
   options?: Record<string, unknown>
 }
 
@@ -26,10 +28,8 @@ const browserTool = {
 
   async handler({ action, ...params }: BrowserInput): Promise<unknown> {
     // Initialize browser if not already initialized
-    if (!browserManager.browser && !browserManager.nekoConnection) {
-      const mode = process.env.BROWSER_MODE || 'headless'
+    if (!browserManager.browser) {
       await browserManager.initialize()
-      browserManager.config.mode = mode
     }
 
     switch (action) {
@@ -45,8 +45,6 @@ const browserTool = {
         return await evaluate(params.script!)
       case 'get_elements':
         return await getElements(params.selector!)
-      case 'switch_mode':
-        return await switchMode(params.mode!)
       case 'status':
         return await getStatus()
       default:
@@ -58,13 +56,12 @@ const browserTool = {
     action: {
       type: 'string',
       required: true,
-      enum: ['navigate', 'click', 'type', 'screenshot', 'evaluate', 'get_elements', 'switch_mode', 'status'],
+      enum: ['navigate', 'click', 'type', 'screenshot', 'evaluate', 'get_elements', 'status'],
     },
     url: { type: 'string', description: 'URL to navigate to (for navigate action)' },
     selector: { type: 'string', description: 'CSS selector for element interaction' },
     text: { type: 'string', description: 'Text to type (for type action)' },
     script: { type: 'string', description: 'JavaScript to evaluate in page context' },
-    mode: { type: 'string', enum: ['headless', 'interactive'], description: 'Browser mode to switch to' },
     options: { type: 'object', description: 'Additional options for the action' },
   },
 }
@@ -78,7 +75,6 @@ async function navigate(url: string, options: Record<string, unknown> = {}): Pro
     success: true,
     url: browserManager.page?.url() || url,
     title: browserManager.page ? await browserManager.page.title() : null,
-    mode: browserManager.config.mode,
   }
 }
 
@@ -96,7 +92,7 @@ async function type(selector: string, text: string, options: Record<string, unkn
 
 async function screenshot(options: Record<string, unknown> = {}): Promise<unknown> {
   const screenshotData = await browserManager.captureScreenshot(options)
-  return { success: true, data: screenshotData, format: 'base64', mode: browserManager.config.mode }
+  return { success: true, data: screenshotData, format: 'base64' }
 }
 
 async function evaluate(script: string): Promise<unknown> {
@@ -111,32 +107,14 @@ async function getElements(selector: string): Promise<unknown> {
   return { success: true, selector, count: elements.length, elements }
 }
 
-async function switchMode(mode: 'headless' | 'interactive'): Promise<unknown> {
-  if (!mode || !['headless', 'interactive'].includes(mode)) {
-    throw new Error('Valid mode (headless or interactive) is required')
-  }
-  await browserManager.switchMode(mode)
-  return { success: true, currentMode: mode }
-}
-
 async function getStatus(): Promise<unknown> {
-  const status: Record<string, unknown> = {
-    mode: browserManager.config.mode,
-    initialized: !!(browserManager.browser || browserManager.nekoConnection),
+  return {
+    initialized: !!browserManager.browser,
     wsPort: browserManager.config.wsPort,
     wsClients: browserManager.wsClients?.size || 0,
+    currentUrl: browserManager.page?.url() || null,
+    title: browserManager.page ? await browserManager.page.title() : null,
   }
-
-  if (browserManager.config.mode === 'headless' && browserManager.page) {
-    status.currentUrl = browserManager.page.url()
-    status.title = await browserManager.page.title()
-  } else if (browserManager.config.mode === 'interactive') {
-    status.nekoConnected = browserManager.nekoConnection?.readyState === 1
-    status.nekoHost = browserManager.config.nekoHost
-    status.nekoPort = browserManager.config.nekoPort
-  }
-
-  return status
 }
 
 // ─── Agent Tools (convention: agentTools export) ────────────────────
@@ -144,13 +122,12 @@ async function getStatus(): Promise<unknown> {
 const BrowserActionSchema = z.object({
   action: z.enum([
     'navigate', 'click', 'type', 'screenshot', 'evaluate',
-    'get_elements', 'switch_mode', 'status',
+    'get_elements', 'status',
   ]).describe('Browser action to perform'),
   url: z.string().optional().describe('URL to navigate to (for navigate action)'),
   selector: z.string().optional().describe('CSS selector for element interaction'),
   text: z.string().optional().describe('Text to type (for type action)'),
   script: z.string().optional().describe('JavaScript to evaluate in page context'),
-  mode: z.enum(['headless', 'interactive']).optional().describe('Browser mode to switch to'),
   options: z.record(z.string(), z.unknown()).optional().describe('Additional options for the action'),
 })
 

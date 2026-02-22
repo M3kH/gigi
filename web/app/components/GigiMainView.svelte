@@ -10,7 +10,7 @@
   import { getCurrentView } from '$lib/stores/navigation.svelte'
   import OverviewDashboard from '$components/dashboard/OverviewDashboard.svelte'
   import GiteaFrame from '$components/GiteaFrame.svelte'
-  import NekoBrowser from '$components/NekoBrowser.svelte'
+  import BrowserView from '$components/BrowserView.svelte'
   import LinkedConversationsBar from '$components/LinkedConversationsBar.svelte'
 
   const view = $derived(getCurrentView())
@@ -25,7 +25,7 @@
       <GiteaFrame src={view.giteaPath} />
     {/key}
   {:else if view.view === 'browser'}
-    <NekoBrowser />
+    <BrowserView />
   {/if}
 </main>
 

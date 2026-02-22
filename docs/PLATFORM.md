@@ -43,7 +43,7 @@ Forking means inheriting a Go codebase, Go templates, and a UI designed for huma
 - Real-time event streaming (SSE/WebSocket)
 - AI agent orchestration (multi-conversation, multi-repo)
 - Chat ↔ issue/PR linkage
-- Shared browser (neko)
+- Shared browser (Chrome + CDP)
 - Code editor (Monaco)
 - Token/cost tracking
 - Onboarding flow
@@ -144,7 +144,7 @@ gigi/
 │   │   └── Explorer.ts
 │   ├── feat-editor/           # Monaco (NEW)
 │   │   └── Editor.ts
-│   ├── feat-browser/          # Neko/WebRTC (from web/browser-control.html)
+│   ├── feat-browser/          # Chrome/CDP (from web/browser-control.html)
 │   │   └── Browser.ts
 │   ├── ui-button/
 │   ├── ui-card/
@@ -178,7 +178,7 @@ Each `lib/*` is self-contained. Frontend features (`feat-*`, `ui-*`) and backend
 | Validation | Zod | Runtime schemas, type inference, API boundary validation |
 | API | tRPC-inspired | End-to-end type safety. But primary transport is WebSocket, not HTTP RPC — so likely a thin custom protocol with Zod-validated messages rather than full tRPC. |
 | Realtime | WebSocket | Bidirectional: chat, agent events, view control, presence. Replaces SSE. |
-| Browser | WebRTC (via Neko) | Video/audio streaming for shared browser. Neko handles the WebRTC layer. |
+| Browser | Chrome + CDP via MCP | Shared browser controlled via Chrome DevTools Protocol. User views via noVNC. |
 | Database | PostgreSQL | Already using, shared with Gitea |
 | AI | Claude Agent SDK | Already using |
 | Git forge | Gitea (MIT) | Already running on cluster, full API |
@@ -366,7 +366,7 @@ For self-hosted: user provides their own API key.
 - **Issue view:** full issue detail, comments, linked chat, AI-suggested actions
 - **PR view:** diff viewer, review comments, merge controls, linked chat
 - **Code explorer:** file tree + Monaco editor (read/write)
-- **Browser view:** neko iframe (shared browser session with agent)
+- **Browser view:** noVNC iframe (shared Chrome session with agent via CDP)
 - **Logs/Console:** agent execution logs, CI/CD output
 
 ### Section F — Chat Overlay
@@ -390,9 +390,9 @@ For self-hosted: user provides their own API key.
 
 ### Shared Browser (Agent + User)
 
-- Neko provides the remote browser (chromium, already integrated)
-- Agent controls browser via Playwright (headless) or neko API (interactive)
-- User watches in real-time via neko's video stream in Section D
+- A custom Chrome container provides the remote browser (Chromium + Xvfb + noVNC)
+- Agent controls browser via Chrome DevTools Protocol (CDP) through the chrome-devtools MCP server
+- User watches in real-time via noVNC stream in Section D
 - Toggle: "Let Gigi drive" / "I'll drive" / "Co-pilot" (both can interact)
 - Use case: debugging a deployed app together, testing UI changes, web scraping
 
@@ -602,8 +602,8 @@ services:
     networks:
       - internal
 
-  neko:
-    image: ghcr.io/m1k1o/neko/chromium
+  chrome:
+    image: your-chrome-container:latest  # Custom Chrome + Xvfb + noVNC
     networks:
       - internal
 
@@ -623,7 +623,7 @@ One `docker compose up` and you have the full platform.
 Same stack, but:
 - Multi-tenant routing (user isolation via Gitea orgs)
 - Shared Gitea instance (one per region) or per-user instances
-- Managed neko pool (allocated on demand)
+- Managed Chrome pool (allocated on demand)
 - Stripe billing integration
 - Platform-provided AI credits (no API key needed)
 
@@ -731,7 +731,7 @@ Build the new Vite SPA. Old `web/index.html` stays until parity.
 ### Phase 4: Rich Workspace
 
 - [ ] `lib/feat-editor/` — Monaco editor (read/write via Gitea API)
-- [ ] `lib/feat-browser/` — neko/WebRTC shared browser (already working, wrap in lib)
+- [ ] `lib/feat-browser/` — Chrome/CDP shared browser (already working, wrap in lib)
 - [ ] Agent view control (navigate, expand, open file — with permission model)
 - [ ] Container proxy (agent-exposed services via Caddy API)
 - [ ] Diff viewer for PRs
@@ -832,7 +832,7 @@ test('creating a conversation links it to the project', async () => {
 ```
 
 **Avoid:**
-- Browser e2e in the pipeline (slow, flaky). Gigi herself can run e2e scripts via neko for manual/scheduled verification.
+- Browser e2e in the pipeline (slow, flaky). Gigi herself can run e2e scripts via the shared Chrome container for manual/scheduled verification.
 - Unit tests for trivial functions that are only tested, never used elsewhere.
 - Mocks that replicate half the system — test the real thing or don't test it.
 
@@ -889,4 +889,4 @@ If these three hold, the product is solid. Everything else is secondary.
 
 4. **Monaco loading strategy?** CDN for SaaS, vendored for self-hosted. Monaco is ~2MB gzipped — acceptable for a development platform.
 
-5. **Neko scaling?** One neko instance per active browser session? Shared pool? For self-hosted single-user, one instance (current approach). For SaaS, on-demand allocation from a pool.
+5. **Browser scaling?** One Chrome instance per active browser session? Shared pool? For self-hosted single-user, one instance (current approach). For SaaS, on-demand allocation from a pool.
