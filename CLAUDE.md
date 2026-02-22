@@ -135,6 +135,17 @@ Include "Closes #N" in the PR description to auto-close the issue on merge.
 - PostgreSQL for persistent storage
 - Configurable via environment variables and database config
 
+## Testing
+
+**Every PR must include automated tests.** This is enforced by the agent system prompt.
+
+- **Framework**: Vitest (`npm test` to run)
+- **Test location**: `tests/` directory, mirroring source structure
+- **New features**: Happy path + at least one edge case
+- **Bug fixes**: Regression test that would have caught the bug
+- **Refactors**: Existing tests must pass; add tests if coverage is low
+- Always run `npm test` before pushing
+
 ## Conventions
 
 - All source files are TypeScript (strict mode)

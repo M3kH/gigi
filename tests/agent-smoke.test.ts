@@ -17,6 +17,8 @@
 
 import { describe, it, beforeEach, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { loadMcpServers, createToolFailureHandler, handlePreToolUse } from '../lib/core/agent'
 
 // ─── UV_THREADPOOL_SIZE ─────────────────────────────────────────────
@@ -145,6 +147,42 @@ describe('Token type detection', () => {
   it('API key should NOT match OAuth prefix', () => {
     const token = 'sk-ant-api01-test-fake-key-456'
     assert.ok(!token.startsWith('sk-ant-oat'), 'API key should not match OAuth prefix')
+  })
+})
+
+// ─── System Prompt — Testing Requirements ───────────────────────────
+
+describe('System prompt testing requirements', () => {
+  const agentSource = readFileSync(
+    resolve(import.meta.dirname, '../lib/core/agent.ts'),
+    'utf-8'
+  )
+
+  it('should contain a Testing Requirements section', () => {
+    assert.ok(
+      agentSource.includes('## Testing Requirements'),
+      'System prompt must include a "## Testing Requirements" section'
+    )
+  })
+
+  it('should require tests in the PR checklist', () => {
+    assert.ok(
+      agentSource.includes('Added automated tests'),
+      'PR checklist must include "Added automated tests" step'
+    )
+  })
+
+  it('should require running npm test before pushing', () => {
+    assert.ok(
+      agentSource.includes('npm test') && agentSource.includes('all tests pass'),
+      'PR checklist must require running npm test and all tests passing'
+    )
+  })
+
+  it('should cover new features, bug fixes, and refactors', () => {
+    assert.ok(agentSource.includes('New features'), 'Should mention new feature testing')
+    assert.ok(agentSource.includes('Bug fixes'), 'Should mention bug fix testing')
+    assert.ok(agentSource.includes('Refactors'), 'Should mention refactor testing')
   })
 })
 

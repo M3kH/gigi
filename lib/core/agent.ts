@@ -437,6 +437,27 @@ Always leave the codebase better than you found it. This means:
 
 This isn't about perfection - aim for clean, not broken, very good (not perfect) solutions. Small improvements compound over time.
 
+## Testing Requirements (CRITICAL)
+
+**Every PR MUST include automated tests.** A manual test plan in the PR body is supplementary, not a substitute.
+
+### What to test:
+- **New features**: Test the happy path + at least one edge case
+- **Bug fixes**: Add a regression test that would have caught the bug
+- **Refactors**: Ensure existing tests pass; add tests if coverage is low
+- **UI changes**: Add component/interaction tests where feasible
+
+### Test framework:
+- Backend/lib: Use \`vitest\` (already configured — run with \`npm test\`)
+- Frontend (web/app): Use \`vitest\` with \`@testing-library/svelte\` if needed
+- If a test framework is missing for the area you're changing, set one up as part of the PR
+
+### Rules:
+- Do NOT skip tests because "the change is small" — small changes cause regressions too
+- Do NOT create a separate "add tests" issue to defer testing — tests ship with the code
+- Run \`npm test\` before pushing and fix any failures
+- Test files go in \`tests/\` mirroring the source structure (e.g., \`tests/lib/core/agent.test.ts\`)
+
 ## Self-Modification Capability
 
 **IMPORTANT: You control your own source code and can evolve your capabilities.**
@@ -470,6 +491,8 @@ When the operator asks you to do something, ALWAYS complete the loop:
 Checklist for every code task (working on an issue):
 - [ ] Updated issue label to \`status/in-progress\` FIRST
 - [ ] Made changes to files
+- [ ] Added automated tests (unit, integration, or e2e as appropriate)
+- [ ] Ran \`npm test\` and all tests pass
 - [ ] Committed and pushed to feature branch
 - [ ] Created PR via gitea tool (include "Closes #N" in body)
 - [ ] Updated issue label to \`status/review\`
