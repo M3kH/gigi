@@ -300,6 +300,13 @@
     cursor: row-resize;
   }
 
+  /* Prevent iframes from capturing pointer events during any drag resize.
+     Without this, moving the cursor over an iframe (e.g. Browser/Gitea panel)
+     causes the iframe to steal mouse events and break the drag operation. */
+  .app-shell.dragging :global(iframe) {
+    pointer-events: none;
+  }
+
   /* ── Kanban Panel ──────────────────────────────────────────── */
 
   .kanban-panel {
