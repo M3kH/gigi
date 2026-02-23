@@ -343,14 +343,14 @@
   })
 </script>
 
-<section class="gigi-kanban" class:header-only={kanbanState === 'hidden'}>
+<section class="gigi-kanban">
   <!-- Header -->
   <header class="board-header">
     <div class="header-left">
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <h2
         class="board-title"
-        ondblclick={() => setPanelState('kanban', kanbanState === 'hidden' ? 'compact' : 'hidden')}
+        ondblclick={() => setPanelState('kanban', 'hidden')}
       >Board</h2>
       <span class="board-count">{totalIssues} issues</span>
     </div>
@@ -780,16 +780,6 @@
   @keyframes spin {
     from { transform: rotate(0deg); }
     to { transform: rotate(360deg); }
-  }
-
-  /* ── Hidden mode (header bar only) ──────────────────────────────── */
-
-  .gigi-kanban.header-only .board-columns {
-    display: none;
-  }
-
-  .gigi-kanban.header-only .board-error {
-    display: none;
   }
 
   /* ── Board Columns ───────────────────────────────────────────────── */

@@ -199,21 +199,38 @@
 
 <div class="app-shell" class:dragging={sidebarDragging || kanbanDragging || chatDragging || chatWidthDragging} class:dragging-y={kanbanDragging || chatDragging}>
   <!-- Section A: Kanban -->
-  <div
-    class="kanban-panel"
-    class:kanban-full={kanbanState === 'full'}
-    class:kanban-compact={kanbanState === 'compact'}
-    class:kanban-hidden={kanbanState === 'hidden'}
-    style:height={kanbanState === 'compact' ? `${kanbanHeight}px` : undefined}
-  >
-    <GigiKanban />
-  </div>
+  {#if kanbanState === 'hidden'}
+    <!-- Collapsed kanban bar -->
+    <button
+      class="kanban-collapsed-bar"
+      onclick={() => setPanelState('kanban', 'compact')}
+      title="Expand board (Ctrl+K)"
+    >
+      <svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12">
+        <path d="M3 3h18v18H3V3zm16 16V5H5v14h14z"/>
+      </svg>
+      <span class="collapsed-bar-label">Board</span>
+      <svg viewBox="0 0 24 24" fill="currentColor" width="10" height="10" class="collapsed-bar-chevron">
+        <path d="M7 9h2v2H7V9zm4 4H9v-2h2v2zm2 0v2h-2v-2h2zm2-2h-2v2h2v-2zm0 0V9h2v2h-2z"/>
+      </svg>
+    </button>
+  {:else}
+    <div
+      class="kanban-panel"
+      class:kanban-full={kanbanState === 'full'}
+      class:kanban-compact={kanbanState === 'compact'}
+      style:height={kanbanState === 'compact' ? `${kanbanHeight}px` : undefined}
+    >
+      <GigiKanban />
+    </div>
+  {/if}
 
   <!-- Kanban drag handle (compact mode only) -->
   {#if kanbanState === 'compact'}
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div class="kanban-divider" onmousedown={startKanbanDrag}></div>
   {/if}
+
 
   <!-- Main area: Sidebar + Content -->
   {#if kanbanState !== 'full'}
@@ -233,6 +250,17 @@
         class="divider"
         onmousedown={startSidebarDrag}
       ></div>
+    {:else if !isMobile && sidebarState === 'hidden'}
+      <!-- Collapsed sidebar bar -->
+      <button
+        class="sidebar-collapsed-bar"
+        onclick={() => setPanelState('sidebar', 'full')}
+        title="Expand sidebar (Ctrl+B)"
+      >
+        <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
+          <path d="M10 5v2h2V5h-2zm2 4V7h-2v2h2zm2 2V9h-2v2h2zm0 2h2v-2h-2v2zm-2 2v-2h2v2h-2zm0 0h-2v2h2v-2zm-4 4v-2h2v2H8z"/>
+        </svg>
+      </button>
     {/if}
 
     <!-- Content area: Filters + Main + Chat -->
@@ -252,23 +280,39 @@
 
   <!-- Section F: Chat Overlay (fixed position) -->
   {#if kanbanState !== 'full'}
-    <div
-      class="chat-overlay-wrapper"
-      class:chat-full={chatState === 'full'}
-      class:chat-compact={chatState === 'compact'}
-      class:chat-hidden={chatState === 'hidden'}
-      style:left={chatState === 'full' ? '0' : undefined}
-      style:width={chatState === 'compact' ? `${chatWidth}px` : chatState === 'full' ? '100%' : undefined}
-      style:height={chatState === 'compact' ? `${chatHeight}px` : chatState === 'full' ? '100vh' : undefined}
-    >
-      {#if chatState === 'compact'}
-        <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <div class="chat-drag-handle" onmousedown={startChatDrag}></div>
-        <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <div class="chat-width-handle" onmousedown={startChatWidthDrag}></div>
-      {/if}
-      <GigiChatOverlay />
-    </div>
+    {#if chatState === 'hidden'}
+      <!-- Collapsed chat tab -->
+      <button
+        class="chat-collapsed-tab"
+        onclick={() => setPanelState('chatOverlay', 'compact')}
+        title="Expand chat (Ctrl+J)"
+      >
+        <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
+          <path d="M20 2H2v20h2V4h16v12H6v2H4v2h2v-2h16V2h-2z"/>
+        </svg>
+        <span>Chat</span>
+        <svg viewBox="0 0 24 24" fill="currentColor" width="10" height="10">
+          <path d="M7 15h2v-2H7v2zm4-4H9v2h2v-2zm2 0v-2h-2v2h2zm2 2h-2v-2h2v2zm0 0v2h2v-2h-2z"/>
+        </svg>
+      </button>
+    {:else}
+      <div
+        class="chat-overlay-wrapper"
+        class:chat-full={chatState === 'full'}
+        class:chat-compact={chatState === 'compact'}
+        style:left={chatState === 'full' ? '0' : undefined}
+        style:width={chatState === 'compact' ? `${chatWidth}px` : chatState === 'full' ? '100%' : undefined}
+        style:height={chatState === 'compact' ? `${chatHeight}px` : chatState === 'full' ? '100vh' : undefined}
+      >
+        {#if chatState === 'compact'}
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
+          <div class="chat-drag-handle" onmousedown={startChatDrag}></div>
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
+          <div class="chat-width-handle" onmousedown={startChatWidthDrag}></div>
+        {/if}
+        <GigiChatOverlay />
+      </div>
+    {/if}
   {/if}
 
   <!-- Mobile sidebar overlay -->
@@ -324,10 +368,40 @@
     min-height: 120px;
   }
 
-  .kanban-panel.kanban-hidden {
-    height: auto;
-    min-height: 0;
-    overflow: hidden;
+  /* ── Kanban collapsed bar ─────────────────────────────────── */
+
+  .kanban-collapsed-bar {
+    display: flex;
+    align-items: center;
+    gap: var(--gigi-space-xs);
+    width: 100%;
+    height: 24px;
+    padding: 0 var(--gigi-space-md);
+    background: var(--gigi-bg-secondary);
+    border: none;
+    border-bottom: var(--gigi-border-width) solid var(--gigi-border-default);
+    color: var(--gigi-text-muted);
+    cursor: pointer;
+    font-size: var(--gigi-font-size-xs);
+    font-family: var(--gigi-font-sans);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 600;
+    transition: all var(--gigi-transition-fast);
+    flex-shrink: 0;
+  }
+
+  .kanban-collapsed-bar:hover {
+    background: var(--gigi-bg-hover);
+    color: var(--gigi-text-primary);
+  }
+
+  .collapsed-bar-label {
+    font-size: var(--gigi-font-size-xs);
+  }
+
+  .collapsed-bar-chevron {
+    margin-left: auto;
   }
 
   /* ── Main Area ─────────────────────────────────────────────── */
@@ -345,6 +419,28 @@
     overflow: hidden;
     border-right: var(--gigi-border-width) solid var(--gigi-border-default);
     transition: width var(--gigi-transition-normal);
+  }
+
+  /* ── Sidebar collapsed bar ────────────────────────────────── */
+
+  .sidebar-collapsed-bar {
+    width: 28px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--gigi-bg-secondary);
+    border: none;
+    border-right: var(--gigi-border-width) solid var(--gigi-border-default);
+    color: var(--gigi-text-muted);
+    cursor: pointer;
+    transition: all var(--gigi-transition-fast);
+    padding: 0;
+  }
+
+  .sidebar-collapsed-bar:hover {
+    background: var(--gigi-bg-hover);
+    color: var(--gigi-accent-blue);
   }
 
   /* ── Divider (drag handle) ─────────────────────────────────── */
@@ -465,8 +561,36 @@
     min-height: 180px;
   }
 
-  .chat-overlay-wrapper.chat-hidden {
-    height: auto;
+  /* ── Chat collapsed tab ──────────────────────────────────── */
+
+  .chat-collapsed-tab {
+    position: fixed;
+    bottom: 0;
+    right: 16px;
+    z-index: var(--gigi-z-overlay, 100);
+    display: flex;
+    align-items: center;
+    gap: var(--gigi-space-xs);
+    padding: var(--gigi-space-xs) var(--gigi-space-md);
+    background: var(--gigi-bg-secondary);
+    border: var(--gigi-border-width) solid var(--gigi-border-default);
+    border-bottom: none;
+    border-top-left-radius: var(--gigi-radius-lg, 8px);
+    border-top-right-radius: var(--gigi-radius-lg, 8px);
+    color: var(--gigi-text-muted);
+    cursor: pointer;
+    font-size: var(--gigi-font-size-xs);
+    font-family: var(--gigi-font-sans);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    box-shadow: var(--gigi-shadow-lg, 0 -2px 16px rgba(0,0,0,0.3));
+    transition: all var(--gigi-transition-fast);
+  }
+
+  .chat-collapsed-tab:hover {
+    background: var(--gigi-bg-hover);
+    color: var(--gigi-accent-blue);
   }
 
   .chat-drag-handle {

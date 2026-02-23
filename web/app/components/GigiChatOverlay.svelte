@@ -100,7 +100,7 @@
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <span
         class="overlay-title"
-        ondblclick={() => setPanelState('chatOverlay', state === 'hidden' ? 'compact' : 'hidden')}
+        ondblclick={() => setPanelState('chatOverlay', 'hidden')}
       >Chat</span>
       {#if activeConv}
         <span class="overlay-conv-title">{activeConv.topic}</span>
@@ -116,39 +116,37 @@
     </div>
   </header>
 
-  {#if state !== 'hidden'}
-    <!-- Thread toolbar: refs + actions (in header area, not scrollable) -->
-    {#if activeConvId}
-      <div class="thread-toolbar">
-        {#if threadRefs.length > 0}
-          <ThreadRefsBar refs={threadRefs} onAddRef={handleAddRef} />
-        {/if}
-        <ThreadActions
-          threadId={activeConvId}
-          {compactStatus}
-          onFork={handleFork}
-          onCompact={handleCompact}
-          onAddRef={handleAddRef}
-        />
-      </div>
-    {/if}
-
-    <ThreadTimeline />
-
-    {#if contextLabel}
-      <div class="context-pill">
-        <span class="context-pill-label">Viewing {contextLabel}</span>
-      </div>
-    {/if}
-
-    <ChatInput
-      onsend={handleSend}
-      conversationId={activeConvId}
-      disabled={false}
-      placeholder={activeConvId ? 'Continue conversation...' : 'Message Gigi...'}
-      autofocus={!activeConvId}
-    />
+  <!-- Thread toolbar: refs + actions (in header area, not scrollable) -->
+  {#if activeConvId}
+    <div class="thread-toolbar">
+      {#if threadRefs.length > 0}
+        <ThreadRefsBar refs={threadRefs} onAddRef={handleAddRef} />
+      {/if}
+      <ThreadActions
+        threadId={activeConvId}
+        {compactStatus}
+        onFork={handleFork}
+        onCompact={handleCompact}
+        onAddRef={handleAddRef}
+      />
+    </div>
   {/if}
+
+  <ThreadTimeline />
+
+  {#if contextLabel}
+    <div class="context-pill">
+      <span class="context-pill-label">Viewing {contextLabel}</span>
+    </div>
+  {/if}
+
+  <ChatInput
+    onsend={handleSend}
+    conversationId={activeConvId}
+    disabled={false}
+    placeholder={activeConvId ? 'Continue conversation...' : 'Message Gigi...'}
+    autofocus={!activeConvId}
+  />
 
   <!-- Add ref dialog -->
   {#if showAddRefDialog && activeConvId}
