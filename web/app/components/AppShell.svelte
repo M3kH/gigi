@@ -206,12 +206,14 @@
       onclick={() => setPanelState('kanban', 'compact')}
       title="Expand board (Ctrl+K)"
     >
-      <svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12">
-        <path d="M3 3h18v18H3V3zm16 16V5H5v14h14z"/>
+      <!-- pixelarticons: grid -->
+      <svg viewBox="0 0 24 24" fill="none" width="12" height="12">
+        <path d="M2 2h20v20H2V2zm2 2v4h4V4H4zm6 0v4h4V4h-4zm6 0v4h4V4h-4zm4 6h-4v4h4v-4zm0 6h-4v4h4v-4zm-6 4v-4h-4v4h4zm-6 0v-4H4v4h4zm-4-6h4v-4H4v4zm6-4v4h4v-4h-4z" fill="currentColor"/>
       </svg>
       <span class="collapsed-bar-label">Board</span>
-      <svg viewBox="0 0 24 24" fill="currentColor" width="10" height="10" class="collapsed-bar-chevron">
-        <path d="M7 9h2v2H7V9zm4 4H9v-2h2v2zm2 0v2h-2v-2h2zm2-2h-2v2h2v-2zm0 0V9h2v2h-2z"/>
+      <!-- pixelarticons: chevron-down -->
+      <svg viewBox="0 0 24 24" fill="none" width="10" height="10" class="collapsed-bar-chevron">
+        <path d="M7 8H5v2h2v2h2v2h2v2h2v-2h2v-2h2v-2h2V8h-2v2h-2v2h-2v2h-2v-2H9v-2H7V8z" fill="currentColor"/>
       </svg>
     </button>
   {:else}
@@ -257,8 +259,9 @@
         onclick={() => setPanelState('sidebar', 'full')}
         title="Expand sidebar (Ctrl+B)"
       >
-        <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
-          <path d="M10 5v2h2V5h-2zm2 4V7h-2v2h2zm2 2V9h-2v2h2zm0 2h2v-2h-2v2zm-2 2v-2h2v2h-2zm0 0h-2v2h2v-2zm-4 4v-2h2v2H8z"/>
+        <!-- pixelarticons: chevron-right -->
+        <svg viewBox="0 0 24 24" fill="none" width="14" height="14">
+          <path d="M8 5v2h2V5H8zm4 4V7h-2v2h2zm2 2V9h-2v2h2zm0 2h2v-2h-2v2zm-2 2v-2h2v2h-2zm0 0h-2v2h2v-2zm-4 4v-2h2v2H8z" fill="currentColor"/>
         </svg>
       </button>
     {/if}
@@ -287,12 +290,14 @@
         onclick={() => setPanelState('chatOverlay', 'compact')}
         title="Expand chat (Ctrl+J)"
       >
-        <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
-          <path d="M20 2H2v20h2V4h16v12H6v2H4v2h2v-2h16V2h-2z"/>
+        <!-- pixelarticons: chat -->
+        <svg viewBox="0 0 24 24" fill="none" width="14" height="14">
+          <path d="M20 2H2v20h2V4h16v12H6v2H4v2h2v-2h16V2h-2z" fill="currentColor"/>
         </svg>
         <span>Chat</span>
-        <svg viewBox="0 0 24 24" fill="currentColor" width="10" height="10">
-          <path d="M7 15h2v-2H7v2zm4-4H9v2h2v-2zm2 0v-2h-2v2h2zm2 2h-2v-2h2v2zm0 0v2h2v-2h-2z"/>
+        <!-- pixelarticons: chevron-up -->
+        <svg viewBox="0 0 24 24" fill="none" width="10" height="10">
+          <path d="M7 16H5v-2h2v-2h2v-2h2V8h2v2h2v2h2v2h2v2h-2v-2h-2v-2h-2v-2h-2v2H9v2H7v2z" fill="currentColor"/>
         </svg>
       </button>
     {:else}
