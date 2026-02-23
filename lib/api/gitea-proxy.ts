@@ -32,6 +32,26 @@ const getOrg = async (): Promise<string> => {
   return orgName
 }
 
+// ─── Types ──────────────────────────────────────────────────────────
+
+/** Gitea Actions workflow run (from /actions/tasks API) */
+interface ActionRun {
+  id: number
+  name: string
+  head_branch: string
+  head_sha: string
+  run_number: number
+  event: string
+  display_title: string
+  status: string
+  workflow_id: string
+  url: string
+  created_at: string
+  updated_at: string
+  run_started_at: string
+  repo?: string
+}
+
 // ─── Status label definitions ────────────────────────────────────────
 
 const STATUS_LABELS = [
@@ -90,49 +110,156 @@ export const createGiteaProxy = (): Hono => {
         gitea.orgs.listRepos(org, { limit: 50 }),
       ])
 
-      // For each repo, get open issues and PRs count in parallel
-      const repoSummaries = await Promise.all(
-        repos.map(async (repo) => {
-          const [issues, pulls] = await Promise.allSettled([
+      const activeRepos = repos.filter(r => !r.archived)
+
+      // For each repo, get open issues count, PRs count, recent PRs, and recent issues in parallel
+      const perRepoData = await Promise.all(
+        activeRepos.map(async (repo) => {
+          const [openIssues, openPulls, recentPulls, recentIssues] = await Promise.allSettled([
             gitea.issues.list(org, repo.name, { state: 'open', limit: 1, type: 'issues' }),
             gitea.pulls.list(org, repo.name, { state: 'open', limit: 1 }),
+            gitea.pulls.list(org, repo.name, { state: 'closed', limit: 5, sort: 'updated' }),
+            gitea.issues.list(org, repo.name, { state: 'all', limit: 5, type: 'issues' }),
           ])
 
           return {
-            name: repo.name,
-            full_name: repo.full_name,
-            description: repo.description,
-            html_url: repo.html_url,
-            open_issues_count: repo.open_issues_count,
-            stars_count: repo.stars_count,
-            forks_count: repo.forks_count,
-            archived: repo.archived,
-            default_branch: repo.default_branch,
-            updated_at: repo.updated_at,
-            language: (repo as Record<string, unknown>).language || '',
-            size: (repo as Record<string, unknown>).size || 0,
-            open_pr_count: pulls.status === 'fulfilled' ? pulls.value.length : 0,
+            summary: {
+              name: repo.name,
+              full_name: repo.full_name,
+              description: repo.description,
+              html_url: repo.html_url,
+              open_issues_count: repo.open_issues_count,
+              stars_count: repo.stars_count,
+              forks_count: repo.forks_count,
+              archived: repo.archived,
+              default_branch: repo.default_branch,
+              updated_at: repo.updated_at,
+              language: (repo as Record<string, unknown>).language || '',
+              size: (repo as Record<string, unknown>).size || 0,
+              open_pr_count: openPulls.status === 'fulfilled' ? openPulls.value.length : 0,
+            },
+            recentPRs: recentPulls.status === 'fulfilled'
+              ? recentPulls.value.map(pr => ({
+                  number: pr.number,
+                  title: pr.title,
+                  state: pr.merged ? 'merged' : pr.state,
+                  user: pr.user ? { login: pr.user.login, avatar_url: pr.user.avatar_url } : null,
+                  repo: repo.name,
+                  head_branch: pr.head?.ref ?? '',
+                  base_branch: pr.base?.ref ?? '',
+                  html_url: pr.html_url,
+                  created_at: pr.created_at,
+                  updated_at: pr.updated_at,
+                  merged_at: pr.merged_at,
+                }))
+              : [],
+            recentIssues: recentIssues.status === 'fulfilled'
+              ? recentIssues.value.map(issue => ({
+                  number: issue.number,
+                  title: issue.title,
+                  state: issue.state,
+                  user: issue.user ? { login: issue.user.login, avatar_url: issue.user.avatar_url } : null,
+                  repo: repo.name,
+                  labels: (issue.labels ?? []).map(l => ({ name: l.name, color: l.color })),
+                  comments: issue.comments ?? 0,
+                  html_url: issue.html_url,
+                  created_at: issue.created_at,
+                  updated_at: issue.updated_at,
+                  closed_at: issue.closed_at,
+                }))
+              : [],
           }
         })
       )
 
-      // Sort by last updated
+      const repoSummaries = perRepoData.map(d => d.summary)
+
+      // Sort repos by last updated
       repoSummaries.sort((a, b) => {
         const dateA = a.updated_at ? new Date(a.updated_at).getTime() : 0
         const dateB = b.updated_at ? new Date(b.updated_at).getTime() : 0
         return dateB - dateA
       })
 
+      // Merge and sort recent PRs across all repos (top 5)
+      const allRecentPRs = perRepoData
+        .flatMap(d => d.recentPRs)
+        .sort((a, b) => {
+          const dateA = a.updated_at ? new Date(a.updated_at).getTime() : 0
+          const dateB = b.updated_at ? new Date(b.updated_at).getTime() : 0
+          return dateB - dateA
+        })
+        .slice(0, 8)
+
+      // Merge and sort recent issues across all repos (top 5)
+      const allRecentIssues = perRepoData
+        .flatMap(d => d.recentIssues)
+        .sort((a, b) => {
+          const dateA = a.updated_at ? new Date(a.updated_at).getTime() : 0
+          const dateB = b.updated_at ? new Date(b.updated_at).getTime() : 0
+          return dateB - dateA
+        })
+        .slice(0, 8)
+
       return c.json({
         org: { id: orgInfo.id, name: (orgInfo as Record<string, unknown>).username ?? orgInfo.name },
-        repos: repoSummaries.filter(r => !r.archived),
-        totalRepos: repoSummaries.filter(r => !r.archived).length,
+        repos: repoSummaries,
+        totalRepos: repoSummaries.length,
         totalOpenIssues: repoSummaries.reduce((sum, r) => sum + (r.open_issues_count || 0), 0),
         totalOpenPRs: repoSummaries.reduce((sum, r) => sum + r.open_pr_count, 0),
+        recentPRs: allRecentPRs,
+        recentIssues: allRecentIssues,
       })
     } catch (err) {
       console.error('[gitea-proxy] overview error:', (err as Error).message)
       return c.json({ error: (err as Error).message }, 500)
+    }
+  })
+
+  /**
+   * GET /api/gitea/overview/actions
+   *
+   * CI/Actions status: recent workflow runs across all org repos.
+   */
+  api.get('/overview/actions', async (c) => {
+    try {
+      const gitea = await getClient()
+      const org = await getOrg()
+      const repos = await gitea.orgs.listRepos(org, { limit: 50 })
+      const activeRepos = repos.filter(r => !r.archived)
+
+      // Fetch action runs per repo using the raw request escape hatch
+      const allRuns = (
+        await Promise.all(
+          activeRepos.map(async (repo) => {
+            try {
+              const data = await gitea.request<{ workflow_runs: ActionRun[] }>({
+                method: 'GET',
+                path: `/repos/${org}/${repo.name}/actions/tasks`,
+                query: { limit: 5 },
+              })
+              return (data.workflow_runs ?? []).map(run => ({
+                ...run,
+                repo: repo.name,
+              }))
+            } catch {
+              return []
+            }
+          })
+        )
+      ).flat()
+
+      // Sort by created_at descending and take top 10
+      allRuns.sort((a, b) => {
+        const dateA = a.created_at ? new Date(a.created_at).getTime() : 0
+        const dateB = b.created_at ? new Date(b.created_at).getTime() : 0
+        return dateB - dateA
+      })
+
+      return c.json({ runs: allRuns.slice(0, 10) })
+    } catch (err) {
+      console.error('[gitea-proxy] overview/actions error:', (err as Error).message)
+      return c.json({ error: (err as Error).message, runs: [] }, 500)
     }
   })
 

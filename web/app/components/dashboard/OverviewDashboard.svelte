@@ -5,16 +5,21 @@
    * Shows:
    * - Quick stats with color-coded icons and tinted backgrounds
    * - Quick Actions prominently in stats row (above fold)
+   * - CI/Actions status with pass/fail/running badges
    * - Repository cards with descriptions, language, size
-   * - Recent activity with message previews and channel icons
+   * - Recent PRs (open + merged) across all repos
+   * - Recent issues across all repos with label dots
    */
 
   import { onMount } from 'svelte'
-  import { getConversations, loadConversations, selectConversation, onGiteaEvent, newConversation, addLocalMessage, setPendingPrompt } from '$lib/stores/chat.svelte'
+  import { getConversations, loadConversations, onGiteaEvent, newConversation, addLocalMessage, setPendingPrompt } from '$lib/stores/chat.svelte'
   import { navigateToRepo, navigateToGitea } from '$lib/stores/navigation.svelte'
   import { setPanelState } from '$lib/stores/panels.svelte'
   import { formatRelativeTime } from '$lib/utils/format'
   import CostWidget from '$components/dashboard/CostWidget.svelte'
+  import ActionsWidget from '$components/dashboard/ActionsWidget.svelte'
+  import RecentPRsWidget from '$components/dashboard/RecentPRsWidget.svelte'
+  import RecentIssuesWidget from '$components/dashboard/RecentIssuesWidget.svelte'
 
   // ── Types ──────────────────────────────────────────────────────────
 
@@ -34,12 +39,42 @@
     size: number
   }
 
+  interface RecentPR {
+    number: number
+    title: string
+    state: string
+    user: { login: string; avatar_url: string } | null
+    repo: string
+    head_branch: string
+    base_branch: string
+    html_url: string
+    created_at: string
+    updated_at: string
+    merged_at: string | null
+  }
+
+  interface RecentIssue {
+    number: number
+    title: string
+    state: string
+    user: { login: string; avatar_url: string } | null
+    repo: string
+    labels: { name: string; color: string }[]
+    comments: number
+    html_url: string
+    created_at: string
+    updated_at: string
+    closed_at: string | null
+  }
+
   interface OverviewData {
     org: { id: number; name: string }
     repos: RepoSummary[]
     totalRepos: number
     totalOpenIssues: number
     totalOpenPRs: number
+    recentPRs: RecentPR[]
+    recentIssues: RecentIssue[]
   }
 
   // ── State ──────────────────────────────────────────────────────────
@@ -51,12 +86,6 @@
   // ── Derived ────────────────────────────────────────────────────────
 
   const conversations = $derived(getConversations())
-  const recentConversations = $derived(
-    conversations
-      .slice()
-      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
-      .slice(0, 5)
-  )
 
   const userRepos = $derived(overview?.repos ?? [])
   const isEmpty = $derived(!loading && !error && userRepos.length === 0)
@@ -109,10 +138,6 @@
     navigateToRepo(overview?.org.name ?? 'gigi', repo.name)
   }
 
-  function handleConversationClick(convId: string): void {
-    selectConversation(convId)
-  }
-
   /** Get a color for a programming language (GitHub-style) */
   function getLanguageColor(lang: string): string {
     const colors: Record<string, string> = {
@@ -124,18 +149,6 @@
     return colors[lang] || '#8b949e'
   }
 
-  /** Show a meaningful title instead of just "web" or channel name */
-  function getConversationDisplayTitle(conv: { topic: string; channel: string }): string {
-    const topic = conv.topic?.trim()
-    if (topic && topic !== conv.channel && topic !== 'Untitled' && topic.length > 1) {
-      return topic
-    }
-    if (conv.channel) {
-      return conv.channel.charAt(0).toUpperCase() + conv.channel.slice(1) + ' conversation'
-    }
-    return 'New conversation'
-  }
-
   /** Format repo size to human-readable */
   function formatSize(sizeKB: number): string {
     if (!sizeKB || sizeKB === 0) return ''
@@ -145,15 +158,6 @@
     return `${(mb / 1024).toFixed(1)} GB`
   }
 
-  /** Get a channel icon */
-  function getChannelIcon(channel: string): string {
-    switch (channel) {
-      case 'web': return '🌐'
-      case 'telegram': return '📱'
-      case 'cli': return '⌨️'
-      default: return '💬'
-    }
-  }
 </script>
 
 <div class="dashboard">
@@ -275,151 +279,105 @@
       <CostWidget />
     </div>
 
-    <!-- Main grid: repos + activity -->
+    <!-- Main grid: CI + PRs | Repos + Issues -->
     <div class="dashboard-grid">
-      <!-- Repositories -->
-      <section class="section">
-        <h2 class="section-title">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M8 5h2v2H8V5zM6 7h2v2H6V7zM4 9h2v2H4V9zm-2 2h2v2H2v-2zm2 2h2v2H4v-2zm2 2h2v2H6v-2zm2 2h2v2H8v-2zm8-12h-2v2h2V5zm2 2h-2v2h2V7zm2 2h-2v2h2V9zm2 2h-2v2h2v-2zm-2 2h-2v2h2v-2zm-2 2h-2v2h2v-2zm-2 2h-2v2h2v-2z"/>
-          </svg>
-          Repositories
-          <span class="section-count">{userRepos.length}</span>
-        </h2>
+      <!-- Left column -->
+      <div class="grid-column">
+        <ActionsWidget />
+        <!-- Repositories -->
+        <section class="section">
+          <h2 class="section-title">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M8 5h2v2H8V5zM6 7h2v2H6V7zM4 9h2v2H4V9zm-2 2h2v2H2v-2zm2 2h2v2H4v-2zm2 2h2v2H6v-2zm2 2h2v2H8v-2zm8-12h-2v2h2V5zm2 2h-2v2h2V7zm2 2h-2v2h2V9zm2 2h-2v2h2v-2zm-2 2h-2v2h2v-2zm-2 2h-2v2h2v-2zm-2 2h-2v2h2v-2z"/>
+            </svg>
+            Repositories
+            <span class="section-count">{userRepos.length}</span>
+          </h2>
 
-        {#if loading}
-          <div class="loading-placeholder">
-            {#each Array(3) as _}
-              <div class="skeleton-card"></div>
-            {/each}
-          </div>
-        {:else if error}
-          <div class="error-banner">
-            <span>Failed to load: {error}</span>
-            <button onclick={fetchOverview}>Retry</button>
-          </div>
-        {:else}
-          <div class="repo-list">
-            {#each userRepos as repo}
-              <button class="repo-card" onclick={() => handleRepoClick(repo)}>
-                <div class="repo-header">
-                  <span class="repo-name">{repo.name}</span>
-                  <div class="repo-header-right">
-                    {#if repo.size}
-                      <span class="repo-size">{formatSize(repo.size)}</span>
+          {#if loading}
+            <div class="loading-placeholder">
+              {#each Array(3) as _}
+                <div class="skeleton-card"></div>
+              {/each}
+            </div>
+          {:else if error}
+            <div class="error-banner">
+              <span>Failed to load: {error}</span>
+              <button onclick={fetchOverview}>Retry</button>
+            </div>
+          {:else}
+            <div class="repo-list">
+              {#each userRepos as repo}
+                <button class="repo-card" onclick={() => handleRepoClick(repo)}>
+                  <div class="repo-header">
+                    <span class="repo-name">{repo.name}</span>
+                    <div class="repo-header-right">
+                      {#if repo.size}
+                        <span class="repo-size">{formatSize(repo.size)}</span>
+                      {/if}
+                      {#if repo.updated_at}
+                        <span class="repo-updated">{formatRelativeTime(repo.updated_at)}</span>
+                      {/if}
+                    </div>
+                  </div>
+                  {#if repo.description}
+                    <p class="repo-desc">{repo.description}</p>
+                  {:else}
+                    <p class="repo-desc repo-desc-empty">No description</p>
+                  {/if}
+                  <div class="repo-stats">
+                    {#if repo.open_issues_count > 0}
+                      <span class="badge badge-issues" title="Open issues">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M18 2H6v2H4v2H2v12h2v2h2v2h12v-2h2v-2h2V6h-2V4h-2V2zm0 2v2h2v12h-2v2H6v-2H4V6h2V4h12zm-8 6h4v4h-4v-4zM8 6h8v2H8V6zm0 10H6V8h2v8zm8 0v2H8v-2h8zm0 0h2V8h-2v8z"/>
+                        </svg>
+                        {repo.open_issues_count}
+                      </span>
                     {/if}
-                    {#if repo.updated_at}
-                      <span class="repo-updated">{formatRelativeTime(repo.updated_at)}</span>
+                    {#if repo.open_pr_count > 0}
+                      <span class="badge badge-prs" title="Open PRs">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M2 2h8v8H7v12H5V10H2V2zm2 2v4h4V4H4zm8 1h7.09v9H22v8h-8v-8h3.09V7H12V5zm4 11v4h4v-4h-4z"/>
+                        </svg>
+                        {repo.open_pr_count}
+                      </span>
+                    {/if}
+                    {#if repo.open_issues_count === 0 && repo.open_pr_count === 0}
+                      <span class="badge badge-clean">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M19 4h2v2h-2V4zm-2 4V6h2v2h-2zm-2 0h2v2h-2V8zm0 0h-2V6h2v2zM3 6h8v2H3V6zm8 10H3v2h8v-2zm7 2v-2h2v-2h-2v2h-2v-2h-2v2h2v2h-2v2h2v-2h2zm0 0v2h2v-2h-2z"/>
+                        </svg>
+                        All clear
+                      </span>
+                    {/if}
+                    {#if repo.language}
+                      <span class="badge badge-lang" title="Primary language">
+                        <span class="lang-dot" style="background: {getLanguageColor(repo.language)}"></span>
+                        {repo.language}
+                      </span>
+                    {/if}
+                    {#if repo.default_branch && repo.default_branch !== 'main'}
+                      <span class="badge badge-branch" title="Default branch">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M5 2h2v12h3v3h7v-7h-3V2h8v8h-3v9h-9v3H2v-8h3V2zm15 6V4h-4v4h4zM8 19v-3H4v4h4v-1z"/>
+                        </svg>
+                        {repo.default_branch}
+                      </span>
                     {/if}
                   </div>
-                </div>
-                {#if repo.description}
-                  <p class="repo-desc">{repo.description}</p>
-                {:else}
-                  <p class="repo-desc repo-desc-empty">No description</p>
-                {/if}
-                <div class="repo-stats">
-                  {#if repo.open_issues_count > 0}
-                    <span class="badge badge-issues" title="Open issues">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M18 2H6v2H4v2H2v12h2v2h2v2h12v-2h2v-2h2V6h-2V4h-2V2zm0 2v2h2v12h-2v2H6v-2H4V6h2V4h12zm-8 6h4v4h-4v-4zM8 6h8v2H8V6zm0 10H6V8h2v8zm8 0v2H8v-2h8zm0 0h2V8h-2v8z"/>
-                      </svg>
-                      {repo.open_issues_count}
-                    </span>
-                  {/if}
-                  {#if repo.open_pr_count > 0}
-                    <span class="badge badge-prs" title="Open PRs">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M2 2h8v8H7v12H5V10H2V2zm2 2v4h4V4H4zm8 1h7.09v9H22v8h-8v-8h3.09V7H12V5zm4 11v4h4v-4h-4z"/>
-                      </svg>
-                      {repo.open_pr_count}
-                    </span>
-                  {/if}
-                  {#if repo.open_issues_count === 0 && repo.open_pr_count === 0}
-                    <span class="badge badge-clean">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M19 4h2v2h-2V4zm-2 4V6h2v2h-2zm-2 0h2v2h-2V8zm0 0h-2V6h2v2zM3 6h8v2H3V6zm8 10H3v2h8v-2zm7 2v-2h2v-2h-2v2h-2v-2h-2v2h2v2h-2v2h2v-2h2zm0 0v2h2v-2h-2z"/>
-                      </svg>
-                      All clear
-                    </span>
-                  {/if}
-                  {#if repo.language}
-                    <span class="badge badge-lang" title="Primary language">
-                      <span class="lang-dot" style="background: {getLanguageColor(repo.language)}"></span>
-                      {repo.language}
-                    </span>
-                  {/if}
-                  {#if repo.default_branch && repo.default_branch !== 'main'}
-                    <span class="badge badge-branch" title="Default branch">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M5 2h2v12h3v3h7v-7h-3V2h8v8h-3v9h-9v3H2v-8h3V2zm15 6V4h-4v4h4zM8 19v-3H4v4h4v-1z"/>
-                      </svg>
-                      {repo.default_branch}
-                    </span>
-                  {/if}
-                </div>
-              </button>
-            {/each}
-          </div>
-        {/if}
-      </section>
+                </button>
+              {/each}
+            </div>
+          {/if}
+        </section>
+      </div>
 
-    <!-- Activity Feed -->
-    <section class="section">
-      <h2 class="section-title">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M19 3H5v2H3v14h2v2h14v-2h2V5h-2V3zm0 2v14H5V5h14zm-8 2h2v6h4v2h-6V7z"/>
-        </svg>
-        Recent Activity
-        {#if recentConversations.length > 0}
-          <span class="section-count">{recentConversations.length}</span>
-        {/if}
-      </h2>
-
-      {#if recentConversations.length === 0}
-        <div class="empty-state">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" opacity="0.3">
-            <path d="M20 2H2v20h2V4h16v12H6v2H4v2h2v-2h16V2h-2z"/>
-          </svg>
-          <p>No conversations yet</p>
-          <p class="empty-hint">Start a chat with Gigi to see activity here</p>
-        </div>
-      {:else}
-        <div class="activity-list">
-          {#each recentConversations as conv}
-            <button
-              class="activity-item"
-              onclick={() => handleConversationClick(conv.id)}
-            >
-              <div class="activity-left">
-                <span class="activity-channel-icon" title={conv.channel}>{getChannelIcon(conv.channel)}</span>
-                <div class="activity-info">
-                  <div class="activity-header">
-                    <span class="activity-title">{getConversationDisplayTitle(conv)}</span>
-                    <span class="activity-status" class:open={conv.status === 'open'} class:active={conv.status === 'active'} class:closed={conv.status === 'closed'}>
-                      {conv.status}
-                    </span>
-                  </div>
-                  {#if conv.lastMessagePreview}
-                    <p class="activity-preview">{conv.lastMessagePreview}</p>
-                  {/if}
-                  <div class="activity-meta">
-                    <span class="activity-time">{formatRelativeTime(conv.updatedAt)}</span>
-                    {#if conv.repo}
-                      <span class="activity-repo">{conv.repo.split('/').pop()}</span>
-                    {/if}
-                    {#if conv.usageCost && conv.usageCost > 0}
-                      <span class="activity-cost">${conv.usageCost.toFixed(3)}</span>
-                    {/if}
-                  </div>
-                </div>
-              </div>
-            </button>
-          {/each}
-        </div>
-      {/if}
-    </section>
-  </div>
+      <!-- Right column -->
+      <div class="grid-column">
+        <RecentPRsWidget prs={overview?.recentPRs ?? []} loading={loading} />
+        <RecentIssuesWidget issues={overview?.recentIssues ?? []} loading={loading} />
+      </div>
+    </div>
   {/if}
 </div>
 
@@ -599,6 +557,13 @@
     gap: var(--gigi-space-xl);
   }
 
+  .grid-column {
+    display: flex;
+    flex-direction: column;
+    gap: var(--gigi-space-xl);
+    min-width: 0;
+  }
+
   @media (max-width: 900px) {
     .dashboard-grid {
       grid-template-columns: 1fr;
@@ -757,129 +722,6 @@
   .badge-branch {
     background: rgba(110, 118, 129, 0.1);
     color: var(--gigi-text-muted);
-  }
-
-  /* ── Activity Feed ──────────────────────────────────────────────── */
-
-  .activity-list {
-    display: flex;
-    flex-direction: column;
-    gap: var(--gigi-space-xs);
-  }
-
-  .activity-item {
-    display: block;
-    width: 100%;
-    text-align: left;
-    background: var(--gigi-bg-secondary);
-    border: var(--gigi-border-width) solid var(--gigi-border-default);
-    border-radius: var(--gigi-radius-md);
-    padding: var(--gigi-space-sm) var(--gigi-space-md);
-    cursor: pointer;
-    transition: all var(--gigi-transition-fast);
-    font-family: var(--gigi-font-sans);
-    color: var(--gigi-text-primary);
-  }
-
-  .activity-item:hover {
-    border-color: var(--gigi-accent-purple);
-    background: var(--gigi-bg-hover);
-  }
-
-  .activity-left {
-    display: flex;
-    gap: var(--gigi-space-sm);
-    align-items: flex-start;
-  }
-
-  .activity-channel-icon {
-    font-size: var(--gigi-font-size-base);
-    flex-shrink: 0;
-    width: 24px;
-    text-align: center;
-    margin-top: 1px;
-  }
-
-  .activity-info {
-    flex: 1;
-    min-width: 0;
-  }
-
-  .activity-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--gigi-space-sm);
-    margin-bottom: 2px;
-  }
-
-  .activity-title {
-    font-size: var(--gigi-font-size-sm);
-    font-weight: 500;
-    color: var(--gigi-text-primary);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    flex: 1;
-  }
-
-  .activity-preview {
-    font-size: var(--gigi-font-size-xs);
-    color: var(--gigi-text-muted);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    margin-bottom: 3px;
-    line-height: 1.3;
-  }
-
-  .activity-status {
-    font-size: 10px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    padding: 1px 6px;
-    border-radius: var(--gigi-radius-full);
-    flex-shrink: 0;
-  }
-
-  .activity-status.open {
-    color: var(--gigi-accent-green);
-    background: rgba(63, 185, 80, 0.12);
-  }
-  .activity-status.active {
-    color: var(--gigi-accent-orange);
-    background: rgba(210, 153, 34, 0.12);
-  }
-  .activity-status.closed {
-    color: var(--gigi-text-muted);
-    background: rgba(110, 118, 129, 0.12);
-  }
-
-  .activity-meta {
-    display: flex;
-    align-items: center;
-    gap: var(--gigi-space-sm);
-  }
-
-  .activity-time {
-    font-size: var(--gigi-font-size-xs);
-    color: var(--gigi-text-muted);
-  }
-
-  .activity-repo {
-    font-size: 10px;
-    color: var(--gigi-accent-blue);
-    background: rgba(88, 166, 255, 0.1);
-    padding: 0 5px;
-    border-radius: var(--gigi-radius-full);
-    font-weight: 500;
-  }
-
-  .activity-cost {
-    font-size: 10px;
-    color: var(--gigi-text-muted);
-    font-variant-numeric: tabular-nums;
   }
 
   /* ── Loading / Error ────────────────────────────────────────────── */
