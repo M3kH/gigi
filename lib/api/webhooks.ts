@@ -8,6 +8,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto'
 import { getConfig, checkRecentAction } from '../core/store'
 import { handleMessage } from '../core/router'
 import { routeWebhook } from './webhookRouter'
+import { routeWorkflowEvent } from './ciRouter'
 import { notifyWebhook } from './webhookNotifier'
 import { handlePushDispatch } from './crossRepoDispatch'
 import { emit } from '../core/events'
@@ -17,8 +18,8 @@ import type { Context } from 'hono'
 // ─── Types ──────────────────────────────────────────────────────────
 
 export interface WebhookPayload {
-  repository?: { name: string; full_name: string; html_url?: string }
-  action?: string // e.g. 'created', 'deleted', 'opened', 'closed'
+  repository?: { name: string; full_name: string; html_url?: string; owner?: { login: string } }
+  action?: string // e.g. 'created', 'deleted', 'opened', 'closed', 'completed'
   issue?: { number: number; title: string; body: string; html_url: string; user?: { login: string }; pull_request?: unknown }
   pull_request?: { title: string; number: number; head?: { ref: string }; base?: { ref: string }; merged: boolean; user?: { login: string }; html_url: string }
   number?: number
@@ -27,6 +28,30 @@ export interface WebhookPayload {
   pusher?: { login: string }
   sender?: { login: string }
   ref?: string
+  // Gitea Actions workflow events
+  workflow_run?: {
+    id: number
+    name?: string
+    display_title?: string
+    head_branch?: string
+    head_sha?: string
+    status?: string
+    conclusion?: string
+    event?: string
+    html_url?: string
+    pull_requests?: Array<{ number: number }>
+  }
+  workflow_job?: {
+    id: number
+    run_id?: number
+    name?: string
+    workflow_name?: string
+    head_branch?: string
+    head_sha?: string
+    status?: string
+    conclusion?: string
+    html_url?: string
+  }
 }
 
 export interface WebhookResult {
@@ -93,6 +118,24 @@ export const handleWebhook = async (c: Context): Promise<Response> => {
     handlePushDispatch(payload.repository.name, payload.ref, headSha).catch(err =>
       console.warn('[webhook] Cross-repo dispatch failed:', (err as Error).message)
     )
+  }
+
+  // CI monitor: route workflow_run / workflow_job events for auto-fix
+  if (event === 'workflow_run' || event === 'workflow_job') {
+    try {
+      const ciResult = await routeWorkflowEvent(event, payload)
+      // Broadcast to frontend
+      emit({
+        type: 'gitea_event',
+        event,
+        action: payload.action,
+        repo: payload.repository?.name,
+      })
+      return c.json({ ok: true, processed: event, ci: ciResult })
+    } catch (err) {
+      console.error(`[webhook] CI routing error for ${event}:`, (err as Error).message)
+      return c.json({ error: (err as Error).message }, 500)
+    }
   }
 
   // Broadcast to frontend via SSE so the UI updates in real-time

@@ -163,6 +163,35 @@ export const notifyWebhook = async (event: string, payload: WebhookPayload): Pro
   }
 }
 
+// ─── Generic Telegram Send ──────────────────────────────────────────
+
+/**
+ * Send a plain text message to the operator via Telegram.
+ * Used by CI monitor and other internal systems for notifications.
+ * Returns true if sent, false if skipped (no bot or chat ID configured).
+ */
+export const notifyTelegram = async (message: string): Promise<boolean> => {
+  if (!bot) return false
+
+  const chatId = await getConfig('telegram_chat_id')
+  if (!chatId) return false
+
+  try {
+    await bot.api.sendMessage(chatId, message, { parse_mode: 'Markdown' })
+    return true
+  } catch {
+    try {
+      // Retry without markdown
+      const plainMessage = message.replace(/[*_`\[\]()]/g, '')
+      await bot.api.sendMessage(chatId, plainMessage)
+      return true
+    } catch (err) {
+      console.error('[webhookNotifier] notifyTelegram failed:', (err as Error).message)
+      return false
+    }
+  }
+}
+
 // ─── Thread-Aware Cross-Channel Notifications ────────────────────────
 
 /**
