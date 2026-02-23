@@ -15,10 +15,20 @@
   <a href="#features">Features</a> &middot;
   <a href="#architecture">Architecture</a> &middot;
   <a href="#configuration">Configuration</a> &middot;
+  <a href="#security">Security</a> &middot;
   <a href="#license">License</a>
 </p>
 
 ---
+
+> [!CAUTION]
+> **Gigi is a power tool for developers who understand what they're running.**
+>
+> - The agent executes shell commands with **full system access** (`dangerouslySkipPermissions`). It can read, write, and delete any file the host process can reach.
+> - The bundled Gitea instance uses **automatic web authentication** — anyone with network access can browse repos, create issues, and merge PRs without logging in.
+> - API keys and tokens (Anthropic, Gitea, Telegram) are stored in the database and available to the agent at runtime.
+>
+> **Never expose Gigi to the public internet.** Run it on a private network, behind a VPN, or bound to `localhost` only. You are fully responsible for securing your deployment. See [Security](#security) for details.
 
 ## The Problem
 
@@ -55,6 +65,9 @@ docker compose up -d
 ```
 
 Open `http://localhost:3100` — the setup wizard walks you through connecting your Anthropic API key, Gitea instance, and (optionally) Telegram.
+
+> [!IMPORTANT]
+> Keep Gigi bound to `localhost` or a private network. See [Security](#security) before exposing it to any external network.
 
 **Services started:**
 
@@ -290,6 +303,32 @@ Automated via Gitea Actions (`.gitea/workflows/build.yml`):
 2. Push to Gitea container registry
 3. Deploy stack via `docker stack deploy`
 4. Update reverse proxy config
+
+## Security
+
+Gigi is designed for **trusted, private environments**. It trades sandboxing for autonomy — which is the point — but this means you must secure the perimeter yourself.
+
+### What you should know
+
+| Risk | Detail |
+|------|--------|
+| **Unrestricted shell** | The agent runs with `dangerouslySkipPermissions` so it can execute any command without confirmation prompts. This is required for autonomous operation but means a misconfigured prompt or malicious input could cause damage. |
+| **Pre-authenticated Gitea** | The Gitea proxy injects `X-WEBAUTH-USER` automatically. There is no login screen — anyone who can reach the UI has full access to all repositories. |
+| **Credentials in database** | API tokens for Anthropic, Gitea, and Telegram are stored in PostgreSQL. Protect your database connection and backups accordingly. |
+| **Browser automation** | The agent controls a real Chrome instance. It can navigate to any URL, execute JavaScript, and interact with pages — including authenticated sessions if cookies are present. |
+
+### Recommendations
+
+- **Bind to localhost** or a private network interface — never `0.0.0.0` on a public-facing machine.
+- **Use a VPN or SSH tunnel** if you need remote access.
+- **Run in Docker** with appropriate network isolation (the default `docker compose` setup does this).
+- **Restrict database access** — don't expose PostgreSQL to the network.
+- **Review agent activity** — check the conversation history and Gitea audit logs periodically.
+- **Set a cost budget** — use Gigi's built-in token tracking to cap spending and prevent runaway loops.
+
+### Reporting vulnerabilities
+
+If you discover a security issue, please open a private issue or contact the maintainers directly rather than posting publicly.
 
 ## License
 
