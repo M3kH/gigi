@@ -165,6 +165,55 @@ agent:
     const config = loadAgentConfig(testConfigPath)
     assert.equal(config.extraPromptFile, undefined)
   })
+
+  it('loads git.author override when both name and email are provided', async () => {
+    await writeFile(testConfigPath, `
+agent:
+  name: Gigi
+  git:
+    name: Gigi
+    email: gigi@example.com
+    author:
+      name: Mauro Mandracchia
+      email: info@ideabile.com
+`)
+    const config = loadAgentConfig(testConfigPath)
+    assert.equal(config.git.name, 'Gigi')
+    assert.equal(config.git.email, 'gigi@example.com')
+    assert.deepEqual(config.git.author, {
+      name: 'Mauro Mandracchia',
+      email: 'info@ideabile.com',
+    })
+  })
+
+  it('omits git.author when only name is provided (no email)', async () => {
+    await writeFile(testConfigPath, `
+agent:
+  git:
+    name: Gigi
+    email: gigi@example.com
+    author:
+      name: Mauro
+`)
+    const config = loadAgentConfig(testConfigPath)
+    assert.equal(config.git.author, undefined)
+  })
+
+  it('omits git.author when neither name nor email is provided', async () => {
+    await writeFile(testConfigPath, `
+agent:
+  git:
+    name: Gigi
+    email: gigi@example.com
+`)
+    const config = loadAgentConfig(testConfigPath)
+    assert.equal(config.git.author, undefined)
+  })
+
+  it('defaults have no git.author override', () => {
+    const config = loadAgentConfig('/tmp/nonexistent-gigi-config.yaml')
+    assert.equal(config.git.author, undefined)
+  })
 })
 
 // ── Extra Prompt File ───────────────────────────────────────────────
@@ -373,5 +422,44 @@ describe('buildSystemPrompt', () => {
       git: { name: 'Gigi', email: 'gigi@localhost' },
     })
     assert.ok(prompt.includes('## Organization Repositories'))
+  })
+
+  it('uses default Co-Authored-By when no author override is set', async () => {
+    const prompt = await buildSystemPrompt({
+      name: 'Gigi',
+      description: 'a persistent AI coordinator',
+      org: 'idea',
+      git: { name: 'Gigi', email: 'gigi@localhost' },
+    })
+    assert.ok(prompt.includes('Co-Authored-By: Claude <noreply@anthropic.com>'))
+    assert.ok(!prompt.includes('Co-Authored-By: Gigi'))
+  })
+
+  it('uses agent identity for Co-Authored-By when author override is set', async () => {
+    const prompt = await buildSystemPrompt({
+      name: 'Gigi',
+      description: 'a persistent AI coordinator',
+      org: 'idea',
+      git: {
+        name: 'Gigi',
+        email: 'gigi@ideabile.com',
+        author: {
+          name: 'Mauro Mandracchia',
+          email: 'info@ideabile.com',
+        },
+      },
+    })
+    assert.ok(prompt.includes('Co-Authored-By: Gigi <gigi@ideabile.com>'))
+    assert.ok(!prompt.includes('Co-Authored-By: Claude'))
+  })
+
+  it('includes git commit formatting section', async () => {
+    const prompt = await buildSystemPrompt({
+      name: 'Gigi',
+      description: 'a persistent AI coordinator',
+      org: 'idea',
+      git: { name: 'Gigi', email: 'gigi@localhost' },
+    })
+    assert.ok(prompt.includes('## Git commit formatting'))
   })
 })

@@ -257,8 +257,17 @@ ${retryCount === 2 ? 'This is your 2nd attempt. If it fails again, you will need
 const configureGit = async (): Promise<void> => {
   try {
     const agentConfig = loadAgentConfig()
-    execSync(`git config --global user.name "${agentConfig.git.name}"`)
-    execSync(`git config --global user.email "${agentConfig.git.email}"`)
+
+    // When author override is set, use operator's identity for commits
+    // and the agent appears only as Co-Authored-By in commit messages.
+    const commitName = agentConfig.git.author?.name ?? agentConfig.git.name
+    const commitEmail = agentConfig.git.author?.email ?? agentConfig.git.email
+    execSync(`git config --global user.name "${commitName}"`)
+    execSync(`git config --global user.email "${commitEmail}"`)
+
+    if (agentConfig.git.author) {
+      console.log(`[agent] Git author override: ${commitName} <${commitEmail}> (agent as Co-Author: ${agentConfig.git.name} <${agentConfig.git.email}>)`)
+    }
 
     // SSH key — mounted as Docker secret at /run/secrets/gigi_ssh_key
     const sshKeyPath = '/run/secrets/gigi_ssh_key'

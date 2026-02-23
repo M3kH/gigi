@@ -15,10 +15,17 @@ agent:
   description: a persistent AI coordinator
   # Gitea organization for repo operations
   org: ${GITEA_ORG:-idea}
-  # Git identity for commits
+  # Git identity for the agent (used as Co-Authored-By when author override is set)
   git:
     name: Gigi
     email: gigi@localhost
+    # Optional: override the commit author (operator identity).
+    # When set, commits are authored as this identity and the agent
+    # appears only as Co-Authored-By in commit messages.
+    # Example:
+    #   author:
+    #     name: Your Name
+    #     email: you@example.com
   # Optional: Extra infrastructure context shown to the agent
   # infrastructure: "3-node ARM64 cluster running Docker Swarm"
   # Optional: Extra prompt sections appended to system prompt (inline)

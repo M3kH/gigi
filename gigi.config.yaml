@@ -13,10 +13,16 @@ agent:
   description: ${AGENT_DESCRIPTION:-a persistent AI coordinator}
   # Gitea organization for repo operations
   org: ${GITEA_ORG:-idea}
-  # Git identity for commits
+  # Git identity for the agent (used as Co-Authored-By when author override is set)
   git:
     name: ${AGENT_GIT_NAME:-Gigi}
     email: ${AGENT_GIT_EMAIL:-gigi@localhost}
+    # Optional: override the commit author (operator identity).
+    # When set, commits are authored as this identity and the agent
+    # appears only as Co-Authored-By. Omit to have the agent be the committer.
+    # author:
+    #   name: ${GIT_AUTHOR_NAME:-}
+    #   email: ${GIT_AUTHOR_EMAIL:-}
   # Optional: path to an extra prompt file for dev-specific or deployment-specific sections
   # Mount a file via Docker and set AGENT_EXTRA_PROMPT_FILE to its path
   # This enables "dev" vs "generic" prompt profiles without changing gigi.config.yaml

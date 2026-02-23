@@ -28,8 +28,19 @@ export interface AgentConfig {
   org: string
   /** Git identity for commits */
   git: {
+    /** Agent's git name — used as committer when no author override, or as Co-Authored-By when author is set */
     name: string
+    /** Agent's git email — used as committer when no author override, or as Co-Authored-By when author is set */
     email: string
+    /**
+     * Optional: override the commit author (operator identity).
+     * When set, git user.name/email are configured to the author's identity,
+     * and the agent appears only as Co-Authored-By in commit messages.
+     */
+    author?: {
+      name: string
+      email: string
+    }
   }
   /** Infrastructure details shown in prompt (optional) */
   infrastructure?: string
@@ -95,6 +106,7 @@ export const loadAgentConfig = (configPath?: string): AgentConfig => {
   }
 
   const gitSection = agentSection.git as Record<string, unknown> | undefined
+  const authorSection = gitSection?.author as Record<string, unknown> | undefined
 
   const config: AgentConfig = {
     name: (agentSection.name as string) || DEFAULT_CONFIG.name,
@@ -103,6 +115,12 @@ export const loadAgentConfig = (configPath?: string): AgentConfig => {
     git: {
       name: gitSection?.name as string || DEFAULT_CONFIG.git.name,
       email: gitSection?.email as string || DEFAULT_CONFIG.git.email,
+      ...(authorSection?.name && authorSection?.email ? {
+        author: {
+          name: authorSection.name as string,
+          email: authorSection.email as string,
+        },
+      } : {}),
     },
   }
 
@@ -279,12 +297,19 @@ export const buildSystemPrompt = async (configOverride?: AgentConfig): Promise<s
   // Resolve dynamic context providers
   const dynamicVars = await resolveProviders()
 
+  // When author override is set, the agent is Co-Author and commits use the operator's identity.
+  // Otherwise, the agent is the committer and Co-Authored-By uses the default Claude identity.
+  const coAuthorLine = config.git.author
+    ? `Co-Authored-By: ${config.git.name} <${config.git.email}>`
+    : 'Co-Authored-By: Claude <noreply@anthropic.com>'
+
   const vars: Record<string, string> = {
     name: config.name,
     description: config.description,
     org: config.org,
     git_name: config.git.name,
     git_email: config.git.email,
+    co_author_line: coAuthorLine,
     gitea_url: '$GITEA_URL',
     ...dynamicVars,
   }
@@ -317,7 +342,7 @@ export const buildSystemPrompt = async (configOverride?: AgentConfig): Promise<s
  * The system prompt template with {{placeholder}} variables.
  * All operator-specific values are replaced at runtime from config.
  *
- * Static placeholders: {{name}}, {{description}}, {{org}}, {{git_name}}, {{git_email}}, {{gitea_url}}
+ * Static placeholders: {{name}}, {{description}}, {{org}}, {{git_name}}, {{git_email}}, {{co_author_line}}, {{gitea_url}}
  * Dynamic placeholders: {{repos}}, {{mcp_tools}} (resolved by context providers)
  */
 const PROMPT_TEMPLATE = `You are {{name}}, {{description}}.
@@ -400,6 +425,23 @@ Git credentials are PRE-CONFIGURED. Just run git commands directly.
   - Example: branch \`fix/kanban-bugs\` → work in \`/workspace/gigi-fix-kanban-bugs\`
 
 This prevents conflicts when multiple agents run concurrently on different branches.
+
+## Git commit formatting
+
+When creating git commits, ALWAYS end the commit message with:
+\`\`\`
+{{co_author_line}}
+\`\`\`
+
+Use a HEREDOC to ensure correct formatting:
+\`\`\`bash
+git commit -m "$(cat <<'EOF'
+feat: description of the change
+
+{{co_author_line}}
+EOF
+)"
+\`\`\`
 
 ## How to create a PR
 
