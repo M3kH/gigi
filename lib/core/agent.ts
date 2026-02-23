@@ -494,8 +494,8 @@ export const runAgent = async (
     systemPrompt = MINIMAL_SYSTEM_PROMPT
     console.log(`[agent] Using MINIMAL prompt (${route.complexity}): ${route.reason}`)
   } else {
-    // Build configurable prompt from template + config
-    const basePrompt = buildSystemPrompt()
+    // Build configurable prompt from template + config (async for dynamic context)
+    const basePrompt = await buildSystemPrompt()
 
     // Load knowledge and inject into full prompt
     let knowledge = ''

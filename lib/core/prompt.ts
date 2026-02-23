@@ -5,6 +5,11 @@
  * from modular sections with {{placeholder}} interpolation. This replaces the
  * hardcoded SYSTEM_PROMPT constant, making Gigi configurable for any operator.
  *
+ * Features:
+ * - Template interpolation with {{placeholders}}
+ * - Dynamic context providers (repos, MCP tools) injected at build time
+ * - Extra prompt file support for dev vs generic profiles
+ *
  * Part of issue #66: Make system prompt configurable and templated.
  */
 
@@ -28,8 +33,10 @@ export interface AgentConfig {
   }
   /** Infrastructure details shown in prompt (optional) */
   infrastructure?: string
-  /** Extra prompt sections appended to the system prompt (optional) */
+  /** Extra prompt sections appended to the system prompt (optional, inline) */
   extraSections?: string
+  /** Path to an extra prompt file to append (supports env var interpolation) */
+  extraPromptFile?: string
 }
 
 const DEFAULT_CONFIG: AgentConfig = {
@@ -105,6 +112,9 @@ export const loadAgentConfig = (configPath?: string): AgentConfig => {
   if (agentSection.extra_sections) {
     config.extraSections = agentSection.extra_sections as string
   }
+  if (agentSection.extra_prompt_file) {
+    config.extraPromptFile = agentSection.extra_prompt_file as string
+  }
 
   console.log(`[prompt] Loaded agent config: name=${config.name}, org=${config.org}`)
   cachedConfig = config
@@ -128,14 +138,146 @@ export const interpolateTemplate = (template: string, vars: Record<string, strin
   })
 }
 
+// ─── Dynamic Context Providers ──────────────────────────────────────
+
+/**
+ * A context provider generates dynamic content for a template placeholder.
+ * Providers are async to support API calls (e.g., fetching repos from Gitea).
+ */
+export interface ContextProvider {
+  /** Placeholder name (e.g., "repos" for {{repos}}) */
+  name: string
+  /** Generate the content for this placeholder */
+  resolve: () => Promise<string>
+}
+
+/**
+ * Fetch org repos from Gitea API and format as a markdown list.
+ * Returns a concise summary: "- **repo-name** — description"
+ */
+export const fetchRepoContext = async (org?: string): Promise<string> => {
+  const giteaUrl = process.env.GITEA_URL
+  const giteaToken = process.env.GITEA_TOKEN
+  if (!giteaUrl || !giteaToken) return '_Gitea not configured — repo list unavailable_'
+
+  try {
+    const targetOrg = org || process.env.GITEA_ORG || 'idea'
+    const res = await fetch(`${giteaUrl}/api/v1/orgs/${targetOrg}/repos?limit=50`, {
+      headers: { 'Authorization': `token ${giteaToken}` },
+    })
+    if (!res.ok) return `_Could not fetch repos (HTTP ${res.status})_`
+
+    const repos = await res.json() as Array<{ name: string; description: string; language: string; archived: boolean }>
+    const active = repos.filter(r => !r.archived)
+
+    if (active.length === 0) return '_No repos found_'
+
+    return active
+      .map(r => {
+        const desc = r.description ? ` — ${r.description}` : ''
+        const lang = r.language ? ` (${r.language})` : ''
+        return `- **${r.name}**${lang}${desc}`
+      })
+      .join('\n')
+  } catch (err) {
+    console.warn('[prompt] Failed to fetch repos:', (err as Error).message)
+    return '_Failed to fetch repo list_'
+  }
+}
+
+/**
+ * List registered MCP tools with their descriptions.
+ * Lazy-imports the registry to avoid circular deps.
+ */
+export const getMCPToolContext = async (): Promise<string> => {
+  try {
+    // Lazy import to avoid circular dependency (registry → tools → ... → prompt)
+    const { listTools } = await import('./registry')
+    const tools = listTools()
+    if (tools.length === 0) return '_No MCP tools registered_'
+
+    return tools
+      .map(t => `- **${t.name}** — ${t.description}`)
+      .join('\n')
+  } catch {
+    return '_Could not list MCP tools_'
+  }
+}
+
+/** Built-in context providers */
+export const defaultProviders: ContextProvider[] = [
+  { name: 'repos', resolve: fetchRepoContext },
+  { name: 'mcp_tools', resolve: getMCPToolContext },
+]
+
+/**
+ * Resolve all context providers and return a vars map.
+ * Results are cached for the duration of the process (cleared on config reset).
+ */
+let providerCache: Record<string, string> | null = null
+
+export const resolveProviders = async (providers: ContextProvider[] = defaultProviders): Promise<Record<string, string>> => {
+  if (providerCache) return providerCache
+
+  const results: Record<string, string> = {}
+  await Promise.all(
+    providers.map(async (p) => {
+      try {
+        results[p.name] = await p.resolve()
+      } catch (err) {
+        console.warn(`[prompt] Provider "${p.name}" failed:`, (err as Error).message)
+        results[p.name] = `_Provider "${p.name}" failed_`
+      }
+    })
+  )
+
+  providerCache = results
+  return results
+}
+
+/** Reset provider cache (for testing or refresh) */
+export const resetProviderCache = (): void => {
+  providerCache = null
+}
+
+// ─── Extra Prompt File ──────────────────────────────────────────────
+
+/**
+ * Load extra prompt content from a file path.
+ * Returns empty string if the file doesn't exist or path is empty.
+ */
+export const loadExtraPromptFile = (filePath?: string): string => {
+  if (!filePath) return ''
+
+  const resolved = resolve(filePath)
+  if (!existsSync(resolved)) {
+    console.warn(`[prompt] Extra prompt file not found: ${resolved}`)
+    return ''
+  }
+
+  try {
+    const content = readFileSync(resolved, 'utf-8').trim()
+    console.log(`[prompt] Loaded extra prompt file: ${resolved} (${content.length} chars)`)
+    return content
+  } catch (err) {
+    console.warn(`[prompt] Failed to read extra prompt file: ${(err as Error).message}`)
+    return ''
+  }
+}
+
 // ─── System Prompt Builder ──────────────────────────────────────────
 
 /**
- * Build the full system prompt from config + template.
- * This replaces the old hardcoded SYSTEM_PROMPT constant.
+ * Build the full system prompt from config + template + dynamic context.
+ *
+ * Now async to support dynamic context providers (repo list, MCP tools).
+ * Falls back to sync behavior if providers fail.
  */
-export const buildSystemPrompt = (configOverride?: AgentConfig): string => {
+export const buildSystemPrompt = async (configOverride?: AgentConfig): Promise<string> => {
   const config = configOverride ?? loadAgentConfig()
+
+  // Resolve dynamic context providers
+  const dynamicVars = await resolveProviders()
 
   const vars: Record<string, string> = {
     name: config.name,
@@ -144,6 +286,7 @@ export const buildSystemPrompt = (configOverride?: AgentConfig): string => {
     git_name: config.git.name,
     git_email: config.git.email,
     gitea_url: '$GITEA_URL',
+    ...dynamicVars,
   }
 
   const prompt = interpolateTemplate(PROMPT_TEMPLATE, vars)
@@ -159,6 +302,12 @@ export const buildSystemPrompt = (configOverride?: AgentConfig): string => {
     sections.push(`\n${config.extraSections}`)
   }
 
+  // Load extra prompt file (for dev vs generic profiles)
+  const extraFileContent = loadExtraPromptFile(config.extraPromptFile)
+  if (extraFileContent) {
+    sections.push(`\n${extraFileContent}`)
+  }
+
   return sections.join('\n')
 }
 
@@ -167,6 +316,9 @@ export const buildSystemPrompt = (configOverride?: AgentConfig): string => {
 /**
  * The system prompt template with {{placeholder}} variables.
  * All operator-specific values are replaced at runtime from config.
+ *
+ * Static placeholders: {{name}}, {{description}}, {{org}}, {{git_name}}, {{git_email}}, {{gitea_url}}
+ * Dynamic placeholders: {{repos}}, {{mcp_tools}} (resolved by context providers)
  */
 const PROMPT_TEMPLATE = `You are {{name}}, {{description}}.
 You help the operator build, deploy, and maintain projects.
@@ -265,7 +417,7 @@ This prevents conflicts when multiple agents run concurrently on different branc
    **IMPORTANT**: Include "Closes #N" in the PR body to link to the issue
 6. Notify the operator via MCP telegram_send tool:
    \`\`\`
-   Use the telegram_send tool with text: "✅ PR created: [title](url)"
+   Use the telegram_send tool with text: "PR created: [title](url)"
    \`\`\`
 
 ## Project Board & Label Workflow
@@ -416,6 +568,10 @@ Checklist for every code task (working on an issue):
 - [ ] (Optional) Sent Telegram notification if TELEGRAM_BOT_TOKEN is set
 
 If you realize you haven't completed the checklist, continue immediately.
+
+## Organization Repositories
+
+{{repos}}
 
 ## Infrastructure
 

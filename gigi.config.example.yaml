@@ -21,8 +21,25 @@ agent:
     email: gigi@localhost
   # Optional: Extra infrastructure context shown to the agent
   # infrastructure: "3-node ARM64 cluster running Docker Swarm"
-  # Optional: Extra prompt sections appended to system prompt
+  # Optional: Extra prompt sections appended to system prompt (inline)
   # extra_sections: "## Custom Rules\n- Always use TypeScript\n- Follow project conventions"
+
+  # Optional: Path to an extra prompt file for deployment-specific sections.
+  # This enables "dev" vs "generic" prompt profiles:
+  # - Generic users: Don't set this → base prompt only
+  # - Dev team: Mount a prompt file via Docker and set AGENT_EXTRA_PROMPT_FILE
+  #
+  # The file should be a markdown document with additional ## sections.
+  # Example: extra_prompt_file: /config/dev-prompt.md
+  extra_prompt_file: ${AGENT_EXTRA_PROMPT_FILE:-}
+
+# ── Dynamic Context ─────────────────────────────────────────────────
+# The following context is auto-injected into the prompt at build time:
+#
+# {{repos}}      — List of org repos with descriptions (from Gitea API)
+# {{mcp_tools}}  — List of registered MCP tools with descriptions
+#
+# These are populated automatically. No configuration needed.
 
 # ── Backup Configuration ─────────────────────────────────────────────
 

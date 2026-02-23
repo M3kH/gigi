@@ -17,6 +17,10 @@ agent:
   git:
     name: ${AGENT_GIT_NAME:-Gigi}
     email: ${AGENT_GIT_EMAIL:-gigi@localhost}
+  # Optional: path to an extra prompt file for dev-specific or deployment-specific sections
+  # Mount a file via Docker and set AGENT_EXTRA_PROMPT_FILE to its path
+  # This enables "dev" vs "generic" prompt profiles without changing gigi.config.yaml
+  extra_prompt_file: ${AGENT_EXTRA_PROMPT_FILE:-}
 
 # ── Backup Configuration ─────────────────────────────────────────────
 
