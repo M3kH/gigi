@@ -25,6 +25,7 @@ export interface SetupResult {
 let status = $state<SetupStatus | null>(null)
 let loading = $state(true)
 let error = $state<string | null>(null)
+let dismissed = $state(false)
 
 // ── API ───────────────────────────────────────────────────────────────
 
@@ -68,7 +69,11 @@ export function isSetupLoading(): boolean {
 }
 
 export function isSetupComplete(): boolean {
-  return status?.claude === true
+  return status?.claude === true && dismissed
+}
+
+export function dismissSetup(): void {
+  dismissed = true
 }
 
 export function getSetupError(): string | null {

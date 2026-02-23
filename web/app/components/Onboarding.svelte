@@ -9,6 +9,7 @@
   import {
     getSetupStatus,
     submitSetup,
+    dismissSetup,
     type SetupStatus,
     type SetupResult,
   } from '$lib/stores/setup.svelte'
@@ -160,6 +161,15 @@
         {/if}
       {/if}
     </section>
+
+    <!-- Continue button — appears once Claude (required step) is configured -->
+    {#if status?.claude}
+      <div class="continue">
+        <button class="continue-btn" onclick={dismissSetup}>
+          Continue to chat
+        </button>
+      </div>
+    {/if}
   </div>
 </div>
 
@@ -308,5 +318,26 @@
 
   .feedback.error {
     color: var(--gigi-accent-red);
+  }
+
+  .continue {
+    margin-top: var(--gigi-space-xl);
+    text-align: center;
+  }
+
+  .continue-btn {
+    width: 100%;
+    padding: var(--gigi-space-md) var(--gigi-space-xl);
+    background: var(--gigi-accent-green);
+    color: var(--gigi-bg-primary);
+    border: none;
+    border-radius: var(--gigi-radius-sm);
+    font-size: var(--gigi-font-size-base);
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .continue-btn:hover {
+    filter: brightness(1.1);
   }
 </style>

@@ -24,7 +24,7 @@ export const getSetupStatus = async (): Promise<SetupStatus> => {
   const config = await getAllConfig()
   return {
     claude: !!config.claude_oauth_token,
-    telegram: !!config.telegram_token && !!config.telegram_chat_id,
+    telegram: !!config.telegram_token,
     gitea: !!config.gitea_url && !!config.gitea_token,
     complete: !!config.claude_oauth_token && !!config.telegram_token && !!config.gitea_token,
   }
