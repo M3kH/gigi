@@ -1,83 +1,95 @@
 import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const ROOT = resolve(import.meta.dirname, '..');
 
 describe('Gitea branding configuration', () => {
-  describe('APP_LOGO points to logo.png', () => {
-    it('docker-compose.local.yml includes GITEA__ui__APP_LOGO=assets/img/logo.png', () => {
-      const content = readFileSync(resolve(ROOT, 'docker-compose.local.yml'), 'utf-8');
-      assert.ok(
-        content.includes('GITEA__ui__APP_LOGO=assets/img/logo.png'),
-        'docker-compose.local.yml should set APP_LOGO to assets/img/logo.png'
-      );
-    });
-
-    it('aio app.ini template includes APP_LOGO = assets/img/logo.png', () => {
-      const content = readFileSync(resolve(ROOT, 'aio/entrypoint.sh'), 'utf-8');
-      assert.ok(
-        content.includes('APP_LOGO = assets/img/logo.png'),
-        'aio entrypoint should set APP_LOGO in app.ini template'
-      );
-    });
-
-    it('logo.png asset exists in gitea custom public directory', () => {
+  describe('custom logo assets', () => {
+    it('logo.png exists in gitea custom public directory', () => {
       const logoPath = resolve(ROOT, 'gitea/custom/public/assets/img/logo.png');
-      // readFileSync throws if file doesn't exist
       const buf = readFileSync(logoPath);
-      assert.ok(buf.length > 0, 'logo.png should not be empty');
+      assert.ok(buf.length > 1000, 'logo.png should be a real image (not empty)');
+    });
+
+    it('favicon.png exists in gitea custom public directory', () => {
+      const faviconPath = resolve(ROOT, 'gitea/custom/public/assets/img/favicon.png');
+      const buf = readFileSync(faviconPath);
+      assert.ok(buf.length > 1000, 'favicon.png should be a real image');
+    });
+
+    it('no SVG wrappers exist (they break when loaded via <img> tag)', () => {
+      const logoSvg = resolve(ROOT, 'gitea/custom/public/assets/img/logo.svg');
+      const faviconSvg = resolve(ROOT, 'gitea/custom/public/assets/img/favicon.svg');
+      assert.ok(!existsSync(logoSvg), 'logo.svg should not exist — SVG wrappers with embedded PNGs break in <img> tags');
+      assert.ok(!existsSync(faviconSvg), 'favicon.svg should not exist');
     });
   });
 
-  describe('navbar logo CSS', () => {
-    it('extra_links.tmpl contains navbar logo scaling and positioning CSS', () => {
+  describe('navbar template uses logo.png', () => {
+    it('head_navbar.tmpl references logo.png instead of logo.svg', () => {
       const content = readFileSync(
-        resolve(ROOT, 'gitea/custom/templates/custom/extra_links.tmpl'),
+        resolve(ROOT, 'gitea/custom/templates/base/head_navbar.tmpl'),
         'utf-8'
       );
+      assert.ok(
+        content.includes('/img/logo.png'),
+        'navbar template should reference logo.png'
+      );
+      assert.ok(
+        !content.includes('/img/logo.svg'),
+        'navbar template should NOT reference logo.svg'
+      );
+    });
 
-      assert.ok(
-        content.includes('#navbar-logo > img:nth-child(1)'),
-        'should have CSS selector for navbar logo image'
+    it('head_navbar.tmpl is a full template (not stripped)', () => {
+      const content = readFileSync(
+        resolve(ROOT, 'gitea/custom/templates/base/head_navbar.tmpl'),
+        'utf-8'
       );
       assert.ok(
-        content.includes('transform: scale(3) translateY(4px)'),
-        'should scale and translate the logo image'
+        content.includes('<nav id="navbar"'),
+        'navbar template should contain the full navigation markup'
       );
       assert.ok(
-        content.includes('#navbar-logo'),
-        'should have CSS selector for navbar-logo container'
-      );
-      assert.ok(
-        content.includes('margin-left: 2.643em'),
-        'should set left margin for centering'
-      );
-      assert.ok(
-        content.includes('div.container:nth-child(1)'),
-        'should have CSS for container padding'
-      );
-      assert.ok(
-        content.includes('padding-top: 1.2em'),
-        'should set top padding on container'
+        content.includes('navbar-logo'),
+        'navbar template should contain the logo element'
       );
     });
   });
 
-  describe('deploy script handles public assets', () => {
-    it('deploy-gitea-templates.sh copies public assets', () => {
-      const content = readFileSync(
-        resolve(ROOT, 'scripts/deploy-gitea-templates.sh'),
-        'utf-8'
+  describe('AIO entrypoint template symlinks', () => {
+    const entrypoint = readFileSync(resolve(ROOT, 'aio/entrypoint.sh'), 'utf-8');
+
+    it('symlinks templates to /data/gitea/custom/templates (not /data/gitea/templates)', () => {
+      assert.ok(
+        entrypoint.includes('TEMPLATE_DIR="/data/gitea/custom/templates"'),
+        'entrypoint should symlink templates to the correct Gitea custom path'
       );
       assert.ok(
-        content.includes('public/assets/img'),
-        'deploy script should copy public assets directory'
+        !entrypoint.includes('TEMPLATE_DIR="/data/gitea/templates"'),
+        'entrypoint should NOT use the wrong legacy path /data/gitea/templates'
+      );
+    });
+
+    it('cleans up legacy wrong-path symlink', () => {
+      assert.ok(
+        entrypoint.includes('/data/gitea/templates'),
+        'entrypoint should reference the legacy path for cleanup'
       );
       assert.ok(
-        content.includes('APP_LOGO'),
-        'deploy script should mention APP_LOGO config requirement'
+        entrypoint.includes('rm -f "/data/gitea/templates"'),
+        'entrypoint should remove the legacy symlink if it exists'
+      );
+    });
+
+    it('does not set invalid APP_LOGO config key', () => {
+      // APP_LOGO is not a valid Gitea config key — logo is customized via
+      // template override + custom public assets directory instead
+      assert.ok(
+        !entrypoint.includes('APP_LOGO'),
+        'entrypoint should NOT set APP_LOGO (not a valid Gitea config key)'
       );
     });
   });

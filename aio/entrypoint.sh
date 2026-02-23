@@ -86,7 +86,6 @@ ENABLE_REVERSE_PROXY_AUTO_REGISTRATION = false
 
 [ui]
 DEFAULT_THEME = gitea-dark
-APP_LOGO = assets/img/logo.png
 
 [webhook]
 ALLOWED_HOST_LIST = *
@@ -96,14 +95,16 @@ EOINI
   # Ensure gigi owns everything in /data (root created files above)
   chown -R gigi:gigi /data
 
-  # Symlink custom templates
-  TEMPLATE_DIR="/data/gitea/templates"
+  # Symlink custom templates into Gitea's custom path
+  TEMPLATE_DIR="/data/gitea/custom/templates"
   if [ -d /app/gitea/custom/templates ] && [ ! -L "$TEMPLATE_DIR" ]; then
     mkdir -p "$(dirname "$TEMPLATE_DIR")"
     rm -rf "$TEMPLATE_DIR"
     ln -sf /app/gitea/custom/templates "$TEMPLATE_DIR"
     echo "[aio] Gitea templates linked"
   fi
+  # Clean up legacy wrong-path symlink if it exists
+  [ -L "/data/gitea/templates" ] && rm -f "/data/gitea/templates"
 
   # Symlink custom public assets (logo, favicon)
   PUBLIC_DIR="/data/gitea/custom/public"
@@ -307,11 +308,14 @@ EOINI
   echo "[aio] Init complete"
 elif [ "$ENABLE_GITEA" = "true" ]; then
   # Not first boot but internal Gitea — ensure templates are linked
-  TEMPLATE_DIR="/data/gitea/templates"
+  TEMPLATE_DIR="/data/gitea/custom/templates"
   if [ -d /app/gitea/custom/templates ] && [ ! -L "$TEMPLATE_DIR" ]; then
+    mkdir -p "$(dirname "$TEMPLATE_DIR")"
     rm -rf "$TEMPLATE_DIR"
     ln -sf /app/gitea/custom/templates "$TEMPLATE_DIR"
   fi
+  # Clean up legacy wrong-path symlink if it exists
+  [ -L "/data/gitea/templates" ] && rm -f "/data/gitea/templates"
 
   # Ensure custom public assets are linked (logo, favicon)
   PUBLIC_DIR="/data/gitea/custom/public"
