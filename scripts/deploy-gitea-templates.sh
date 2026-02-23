@@ -17,11 +17,22 @@ if [ ! -d "$TEMPLATES_DIR" ]; then
   exit 1
 fi
 
+PUBLIC_DIR="${SCRIPT_DIR}/../gitea/custom/public"
+
 echo "Deploying Gitea templates to ${GITEA_HOST}..."
 
 # Copy templates to Gitea data directory
 ssh "${GITEA_HOST}" "mkdir -p /mnt/cluster-storage/docker/gitea/gitea/templates"
 scp -r "${TEMPLATES_DIR}"/* "${GITEA_HOST}:/mnt/cluster-storage/docker/gitea/gitea/templates/"
 
-echo "Templates deployed. Restart Gitea to pick up changes."
+# Copy public assets (logo, favicon) to Gitea custom directory
+if [ -d "$PUBLIC_DIR" ]; then
+  echo "Deploying Gitea public assets..."
+  ssh "${GITEA_HOST}" "mkdir -p /mnt/cluster-storage/docker/gitea/custom/public/assets/img"
+  scp -r "${PUBLIC_DIR}"/* "${GITEA_HOST}:/mnt/cluster-storage/docker/gitea/custom/public/"
+fi
+
+echo "Templates and assets deployed. Restart Gitea to pick up changes."
 echo "  ssh ${GITEA_HOST} 'docker restart gitea'"
+echo ""
+echo "NOTE: To use logo.png, ensure app.ini has: [ui] APP_LOGO = assets/img/logo.png"

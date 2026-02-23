@@ -14,6 +14,7 @@ services:
       - GITEA__service__ENABLE_REVERSE_PROXY_AUTHENTICATION=true
       - GITEA__service__ENABLE_REVERSE_PROXY_AUTO_REGISTRATION=false
       - GITEA__ui__DEFAULT_THEME=gitea-dark
+      - GITEA__ui__APP_LOGO=assets/img/logo.png
       - GITEA__webhook__ALLOWED_HOST_LIST=*
     ports:
       - "3300:3000"
@@ -21,6 +22,7 @@ services:
     volumes:
       - gitea-data:/data
       - ./gitea/custom/templates:/data/gitea/templates:ro
+      - ./gitea/custom/public:/data/gitea/custom/public:ro
     networks:
       - gigi-local
     healthcheck:

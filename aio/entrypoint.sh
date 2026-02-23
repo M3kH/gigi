@@ -86,6 +86,7 @@ ENABLE_REVERSE_PROXY_AUTO_REGISTRATION = false
 
 [ui]
 DEFAULT_THEME = gitea-dark
+APP_LOGO = assets/img/logo.png
 
 [webhook]
 ALLOWED_HOST_LIST = *
