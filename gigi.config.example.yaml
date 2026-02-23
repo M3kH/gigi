@@ -1,4 +1,6 @@
-# Gigi Configuration
+# Gigi Configuration — Example
+#
+# Copy this to gigi.config.yaml and customize for your setup.
 # Secrets go in env vars, structure goes here.
 # Supports env var interpolation: ${VAR_NAME} and ${VAR_NAME:-default}
 
@@ -8,22 +10,26 @@
 
 agent:
   # Agent display name (used in prompts and git commits)
-  name: ${AGENT_NAME:-Gigi}
+  name: Gigi
   # Short description/role shown in the system prompt
-  description: ${AGENT_DESCRIPTION:-a persistent AI coordinator}
+  description: a persistent AI coordinator
   # Gitea organization for repo operations
   org: ${GITEA_ORG:-idea}
   # Git identity for commits
   git:
-    name: ${AGENT_GIT_NAME:-Gigi}
-    email: ${AGENT_GIT_EMAIL:-gigi@localhost}
+    name: Gigi
+    email: gigi@localhost
+  # Optional: Extra infrastructure context shown to the agent
+  # infrastructure: "3-node ARM64 cluster running Docker Swarm"
+  # Optional: Extra prompt sections appended to system prompt
+  # extra_sections: "## Custom Rules\n- Always use TypeScript\n- Follow project conventions"
 
 # ── Backup Configuration ─────────────────────────────────────────────
 
 backup:
   sources:
-    # Back up all repos in the "idea" org
-    - org: idea
+    # Back up all repos in the configured org
+    - org: ${GITEA_ORG:-idea}
 
   targets:
     # Git mirror to secondary Gitea (optional)
@@ -31,8 +37,8 @@ backup:
       name: git-mirror
       url: ${MIRROR_GIT_URL:-}
       auth: token
-      token: ${MIRROR_GIT_TOKEN}
-      api_token: ${MIRROR_GIT_TOKEN}
+      token: ${MIRROR_GIT_TOKEN:-}
+      api_token: ${MIRROR_GIT_TOKEN:-}
       create_repos: true
 
   schedule:

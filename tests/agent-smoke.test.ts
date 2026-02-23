@@ -153,8 +153,9 @@ describe('Token type detection', () => {
 // ─── System Prompt — Testing Requirements ───────────────────────────
 
 describe('System prompt testing requirements', () => {
+  // The system prompt template now lives in prompt.ts (moved from agent.ts in #66)
   const agentSource = readFileSync(
-    resolve(import.meta.dirname, '../lib/core/agent.ts'),
+    resolve(import.meta.dirname, '../lib/core/prompt.ts'),
     'utf-8'
   )
 
