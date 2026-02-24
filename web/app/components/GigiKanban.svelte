@@ -796,7 +796,6 @@
   .column {
     flex: 1;
     min-width: 200px;
-    max-width: 320px;
     display: flex;
     flex-direction: column;
     background: var(--gigi-bg-primary);
@@ -885,8 +884,10 @@
     display: flex;
     flex-direction: column;
     gap: var(--gigi-space-xs);
-    min-width: 90px;
-    padding-top: 28px; /* align with column bodies */
+    min-width: 80px;
+    padding: var(--gigi-space-sm) var(--gigi-space-xs);
+    align-self: stretch;
+    background: var(--gigi-bg-primary);
   }
 
   .collapsed-badge {

@@ -124,7 +124,7 @@
       </span>
     </div>
     {#if !loading && budgetLoaded}
-      <div class="cost-bar">
+      <div class="cost-bar" class:over-budget={budget.overBudget}>
         <div
           class="cost-bar-fill"
           class:warning={percentUsed > 80}
@@ -249,6 +249,7 @@
     cursor: pointer;
     font-family: var(--gigi-font-sans);
     color: var(--gigi-text-primary);
+    overflow: hidden;
   }
 
   .cost-icon {
@@ -280,6 +281,7 @@
     font-weight: 700;
     color: var(--gigi-accent-green);
     font-variant-numeric: tabular-nums;
+    white-space: nowrap;
   }
 
   .cost-value.warning {
@@ -289,6 +291,7 @@
   .cost-label {
     font-size: var(--gigi-font-size-xs);
     color: var(--gigi-text-muted);
+    white-space: nowrap;
   }
 
   .cost-bar {
@@ -313,6 +316,16 @@
 
   .cost-bar-fill.danger {
     background: var(--gigi-accent-red);
+  }
+
+  .cost-bar.over-budget {
+    background: repeating-linear-gradient(
+      -45deg,
+      var(--gigi-bg-tertiary),
+      var(--gigi-bg-tertiary) 2px,
+      rgba(248, 81, 73, 0.15) 2px,
+      rgba(248, 81, 73, 0.15) 4px
+    );
   }
 
   .expand-icon {
