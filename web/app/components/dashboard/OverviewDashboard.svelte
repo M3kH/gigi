@@ -272,11 +272,10 @@
           <span class="stat-label">Conversations</span>
         </div>
       </div>
-    </div>
 
-    <!-- Cost monitoring widget -->
-    <div class="cost-section">
-      <CostWidget />
+      <div class="stat-cost">
+        <CostWidget />
+      </div>
     </div>
 
     <!-- Main grid: CI + PRs | Repos + Issues -->
@@ -392,10 +391,15 @@
 
   .stats-row {
     display: grid;
-    grid-template-columns: auto repeat(4, 1fr);
+    grid-template-columns: auto repeat(6, 1fr);
     gap: var(--gigi-space-md);
     margin-bottom: var(--gigi-space-md);
     align-items: stretch;
+  }
+
+  .stat-cost {
+    grid-column: span 2;
+    min-width: 0;
   }
 
   @media (max-width: 900px) {
@@ -403,6 +407,9 @@
       grid-template-columns: repeat(2, 1fr);
     }
     .stat-actions {
+      grid-column: 1 / -1;
+    }
+    .stat-cost {
       grid-column: 1 / -1;
     }
   }
@@ -541,12 +548,6 @@
   .action-chip svg {
     opacity: 0.8;
     flex-shrink: 0;
-  }
-
-  /* ── Cost Section ─────────────────────────────────────────────── */
-
-  .cost-section {
-    margin-bottom: var(--gigi-space-xl);
   }
 
   /* ── Grid ───────────────────────────────────────────────────────── */
