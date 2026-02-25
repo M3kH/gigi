@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## What Is Gigi
+## What Is Gigi 🤵🏻‍♂️
 
 Gigi is a persistent AI coordinator running 24/7 on a compute cluster. It manages infrastructure, coordinates agents, tracks issues, and communicates with the operator via Telegram and a real-time web UI.
 

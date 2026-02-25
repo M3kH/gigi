@@ -2,7 +2,7 @@
   <img src="web/app/public/gigi-zen.png" alt="Gigi" width="200" />
 </p>
 
-<h1 align="center">Gigi</h1>
+<h1 align="center">🤵🏻‍♂️ Gigi</h1>
 
 <p align="center">
   <strong>The control plane for autonomous AI development.</strong><br/>

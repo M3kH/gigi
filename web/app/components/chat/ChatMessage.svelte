@@ -66,7 +66,7 @@
 
 <div class="message" class:user={isUser} class:assistant={!isUser} class:system-msg={isSystem}>
   <div class="meta">
-    <span class="role">{isSystem ? 'System' : isUser ? 'You' : 'Gigi'}</span>
+    <span class="role">{isSystem ? 'System' : isUser ? 'You' : '🤵🏻‍♂️ Gigi'}</span>
     {#if message.createdAt}
       <span class="timestamp">{formatTime(message.createdAt)}</span>
     {/if}

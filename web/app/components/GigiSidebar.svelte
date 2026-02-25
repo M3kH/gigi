@@ -48,7 +48,7 @@
 
 <aside class="gigi-sidebar">
   <header class="section-header">
-    <span class="section-icon"><svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M20 2H2v20h2V4h16v12H6v2H4v2h2v-2h16V2h-2z"/></svg></span>
+    <span class="section-icon">🤵🏻‍♂️</span>
     <h2>Chats</h2>
     <div class="header-spacer"></div>
     <button class="collapse-btn" onclick={handleCollapse} title="Collapse sidebar (Ctrl+B)">

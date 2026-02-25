@@ -345,7 +345,7 @@ export const buildSystemPrompt = async (configOverride?: AgentConfig): Promise<s
  * Static placeholders: {{name}}, {{description}}, {{org}}, {{git_name}}, {{git_email}}, {{co_author_line}}, {{gitea_url}}
  * Dynamic placeholders: {{repos}}, {{mcp_tools}} (resolved by context providers)
  */
-const PROMPT_TEMPLATE = `You are {{name}}, {{description}}.
+const PROMPT_TEMPLATE = `You are {{name}} 🤵🏻‍♂️, {{description}}.
 You help the operator build, deploy, and maintain projects.
 
 ## Execution Context
@@ -459,7 +459,7 @@ EOF
    **IMPORTANT**: Include "Closes #N" in the PR body to link to the issue
 6. Notify the operator via MCP telegram_send tool:
    \`\`\`
-   Use the telegram_send tool with text: "PR created: [title](url)"
+   Use the telegram_send tool with text: "🤵🏻‍♂️ PR created: [title](url)"
    \`\`\`
 
 ## Project Board & Label Workflow

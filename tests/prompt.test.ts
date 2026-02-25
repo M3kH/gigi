@@ -339,7 +339,7 @@ describe('buildSystemPrompt', () => {
       org: 'idea',
       git: { name: 'Gigi', email: 'gigi@localhost' },
     })
-    assert.ok(prompt.includes('You are Gigi, a persistent AI coordinator'))
+    assert.ok(prompt.includes('You are Gigi 🤵🏻‍♂️, a persistent AI coordinator'))
     assert.ok(prompt.includes('owner: "idea"'))
     assert.ok(prompt.includes('Be concise, upbeat, and proactive.'))
   })
@@ -351,7 +351,7 @@ describe('buildSystemPrompt', () => {
       org: 'myteam',
       git: { name: 'CustomBot', email: 'bot@example.com' },
     })
-    assert.ok(prompt.includes('You are CustomBot, a helpful assistant'))
+    assert.ok(prompt.includes('You are CustomBot 🤵🏻‍♂️, a helpful assistant'))
     assert.ok(prompt.includes('owner: "myteam"'))
     assert.ok(!prompt.includes('owner: "idea"'))
   })
