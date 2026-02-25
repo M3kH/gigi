@@ -40,6 +40,8 @@ This is standard practice for dual-licensed open-source projects (used by GitLab
 
 ### Development Setup
 
+Gigi uses an **All-In-One (AIO)** container that bundles Gitea, Chrome, and noVNC. For local development, the AIO container runs in infra-only mode while you run the Gigi backend locally with hot reload.
+
 1. **Clone the repository**
 
    ```bash
@@ -53,25 +55,20 @@ This is standard practice for dual-licensed open-source projects (used by GitLab
    npm install
    ```
 
-3. **Set up environment**
+3. **Start the full dev environment**
 
    ```bash
-   cp .env.example .env
-   # Edit .env with your configuration:
-   # - DATABASE_URL (PostgreSQL connection string)
-   # - ANTHROPIC_API_KEY (for Claude)
-   # - GITEA_URL and GITEA_TOKEN (optional, for Gitea integration)
+   ./dev.sh          # Starts AIO infra (Gitea + Chrome + Postgres) + dev servers
+   ./dev.sh --fresh  # Wipe state and start fresh
    ```
 
-4. **Start development server**
+   This starts the AIO container in infra-only mode (Gitea + Chrome), PostgreSQL, and the Gigi dev servers with hot module replacement.
 
-   ```bash
-   npm run dev
-   ```
+   - **Backend + Frontend (HMR)**: `http://localhost:5173`
+   - **Gitea API**: `http://localhost:3300`
+   - **noVNC (browser viewer)**: `http://localhost:6080`
 
-   This starts both the backend (with hot reload) and the Vite dev server for the frontend.
-
-5. **Run tests**
+4. **Run tests**
 
    ```bash
    npm test                  # Unit tests
@@ -79,15 +76,15 @@ This is standard practice for dual-licensed open-source projects (used by GitLab
    npm run typecheck         # TypeScript type checking
    ```
 
-### Docker Compose (Full Stack)
+### Docker Compose (Production-like)
 
 ```bash
 cp .env.example .env
-# Edit .env with your configuration
-docker-compose up -d
+# Edit .env — set DATABASE_URL
+docker compose up -d
 ```
 
-This brings up Gigi, PostgreSQL, and the shared browser service.
+This starts the full AIO container (Gigi + Gitea + Chrome) with PostgreSQL.
 
 ## Making Changes
 

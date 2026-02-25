@@ -1,17 +1,17 @@
-version: '3.9'
-
 services:
   gigi:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.aio
     image: ${REGISTRY}/${IMAGE}:${TAG:-latest}
     container_name: gigi
     restart: unless-stopped
     environment:
-      CHROME_CDP_URL: ${CHROME_CDP_URL:-}
-      WS_PORT: 3001
       DATABASE_URL: ${DATABASE_URL}
+      ADMIN_USER: ${ADMIN_USER:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
+      ORG_NAME: ${ORG_NAME:-idea}
+      GIGI_INSTANCE_URL: ${GIGI_INSTANCE_URL:-http://localhost:3000}
       # Backup system — git mirror to secondary Gitea (optional)
       BACKUP_GITEA_URL: ${BACKUP_GITEA_URL:-}
       BACKUP_AUTH_METHOD: ${BACKUP_AUTH_METHOD:-mtls}
@@ -22,9 +22,12 @@ services:
       BACKUP_MTLS_CA: ${BACKUP_MTLS_CA:-/certs/backup/ca-cert.pem}
       NODE_EXTRA_CA_CERTS: ${BACKUP_MTLS_CA:-/certs/backup/ca-cert.pem}
     ports:
-      - "3100:3000"
-      - "3101:3001"
+      - "3100:3000"    # Gigi web UI
+      - "2222:2222"    # Gitea SSH
+      - "6080:6080"    # noVNC (browser viewer)
+    shm_size: "2gb"
     volumes:
+      - gigi-data:/data
       - workspace:/workspace
       - ${BACKUP_CERTS_DIR:-./certs/backup}:/certs/backup:ro
     networks:
@@ -38,7 +41,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 40s
+      start_period: 120s
     deploy:
       mode: replicated
       replicas: 1
@@ -64,4 +67,5 @@ networks:
     external: true
 
 volumes:
+  gigi-data:
   workspace:

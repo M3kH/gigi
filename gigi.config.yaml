@@ -33,7 +33,7 @@ agent:
 backup:
   sources:
     # Back up all repos in the configured org
-    - org: ${GITEA_ORG:-idea}
+    - org: ${GITEA_ORG:-acme}
 
   targets:
     # Git mirror to secondary Gitea (optional)

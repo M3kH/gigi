@@ -46,7 +46,7 @@ The current iframe approach requires the user to keep a browser tab open for Gig
 
 ### Chrome as Gigi's Eyes
 
-With our Chrome container, the browser is **server-side and always running**. Gigi connects to it via Chrome DevTools Protocol (CDP) through the chrome-devtools MCP server, the user watches via noVNC.
+With Chrome built into the AIO container, the browser is **server-side and always running**. Gigi connects to it via Chrome DevTools Protocol (CDP) through the chrome-devtools MCP server, the user watches via noVNC.
 
 **Gigi's autonomous loop:**
 1. Write code

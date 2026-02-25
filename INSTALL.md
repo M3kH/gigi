@@ -106,13 +106,13 @@ See complete label set in `scripts/setup-org-labels.sh`:
 After setup, verify:
 
 ```bash
-# Check org labels
+# Check org labels (replace $ORG_NAME with your org, default: "idea")
 curl -H "Authorization: token $GITEA_TOKEN" \
-  "$GITEA_URL/api/v1/orgs/acme/labels"
+  "$GITEA_URL/api/v1/orgs/$ORG_NAME/labels"
 
 # Check repos
 curl -H "Authorization: token $GITEA_TOKEN" \
-  "$GITEA_URL/api/v1/orgs/acme/repos"
+  "$GITEA_URL/api/v1/orgs/$ORG_NAME/repos"
 ```
 
 ## Troubleshooting

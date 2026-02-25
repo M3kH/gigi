@@ -47,8 +47,8 @@ git push origin main --tags
 ### 2. Build & Deploy
 
 ```bash
-# Build the Docker image
-docker build -t gigi:vX.Y.Z .
+# Build the AIO Docker image
+docker build -f Dockerfile.aio -t gigi:vX.Y.Z .
 
 # Deploy to Docker Swarm
 docker stack deploy -c docker-compose.yml gigi

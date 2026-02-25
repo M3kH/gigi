@@ -29,6 +29,9 @@
 
 ---
 
+> [!CAUTION]
+> **Gigi has full shell access and pre-authenticated Gitea.** Never expose Gigi to the public internet. Bind to `localhost` or a private network only. See [Security](#security) for details.
+
 > [!NOTE]
 > Gigi is in **pre-alpha**. It's battle-tested (Gigi's own code is developed with Gigi), but not perfect yet. We're looking for volunteers willing to take it for a spin. See [Security](#security) for deployment guidelines.
 
@@ -184,6 +187,7 @@ After you merge, CI/CD deploys the update automatically. The agent evolves itsel
 | Database | PostgreSQL |
 | Browser | Chrome + [DevTools Protocol MCP](https://developer.chrome.com/docs/devtools/) |
 | Messaging | [grammY](https://grammy.dev/) (Telegram) |
+| Container | All-In-One (AIO) — Gigi + Gitea + Chrome + noVNC |
 | Deployment | Docker Swarm, Gitea Actions CI/CD |
 
 ### Project Structure
@@ -212,32 +216,37 @@ src/
 
 ### Docker Compose (recommended)
 
+Gigi uses an **All-In-One (AIO)** image that bundles the agent, Gitea, Chrome, and noVNC into a single container. You only need PostgreSQL alongside it.
+
 ```bash
 git clone https://github.com/user/gigi.git
 cd gigi
 cp .env.example .env
-# Edit .env — set DATABASE_URL and your ANTHROPIC_API_KEY
+# Edit .env — set DATABASE_URL
 docker compose up -d
 ```
 
-Open `http://localhost:3100` — the setup wizard walks you through connecting your Anthropic API key, Gitea instance, and (optionally) Telegram.
+Open `http://localhost:3100` — the setup wizard walks you through connecting your Anthropic API key and (optionally) Telegram.
 
 > [!IMPORTANT]
 > Keep Gigi bound to `localhost` or a private network. See [Security](#security) before exposing it to any external network.
 
-**Services started:**
+**What runs inside the AIO container:**
 
-| Service | Description |
-|---------|-------------|
-| `gigi` | AI agent + real-time web UI |
-| `chrome` | Headless Chrome with DevTools Protocol for browser automation |
+| Component | Description |
+|-----------|-------------|
+| Gigi Agent | AI agent + real-time web UI |
+| Gitea | Git forge — repos, issues, PRs, project boards |
+| Chrome | Headless browser with DevTools Protocol for automation |
+| noVNC | Browser viewer — watch the agent interact with pages |
 
-You'll also need a **PostgreSQL** instance and a **Gitea** instance (or any Gitea-compatible forge). See [Configuration](#configuration) for details.
+You need a **PostgreSQL** instance (external or in the same compose). See [Configuration](#configuration) for details.
 
 ### Local Development
 
 ```bash
-./dev.sh # add --fresh to ensure you start with no state
+./dev.sh          # Start AIO infra + dev servers with HMR
+./dev.sh --fresh  # Wipe state and start fresh (shows onboarding)
 ```
 
 ## Configuration
@@ -249,8 +258,9 @@ Configuration is stored in PostgreSQL and managed via the web UI setup wizard at
 | Service | Purpose |
 |---------|---------|
 | **PostgreSQL** | Conversations, messages, config, task state |
-| **Gitea** | Git hosting, issues, PRs, project boards, webhooks |
 | **Anthropic API** | Claude models for the agent |
+
+Gitea and Chrome are **bundled inside the AIO container** — no separate setup needed.
 
 ### Optional Services
 
@@ -265,9 +275,12 @@ Configuration is stored in PostgreSQL and managed via the web UI setup wizard at
 |----------|-------------|---------|
 | `DATABASE_URL` | PostgreSQL connection string | *required* |
 | `PORT` | HTTP server port | `3000` |
-| `CHROME_CDP_URL` | Chrome DevTools Protocol URL for browser automation | — |
-| `GITEA_URL` | Gitea instance base URL | — |
-| `GITEA_TOKEN` | Gitea API token for agent operations | — |
+| `ADMIN_USER` | Gitea admin username (created on first boot) | `admin` |
+| `ADMIN_PASSWORD` | Gitea admin password | `admin` |
+| `ORG_NAME` | Gitea organization name | `idea` |
+| `GIGI_INSTANCE_URL` | External URL for Gitea redirect config | `http://localhost:3000` |
+| `GITEA_URL` | Use an external Gitea instead of internal | — |
+| `CHROME_CDP_URL` | Use an external Chrome instead of internal | — |
 | `TELEGRAM_BOT_TOKEN` | Telegram bot token for mobile access | — |
 
 ## MCP Tools

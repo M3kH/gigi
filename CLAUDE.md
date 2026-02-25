@@ -86,11 +86,13 @@ npm test           # Run test suite
 
 ## CI/CD
 
+Gigi uses the **AIO (All-In-One) image** (`Dockerfile.aio`) as the only supported deployment path. The AIO image bundles Gigi, Gitea, Chrome, and noVNC.
+
 `.gitea/workflows/build.yml`:
 1. rsync source to cluster manager node
-2. `docker-compose build` natively on ARM64
+2. Build AIO image (`Dockerfile.aio`) natively on ARM64
 3. Push images to Gitea container registry
-4. `docker stack deploy` with docker-compose.yml
+4. `docker stack deploy` with docker-compose.yml (uses AIO image)
 5. Deploy Caddyfile via `deploy-site` action
 
 ## Self-modification Workflow

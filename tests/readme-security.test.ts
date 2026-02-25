@@ -87,8 +87,12 @@ describe('README security warnings', () => {
   it('should include a security notice in the Quickstart section', () => {
     // The quickstart should not let users skip past the warning
     const quickstartIdx = README.indexOf('## Quickstart')
-    const featuresIdx = README.indexOf('## Features')
-    const quickstartSection = README.slice(quickstartIdx, featuresIdx)
+    assert.ok(quickstartIdx !== -1, 'README must have a ## Quickstart section')
+    // Find the next ## section after Quickstart
+    const nextSectionIdx = README.indexOf('\n## ', quickstartIdx + 1)
+    const quickstartSection = nextSectionIdx === -1
+      ? README.slice(quickstartIdx)
+      : README.slice(quickstartIdx, nextSectionIdx)
 
     assert.ok(
       quickstartSection.includes('[!IMPORTANT]') ||
