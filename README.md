@@ -21,14 +21,8 @@
 
 ---
 
-> [!CAUTION]
-> **Gigi is a power tool for developers who understand what they're running.**
->
-> - The agent executes shell commands with **full system access** (`dangerouslySkipPermissions`). It can read, write, and delete any file the host process can reach.
-> - The bundled Gitea instance uses **automatic web authentication** — anyone with network access can browse repos, create issues, and merge PRs without logging in.
-> - API keys and tokens (Anthropic, Gitea, Telegram) are stored in the database and available to the agent at runtime.
->
-> **Never expose Gigi to the public internet.** Run it on a private network, behind a VPN, or bound to `localhost` only. You are fully responsible for securing your deployment. See [Security](#security) for details.
+> [!WARNING]
+> Gigi runs with full system access — designed for **private networks only**. Read [Security](#security) before deploying.
 
 ## The Problem
 
