@@ -8,6 +8,7 @@
 
   import { onMount } from 'svelte'
   import { onGiteaEvent } from '$lib/stores/chat.svelte'
+  import { navigateToGitea } from '$lib/stores/navigation.svelte'
   import { formatRelativeTime } from '$lib/utils/format'
 
   interface ActionRun {
@@ -22,6 +23,12 @@
     created_at: string
     updated_at: string
   }
+
+  interface Props {
+    owner?: string
+  }
+
+  let { owner = 'idea' }: Props = $props()
 
   let runs = $state<ActionRun[]>([])
   let loading = $state(true)
@@ -110,11 +117,9 @@
   {:else}
     <div class="run-list">
       {#each runs as run}
-        <a
+        <button
           class="run-item"
-          href={run.url}
-          target="_blank"
-          rel="noopener noreferrer"
+          onclick={() => navigateToGitea(`/${owner}/${run.repo}/actions/runs/${run.id}`)}
           title="{run.display_title} ({run.status})"
         >
           <span class="run-status run-status-{getStatusIcon(run.status)}" class:pulse={run.status === 'running' || run.status === 'waiting'}>
@@ -136,7 +141,7 @@
               <span class="run-time">{formatRelativeTime(run.created_at)}</span>
             </div>
           </div>
-        </a>
+        </button>
       {/each}
     </div>
   {/if}
@@ -181,13 +186,15 @@
     display: flex;
     align-items: flex-start;
     gap: var(--gigi-space-sm);
+    width: 100%;
+    text-align: left;
     background: var(--gigi-bg-secondary);
     border: var(--gigi-border-width) solid var(--gigi-border-default);
     border-radius: var(--gigi-radius-md);
     padding: var(--gigi-space-sm) var(--gigi-space-md);
     cursor: pointer;
     transition: all var(--gigi-transition-fast);
-    text-decoration: none;
+    font-family: var(--gigi-font-sans);
     color: inherit;
   }
 

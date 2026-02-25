@@ -7,6 +7,7 @@
    */
 
   import { formatRelativeTime } from '$lib/utils/format'
+  import { navigateToIssue } from '$lib/stores/navigation.svelte'
 
   interface IssueLabel {
     name: string
@@ -29,10 +30,11 @@
 
   interface Props {
     issues: RecentIssue[]
+    owner: string
     loading?: boolean
   }
 
-  let { issues, loading = false }: Props = $props()
+  let { issues, owner, loading = false }: Props = $props()
 
   /** Get non-status labels for compact display */
   function displayLabels(labels: IssueLabel[]): IssueLabel[] {
@@ -69,11 +71,9 @@
   {:else}
     <div class="issue-list">
       {#each issues as issue}
-        <a
+        <button
           class="issue-item"
-          href={issue.html_url}
-          target="_blank"
-          rel="noopener noreferrer"
+          onclick={() => navigateToIssue(owner, issue.repo, issue.number)}
           title="#{issue.number} {issue.title}"
         >
           <span class="issue-state" class:issue-open={issue.state === 'open'} class:issue-closed={issue.state === 'closed'}>
@@ -105,7 +105,7 @@
               <span class="issue-time">{formatRelativeTime(issue.updated_at)}</span>
             </div>
           </div>
-        </a>
+        </button>
       {/each}
     </div>
   {/if}
@@ -148,13 +148,15 @@
     display: flex;
     align-items: flex-start;
     gap: var(--gigi-space-sm);
+    width: 100%;
+    text-align: left;
     background: var(--gigi-bg-secondary);
     border: var(--gigi-border-width) solid var(--gigi-border-default);
     border-radius: var(--gigi-radius-md);
     padding: var(--gigi-space-sm) var(--gigi-space-md);
     cursor: pointer;
     transition: all var(--gigi-transition-fast);
-    text-decoration: none;
+    font-family: var(--gigi-font-sans);
     color: inherit;
   }
 

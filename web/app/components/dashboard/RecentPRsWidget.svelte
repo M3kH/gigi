@@ -7,6 +7,7 @@
    */
 
   import { formatRelativeTime } from '$lib/utils/format'
+  import { navigateToPull } from '$lib/stores/navigation.svelte'
 
   interface RecentPR {
     number: number
@@ -24,10 +25,11 @@
 
   interface Props {
     prs: RecentPR[]
+    owner: string
     loading?: boolean
   }
 
-  let { prs, loading = false }: Props = $props()
+  let { prs, owner, loading = false }: Props = $props()
 
   function getStateIcon(state: string): string {
     switch (state) {
@@ -63,11 +65,9 @@
   {:else}
     <div class="pr-list">
       {#each prs as pr}
-        <a
+        <button
           class="pr-item"
-          href={pr.html_url}
-          target="_blank"
-          rel="noopener noreferrer"
+          onclick={() => navigateToPull(owner, pr.repo, pr.number)}
           title="#{pr.number} {pr.title}"
         >
           <span class="pr-state pr-state-{getStateIcon(pr.state)}">
@@ -95,7 +95,7 @@
               <span class="pr-time">{formatRelativeTime(pr.merged_at ?? pr.updated_at)}</span>
             </div>
           </div>
-        </a>
+        </button>
       {/each}
     </div>
   {/if}
@@ -138,13 +138,15 @@
     display: flex;
     align-items: flex-start;
     gap: var(--gigi-space-sm);
+    width: 100%;
+    text-align: left;
     background: var(--gigi-bg-secondary);
     border: var(--gigi-border-width) solid var(--gigi-border-default);
     border-radius: var(--gigi-radius-md);
     padding: var(--gigi-space-sm) var(--gigi-space-md);
     cursor: pointer;
     transition: all var(--gigi-transition-fast);
-    text-decoration: none;
+    font-family: var(--gigi-font-sans);
     color: inherit;
   }
 

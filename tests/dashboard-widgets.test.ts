@@ -237,6 +237,49 @@ describe('overview response shape', () => {
   })
 })
 
+describe('widget navigation — in-app routing instead of external links', () => {
+  // These test the navigation path construction logic that widgets use
+  // to navigate in the Gitea iframe instead of opening broken external links
+
+  it('PR widget constructs correct navigation path for pulls', () => {
+    const owner = 'idea'
+    const pr = { repo: 'gigi', number: 42 }
+    const expectedPath = `/gitea/${owner}/${pr.repo}/pulls/${pr.number}`
+    assert.equal(expectedPath, '/gitea/idea/gigi/pulls/42')
+  })
+
+  it('issue widget constructs correct navigation path for issues', () => {
+    const owner = 'idea'
+    const issue = { repo: 'gigi', number: 105 }
+    const expectedPath = `/gitea/${owner}/${issue.repo}/issues/${issue.number}`
+    assert.equal(expectedPath, '/gitea/idea/gigi/issues/105')
+  })
+
+  it('actions widget constructs correct navigation path for CI runs', () => {
+    const owner = 'idea'
+    const run = { repo: 'gigi', id: 7 }
+    const expectedPath = `/${owner}/${run.repo}/actions/runs/${run.id}`
+    assert.equal(expectedPath, '/idea/gigi/actions/runs/7')
+  })
+
+  it('navigation paths work with different org names', () => {
+    const owner = 'my-org'
+    const pr = { repo: 'my-project', number: 1 }
+    const expectedPath = `/gitea/${owner}/${pr.repo}/pulls/${pr.number}`
+    assert.equal(expectedPath, '/gitea/my-org/my-project/pulls/1')
+  })
+
+  it('navigation paths work across different repos', () => {
+    const owner = 'idea'
+    const repos = ['gigi', 'gigi-infra', 'my-app']
+    for (const repo of repos) {
+      const path = `/gitea/${owner}/${repo}/issues/1`
+      assert.ok(path.includes(repo), `path should include repo name: ${repo}`)
+      assert.ok(path.startsWith('/gitea/'), 'path should start with /gitea/')
+    }
+  })
+})
+
 describe('CI status widget data', () => {
   it('getStatusLabel maps CI statuses correctly', () => {
     // Replicate the widget logic

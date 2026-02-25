@@ -282,7 +282,7 @@
     <div class="dashboard-grid">
       <!-- Left column -->
       <div class="grid-column">
-        <ActionsWidget />
+        <ActionsWidget owner={overview?.org?.name ?? 'idea'} />
         <!-- Repositories -->
         <section class="section">
           <h2 class="section-title">
@@ -373,8 +373,8 @@
 
       <!-- Right column -->
       <div class="grid-column">
-        <RecentPRsWidget prs={overview?.recentPRs ?? []} loading={loading} />
-        <RecentIssuesWidget issues={overview?.recentIssues ?? []} loading={loading} />
+        <RecentPRsWidget prs={overview?.recentPRs ?? []} owner={overview?.org?.name ?? 'idea'} loading={loading} />
+        <RecentIssuesWidget issues={overview?.recentIssues ?? []} owner={overview?.org?.name ?? 'idea'} loading={loading} />
       </div>
     </div>
   {/if}
