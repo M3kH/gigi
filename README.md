@@ -46,40 +46,6 @@ Gigi is the **control plane** for autonomous AI development. Instead of watching
 
 Self-hosted. Open source. Your hardware, your data, your agent.
 
-## Quickstart
-
-### Docker Compose (recommended)
-
-```bash
-git clone https://github.com/user/gigi.git
-cd gigi
-cp .env.example .env
-# Edit .env — set DATABASE_URL and your ANTHROPIC_API_KEY
-docker compose up -d
-```
-
-Open `http://localhost:3100` — the setup wizard walks you through connecting your Anthropic API key, Gitea instance, and (optionally) Telegram.
-
-> [!IMPORTANT]
-> Keep Gigi bound to `localhost` or a private network. See [Security](#security) before exposing it to any external network.
-
-**Services started:**
-
-| Service | Description |
-|---------|-------------|
-| `gigi` | AI agent + real-time web UI |
-| `chrome` | Headless Chrome with DevTools Protocol for browser automation |
-
-You'll also need a **PostgreSQL** instance and a **Gitea** instance (or any Gitea-compatible forge). See [Configuration](#configuration) for details.
-
-### Local Development
-
-```bash
-npm install
-npm run dev          # backend + Vite frontend with hot reload
-npm test             # run test suite
-```
-
 ## Features
 
 ### Kanban-Driven Development
@@ -234,6 +200,38 @@ src/
 └── server.ts       # WebSocket server management
 ```
 
+## Quickstart
+
+### Docker Compose (recommended)
+
+```bash
+git clone https://github.com/user/gigi.git
+cd gigi
+cp .env.example .env
+# Edit .env — set DATABASE_URL and your ANTHROPIC_API_KEY
+docker compose up -d
+```
+
+Open `http://localhost:3100` — the setup wizard walks you through connecting your Anthropic API key, Gitea instance, and (optionally) Telegram.
+
+> [!IMPORTANT]
+> Keep Gigi bound to `localhost` or a private network. See [Security](#security) before exposing it to any external network.
+
+**Services started:**
+
+| Service | Description |
+|---------|-------------|
+| `gigi` | AI agent + real-time web UI |
+| `chrome` | Headless Chrome with DevTools Protocol for browser automation |
+
+You'll also need a **PostgreSQL** instance and a **Gitea** instance (or any Gitea-compatible forge). See [Configuration](#configuration) for details.
+
+### Local Development
+
+```bash
+./dev.sh # add --fresh to ensure you start with no state
+```
+
 ## Configuration
 
 Configuration is stored in PostgreSQL and managed via the web UI setup wizard at `/setup`.
@@ -326,4 +324,4 @@ If you discover a security issue, please open a private issue or contact the mai
 
 ## License
 
-GPL-2.0
+AGPL-3.0
