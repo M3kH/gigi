@@ -132,6 +132,83 @@ describe('applyEvent — unit tests', () => {
   })
 })
 
+describe('Multiple concurrent ask_user questions', () => {
+  it('should track multiple unanswered questions independently', () => {
+    let segs: StreamSegment[] = []
+    const t = 1000
+
+    // Two questions arrive (parallel ask_user tool calls)
+    segs = applyEvent(segs, { type: 'ask_user', questionId: 'q1', question: 'First?', options: ['A', 'B'] }, t)
+    segs = applyEvent(segs, { type: 'ask_user', questionId: 'q2', question: 'Second?', options: ['X', 'Y'] }, t)
+
+    assert.equal(segs.length, 2)
+    assert.equal(segs[0].type, 'ask_user')
+    assert.equal(segs[1].type, 'ask_user')
+
+    // Both should be unanswered
+    if (segs[0].type === 'ask_user') assert.equal(segs[0].answer, undefined)
+    if (segs[1].type === 'ask_user') assert.equal(segs[1].answer, undefined)
+  })
+
+  it('answering first question should leave second unanswered', () => {
+    let segs: StreamSegment[] = []
+    const t = 1000
+
+    segs = applyEvent(segs, { type: 'ask_user', questionId: 'q1', question: 'First?', options: ['A', 'B'] }, t)
+    segs = applyEvent(segs, { type: 'ask_user', questionId: 'q2', question: 'Second?', options: ['X', 'Y'] }, t)
+
+    // Answer first question only
+    segs = answerSegment(segs, 'q1', 'A', t)
+
+    if (segs[0].type === 'ask_user') {
+      assert.equal(segs[0].answer, 'A')
+      assert.equal(segs[0].answeredAt, t)
+    }
+    if (segs[1].type === 'ask_user') {
+      assert.equal(segs[1].answer, undefined, 'Second question should remain unanswered')
+    }
+
+    // Check: still has unanswered questions
+    const hasUnanswered = segs.some(s => s.type === 'ask_user' && s.answer === undefined)
+    assert.equal(hasUnanswered, true, 'Should detect unanswered question')
+  })
+
+  it('answering all questions should report no unanswered', () => {
+    let segs: StreamSegment[] = []
+    const t = 1000
+
+    segs = applyEvent(segs, { type: 'ask_user', questionId: 'q1', question: 'First?', options: ['A', 'B'] }, t)
+    segs = applyEvent(segs, { type: 'ask_user', questionId: 'q2', question: 'Second?', options: ['X', 'Y'] }, t)
+
+    // Answer both
+    segs = answerSegment(segs, 'q1', 'A', t)
+    segs = answerSegment(segs, 'q2', 'Y', t)
+
+    const hasUnanswered = segs.some(s => s.type === 'ask_user' && s.answer === undefined)
+    assert.equal(hasUnanswered, false, 'All questions should be answered')
+  })
+
+  it('answering questions out of order should work', () => {
+    let segs: StreamSegment[] = []
+    const t = 1000
+
+    segs = applyEvent(segs, { type: 'ask_user', questionId: 'q1', question: 'First?', options: ['A'] }, t)
+    segs = applyEvent(segs, { type: 'ask_user', questionId: 'q2', question: 'Second?', options: ['X'] }, t)
+
+    // Answer second first
+    segs = answerSegment(segs, 'q2', 'X', t)
+    if (segs[0].type === 'ask_user') assert.equal(segs[0].answer, undefined)
+    if (segs[1].type === 'ask_user') assert.equal(segs[1].answer, 'X')
+
+    // Now answer first
+    segs = answerSegment(segs, 'q1', 'A', t)
+    if (segs[0].type === 'ask_user') assert.equal(segs[0].answer, 'A')
+
+    const hasUnanswered = segs.some(s => s.type === 'ask_user' && s.answer === undefined)
+    assert.equal(hasUnanswered, false)
+  })
+})
+
 describe('formatGiteaEvent', () => {
   it('formats push event with repo', () => {
     assert.equal(formatGiteaEvent('push', 'created', 'idea/my-plugin'), 'Push: created — idea/my-plugin')

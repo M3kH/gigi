@@ -616,9 +616,16 @@ export function answerQuestion(questionId: string, answer: string): void {
   const ws = getWSClient()
   ws.send({ type: 'user:answer', questionId, answer })
 
-  // Resume agent state
+  // Only transition away from waiting_for_user when ALL questions are answered.
+  // With multiple concurrent ask_user calls, answering the first question
+  // should keep the state as waiting_for_user until the last one is done.
   if (dialogState === 'waiting_for_user') {
-    dialogState = 'thinking'
+    const hasUnanswered = streamSegments.some(
+      s => s.type === 'ask_user' && s.answer === undefined,
+    )
+    if (!hasUnanswered) {
+      dialogState = 'thinking'
+    }
   }
 }
 
