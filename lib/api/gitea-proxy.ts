@@ -198,7 +198,7 @@ export const createGiteaProxy = (): Hono => {
       })
 
       // Merge and sort open PRs across all repos (most recent first)
-      const byDateDesc = (a: { updated_at: string }, b: { updated_at: string }) => {
+      const byDateDesc = (a: { updated_at?: string }, b: { updated_at?: string }) => {
         const dateA = a.updated_at ? new Date(a.updated_at).getTime() : 0
         const dateB = b.updated_at ? new Date(b.updated_at).getTime() : 0
         return dateB - dateA
