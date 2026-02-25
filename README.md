@@ -21,8 +21,8 @@
 
 ---
 
-> [!WARNING]
-> Gigi runs with full system access — designed for **private networks only**. Read [Security](#security) before deploying.
+> [!NOTE]
+> Gigi is in **pre-alpha**. It's battle-tested (Gigi's own code is developed with Gigi), but not perfect yet. We're looking for volunteers willing to take it for a spin. See [Security](#security) for deployment guidelines.
 
 ## The Problem
 
