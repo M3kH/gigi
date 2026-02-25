@@ -85,7 +85,7 @@ backup:
 `
     const result = parseSimpleYaml(yaml) as any
     assert.equal(result.backup.sources.length, 1)
-    assert.equal(result.backup.sources[0].org, 'gigi')
+    assert.equal(result.backup.sources[0].org, 'idea')
     assert.equal(result.backup.targets.length, 1)
     assert.equal(result.backup.targets[0].type, 'git-mirror')
     assert.equal(result.backup.targets[0].name, 'backup')
@@ -99,7 +99,7 @@ backup:
     - org: idea  # inline comment
 `
     const result = parseSimpleYaml(yaml) as any
-    assert.equal(result.backup.sources[0].org, 'gigi')
+    assert.equal(result.backup.sources[0].org, 'idea')
   })
 
   it('handles quoted strings', () => {
