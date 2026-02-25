@@ -25,7 +25,7 @@ export interface SetupResult {
 let status = $state<SetupStatus | null>(null)
 let loading = $state(true)
 let error = $state<string | null>(null)
-let dismissed = $state(false)
+let dismissed = $state(localStorage.getItem('setup_dismissed') === 'true')
 
 // ── API ───────────────────────────────────────────────────────────────
 
@@ -35,7 +35,16 @@ export async function checkSetup(): Promise<void> {
   try {
     const res = await fetch('/api/setup/status')
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const prev = status
     status = await res.json()
+    // Auto-dismiss for returning users on initial page load:
+    // If Claude was already configured before we checked (not just saved during
+    // this session via submitSetup), and user hasn't dismissed yet, they're a
+    // returning user who set up before the dismissed flag existed.
+    if (prev === null && status?.claude && !dismissed) {
+      dismissed = true
+      localStorage.setItem('setup_dismissed', 'true')
+    }
   } catch (err) {
     error = (err as Error).message
     // If we can't reach the API, assume not set up
@@ -74,6 +83,7 @@ export function isSetupComplete(): boolean {
 
 export function dismissSetup(): void {
   dismissed = true
+  localStorage.setItem('setup_dismissed', 'true')
 }
 
 export function getSetupError(): string | null {
