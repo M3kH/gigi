@@ -1,6 +1,8 @@
 # Release Strategy
 
-This document describes how Gigi is versioned, released, and published.
+This document describes how Gigi is versioned and released.
+
+> **Note**: Automated release workflows are not yet in place. This document captures the conventions and planned process for when formal releases begin.
 
 ## Versioning
 
@@ -10,7 +12,7 @@ Gigi follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html) (semver)
 - **MINOR** (`0.X.0`) — New features, backward-compatible additions
 - **PATCH** (`0.0.X`) — Bug fixes, documentation updates, minor improvements
 
-Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/) for automated changelog generation:
+Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/) for changelog generation:
 
 ```
 feat: add Telegram notification support
@@ -22,58 +24,43 @@ refactor!: restructure MCP tool registration (breaking)
 ## Day-to-Day Workflow
 
 1. **Development** happens on Gitea (branches → PRs → merge to `main`)
-2. **Dual-push** syncs `main` to GitHub automatically
-3. **GitHub Actions CI** runs tests on external contributor PRs
-4. **Gitea Actions CI** runs tests on internal PRs
+2. **Gitea Actions CI** runs tests on PRs
+3. **Deployments** are manual via Docker Swarm (`docker stack deploy`)
 
-## Release Workflow
+## Release Process (Planned)
 
-Releases are triggered manually and automated via GitHub Actions:
+When formal releases are introduced, the process will be:
 
-### 1. Trigger a Release
+### 1. Prepare the Release
 
 ```bash
-# From GitHub, trigger the release workflow
-gh workflow run release.yml -f release_type=minor
+# Bump version in package.json
+npm version minor  # or patch, major
+
+# Update CHANGELOG.md with changes since last release
+# Commit the version bump
+git commit -am "release: vX.Y.Z"
+git tag vX.Y.Z
+git push origin main --tags
 ```
 
-The `release_type` parameter accepts: `patch`, `minor`, or `major`.
+### 2. Build & Deploy
 
-### 2. Release PR Created
+```bash
+# Build the Docker image
+docker build -t gigi:vX.Y.Z .
 
-The workflow automatically:
-- Bumps the version in `package.json`
-- Generates a changelog from conventional commits since the last release
-- Updates `CHANGELOG.md`
-- Creates a `release/vX.Y.Z` branch
-- Opens a Release PR on GitHub for review
-
-### 3. Review & Merge
-
-- Review the version bump and changelog
-- Ensure CI passes
-- Merge the Release PR
-
-### 4. Publish (Automatic)
-
-On merge, the publish workflow automatically:
-- Creates a git tag (`vX.Y.Z`)
-- Builds a multi-architecture Docker image (linux/amd64, linux/arm64)
-- Pushes the image to `ghcr.io`
-- Creates a GitHub Release with changelog notes
-
-## Docker Images
-
-Published images are available at:
-
+# Deploy to Docker Swarm
+docker stack deploy -c docker-compose.yml gigi
 ```
-ghcr.io/anthropics/gigi:latest
-ghcr.io/anthropics/gigi:vX.Y.Z
-```
+
+### 3. Create a Release (Optional)
+
+Create a Gitea release from the tag with changelog notes.
 
 ## Changelog
 
-The [CHANGELOG.md](../CHANGELOG.md) follows the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format and is automatically updated during releases.
+The [CHANGELOG.md](../CHANGELOG.md) follows the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format and should be updated with each significant change.
 
 ## Hotfix Process
 
@@ -81,15 +68,13 @@ For urgent fixes:
 
 1. Create a branch from the release tag: `git checkout -b hotfix/description vX.Y.Z`
 2. Apply the fix and commit
-3. Trigger the release workflow with `release_type=patch`
-4. Follow the normal review/merge/publish flow
+3. Create a PR, merge, tag, and deploy
 
-## Pre-release Versions
+## Docker Images
 
-For testing before a stable release:
+Currently built and deployed locally. When a public registry is introduced, images will be published with version tags:
 
-```bash
-gh workflow run release.yml -f release_type=minor -f prerelease=true
 ```
-
-This creates versions like `0.2.0-rc.1` and marks the GitHub Release as a pre-release.
+registry/gigi:latest
+registry/gigi:vX.Y.Z
+```

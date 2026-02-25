@@ -2,7 +2,7 @@
  * Release Strategy Tests
  *
  * Validates that release-related files are present, consistent,
- * and properly structured for the v0.1.0 public release.
+ * and properly structured.
  */
 
 import { describe, it } from 'node:test'
@@ -163,14 +163,13 @@ describe('docs/RELEASE.md', () => {
     assert.ok(release.includes('Conventional Commits'), 'must reference conventional commits')
   })
 
-  it('documents release workflow steps', () => {
-    assert.ok(release.includes('Release Workflow'), 'must have release workflow section')
-    assert.ok(release.includes('workflow_dispatch') || release.includes('gh workflow run'),
-      'must describe how to trigger a release')
+  it('documents release process', () => {
+    assert.ok(release.includes('Release Process') || release.includes('Release Workflow'),
+      'must have release process section')
   })
 
-  it('documents Docker image publishing', () => {
-    assert.ok(release.includes('ghcr.io'), 'must reference ghcr.io for Docker images')
+  it('documents Docker deployment', () => {
+    assert.ok(release.includes('Docker'), 'must reference Docker for deployment')
   })
 
   it('documents changelog maintenance', () => {
@@ -178,9 +177,9 @@ describe('docs/RELEASE.md', () => {
   })
 })
 
-// ─── GitHub templates ───────────────────────────────────────────────
+// ─── Issue and PR templates ─────────────────────────────────────────
 
-describe('GitHub issue and PR templates', () => {
+describe('issue and PR templates', () => {
   it('has bug report template', () => {
     assert.ok(
       existsSync(resolve(ROOT, '.github/ISSUE_TEMPLATE/bug_report.md')),
