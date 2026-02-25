@@ -69,16 +69,38 @@ if [ "$ENABLE_GITEA" = "true" ] && [ ! -f "$MARKER" ]; then
   GITEA_CONF="/data/gitea/conf/app.ini"
   if [ ! -f "$GITEA_CONF" ]; then
     mkdir -p /data/gitea/conf
-    cat > "$GITEA_CONF" << 'EOINI'
+
+    # Database config: PostgreSQL if GITEA_DATABASE_URL is set, else SQLite
+    if [ -n "$GITEA_DATABASE_URL" ]; then
+      # Parse postgres://user:pass@host:port/dbname
+      DB_USER=$(echo "$GITEA_DATABASE_URL" | sed -n 's|.*://\([^:]*\):.*|\1|p')
+      DB_PASS=$(echo "$GITEA_DATABASE_URL" | sed -n 's|.*://[^:]*:\([^@]*\)@.*|\1|p')
+      DB_HOST=$(echo "$GITEA_DATABASE_URL" | sed -n 's|.*@\([^:]*\):.*|\1|p')
+      DB_PORT=$(echo "$GITEA_DATABASE_URL" | sed -n 's|.*:\([0-9]*\)/.*|\1|p')
+      DB_NAME=$(echo "$GITEA_DATABASE_URL" | sed -n 's|.*/\([^?]*\).*|\1|p')
+      DB_SECTION="[database]
+DB_TYPE = postgres
+HOST = ${DB_HOST}:${DB_PORT}
+NAME = ${DB_NAME}
+USER = ${DB_USER}
+PASSWD = ${DB_PASS}
+SSL_MODE = disable"
+      echo "[aio] Gitea using PostgreSQL: ${DB_HOST}:${DB_PORT}/${DB_NAME}"
+    else
+      DB_SECTION="[database]
+DB_TYPE = sqlite3
+PATH = /data/gitea/gitea.db"
+      echo "[aio] Gitea using SQLite"
+    fi
+
+    cat > "$GITEA_CONF" << EOINI
 [server]
 HTTP_PORT = 3300
 ROOT_URL = http://localhost:3300/
 START_SSH_SERVER = false
 SSH_DISABLE_AUTHORIZED_KEYS_DB = true
 
-[database]
-DB_TYPE = sqlite3
-PATH = /data/gitea/gitea.db
+${DB_SECTION}
 
 [security]
 INSTALL_LOCK = true
