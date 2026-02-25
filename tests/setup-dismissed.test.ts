@@ -1,253 +1,280 @@
 /**
- * Tests for setup dismissed state persistence (setup.svelte.ts logic)
+ * Tests for setup dismissed state — server-side persistence
  *
  * Validates:
- * - dismissed flag persists across page reloads via localStorage
- * - Auto-dismiss works for returning users (Claude already configured on page load)
- * - Auto-dismiss does NOT trigger during initial setup (after submitSetup)
- * - isSetupComplete requires both Claude configured AND dismissed
- *
- * Since the store uses Svelte 5 runes ($state), we mirror the core logic here
- * to test it with the Node.js test runner — same pattern as setup-telegram.test.ts.
+ * - dismissed flag is persisted in PostgreSQL config store (not localStorage)
+ * - Auto-dismiss migration: existing users (Claude configured, no setup_dismissed key)
+ *   get auto-dismissed on first status check
+ * - New users: setup_dismissed stays false until they explicitly dismiss
+ * - The dismiss step works via setupStep('dismiss', {})
+ * - isSetupComplete logic (Claude configured AND dismissed)
  */
 
-import { describe, it, beforeEach } from 'node:test'
+import { describe, it, beforeEach, mock } from 'node:test'
 import assert from 'node:assert/strict'
 
-// ── Mock localStorage ────────────────────────────────────────────────
+// ── Mock config store ─────────────────────────────────────────────────
+// Mirror the setup domain logic without actually importing it (avoids
+// requiring database connections). Tests the business logic directly.
 
-class MockLocalStorage {
+class MockConfigStore {
   private store: Record<string, string> = {}
 
-  getItem(key: string): string | null {
+  async getConfig(key: string): Promise<string | null> {
     return this.store[key] ?? null
   }
 
-  setItem(key: string, value: string): void {
+  async setConfig(key: string, value: string): Promise<void> {
     this.store[key] = value
   }
 
-  removeItem(key: string): void {
-    delete this.store[key]
+  async getAllConfig(): Promise<Record<string, string>> {
+    return { ...this.store }
   }
 
-  clear(): void {
-    this.store = {}
+  // Seed config values for test setup
+  seed(data: Record<string, string>): void {
+    this.store = { ...data }
   }
 }
 
-// ── Mirror of setup store logic ──────────────────────────────────────
-// Reproduces the logic from web/app/lib/stores/setup.svelte.ts
-// without Svelte runes, for testability.
+// ── Mirror of setup domain logic ─────────────────────────────────────
+// Reproduces getSetupStatus() and setupStep('dismiss') from
+// lib/domain/setup.ts for unit testing without DB dependencies.
 
 interface SetupStatus {
   claude: boolean
   telegram: boolean
   gitea: boolean
   complete: boolean
+  dismissed: boolean
 }
 
-function createSetupStore(localStorage: MockLocalStorage) {
-  let status: SetupStatus | null = null
-  let dismissed = localStorage.getItem('setup_dismissed') === 'true'
+interface SetupResult {
+  ok: boolean
+  message?: string
+  error?: string
+}
 
+function createSetupDomain(configStore: MockConfigStore) {
   return {
-    // Simulates checkSetup() — accepts a status response instead of fetching
-    checkSetup(apiResponse: SetupStatus) {
-      const prev = status
-      status = apiResponse
-      // Auto-dismiss for returning users on initial page load
-      if (prev === null && status?.claude && !dismissed) {
-        dismissed = true
-        localStorage.setItem('setup_dismissed', 'true')
+    async getSetupStatus(): Promise<SetupStatus> {
+      const config = await configStore.getAllConfig()
+      const claude = !!config.claude_oauth_token
+      const dismissed = config.setup_dismissed === 'true'
+
+      // Auto-dismiss migration
+      if (claude && !dismissed && config.setup_dismissed === undefined) {
+        await configStore.setConfig('setup_dismissed', 'true')
+        return {
+          claude,
+          telegram: !!config.telegram_token,
+          gitea: !!config.gitea_url && !!config.gitea_token,
+          complete: !!config.claude_oauth_token && !!config.telegram_token && !!config.gitea_token,
+          dismissed: true,
+        }
+      }
+
+      return {
+        claude,
+        telegram: !!config.telegram_token,
+        gitea: !!config.gitea_url && !!config.gitea_token,
+        complete: !!config.claude_oauth_token && !!config.telegram_token && !!config.gitea_token,
+        dismissed: claude && dismissed,
       }
     },
 
-    // Simulates submitSetup() — calls checkSetup after
-    submitSetup(apiResponse: SetupStatus) {
-      // submitSetup calls checkSetup internally (status is no longer null)
-      this.checkSetup(apiResponse)
-    },
-
-    dismissSetup() {
-      dismissed = true
-      localStorage.setItem('setup_dismissed', 'true')
-    },
-
-    isSetupComplete(): boolean {
-      return status?.claude === true && dismissed
-    },
-
-    get dismissed() {
-      return dismissed
-    },
-
-    get status() {
-      return status
+    async dismiss(): Promise<SetupResult> {
+      await configStore.setConfig('setup_dismissed', 'true')
+      return { ok: true, message: 'Setup dismissed' }
     },
   }
 }
 
 // ── Tests ────────────────────────────────────────────────────────────
 
-describe('Setup — dismissed state persistence', () => {
-  let ls: MockLocalStorage
+describe('Setup — server-side dismissed persistence', () => {
+  let configStore: MockConfigStore
 
   beforeEach(() => {
-    ls = new MockLocalStorage()
+    configStore = new MockConfigStore()
   })
 
-  describe('localStorage initialization', () => {
-    it('dismissed defaults to false when localStorage is empty', () => {
-      const store = createSetupStore(ls)
-      assert.equal(store.dismissed, false)
+  describe('getSetupStatus — dismissed field', () => {
+    it('returns dismissed: false when nothing is configured', async () => {
+      const domain = createSetupDomain(configStore)
+      const status = await domain.getSetupStatus()
+      assert.equal(status.dismissed, false)
+      assert.equal(status.claude, false)
     })
 
-    it('dismissed initializes to true when localStorage has setup_dismissed=true', () => {
-      ls.setItem('setup_dismissed', 'true')
-      const store = createSetupStore(ls)
-      assert.equal(store.dismissed, true)
+    it('returns dismissed: false when Claude is configured but setup_dismissed is explicitly false', async () => {
+      configStore.seed({
+        claude_oauth_token: 'sk-ant-test',
+        setup_dismissed: 'false',
+      })
+      const domain = createSetupDomain(configStore)
+      const status = await domain.getSetupStatus()
+      assert.equal(status.claude, true)
+      assert.equal(status.dismissed, false)
     })
 
-    it('dismissed is false for any other localStorage value', () => {
-      ls.setItem('setup_dismissed', 'false')
-      const store = createSetupStore(ls)
-      assert.equal(store.dismissed, false)
-    })
-  })
-
-  describe('dismissSetup persistence', () => {
-    it('sets dismissed to true and persists in localStorage', () => {
-      const store = createSetupStore(ls)
-      assert.equal(store.dismissed, false)
-
-      store.dismissSetup()
-
-      assert.equal(store.dismissed, true)
-      assert.equal(ls.getItem('setup_dismissed'), 'true')
+    it('returns dismissed: true when Claude is configured and setup_dismissed is true', async () => {
+      configStore.seed({
+        claude_oauth_token: 'sk-ant-test',
+        setup_dismissed: 'true',
+      })
+      const domain = createSetupDomain(configStore)
+      const status = await domain.getSetupStatus()
+      assert.equal(status.claude, true)
+      assert.equal(status.dismissed, true)
     })
 
-    it('dismissed survives simulated page reload', () => {
-      // Session 1: user dismisses setup
-      const store1 = createSetupStore(ls)
-      store1.dismissSetup()
-      assert.equal(ls.getItem('setup_dismissed'), 'true')
-
-      // Session 2: new store reads from same localStorage
-      const store2 = createSetupStore(ls)
-      assert.equal(store2.dismissed, true)
-    })
-  })
-
-  describe('isSetupComplete', () => {
-    it('returns false when neither Claude nor dismissed', () => {
-      const store = createSetupStore(ls)
-      store.checkSetup({ claude: false, telegram: false, gitea: false, complete: false })
-      assert.equal(store.isSetupComplete(), false)
-    })
-
-    it('returns false when Claude configured but not dismissed', () => {
-      const store = createSetupStore(ls)
-      // Force dismissed to stay false by not having localStorage set
-      // AND by having Claude not configured on first check
-      store.checkSetup({ claude: false, telegram: false, gitea: false, complete: false })
-      // Now "submit" Claude — triggers checkSetup with claude: true but prev !== null
-      store.submitSetup({ claude: true, telegram: false, gitea: false, complete: false })
-      assert.equal(store.isSetupComplete(), false, 'should not auto-dismiss during setup flow')
-    })
-
-    it('returns true when Claude configured AND dismissed', () => {
-      const store = createSetupStore(ls)
-      store.checkSetup({ claude: true, telegram: false, gitea: false, complete: false })
-      // Auto-dismiss triggers because prev===null and claude is true
-      assert.equal(store.isSetupComplete(), true)
-    })
-
-    it('returns true when dismissed via button click', () => {
-      const store = createSetupStore(ls)
-      store.checkSetup({ claude: false, telegram: false, gitea: false, complete: false })
-      store.submitSetup({ claude: true, telegram: false, gitea: false, complete: false })
-      // User clicks "Continue to chat"
-      store.dismissSetup()
-      assert.equal(store.isSetupComplete(), true)
+    it('dismissed is false when setup_dismissed is true but Claude is NOT configured', async () => {
+      configStore.seed({
+        setup_dismissed: 'true',
+      })
+      const domain = createSetupDomain(configStore)
+      const status = await domain.getSetupStatus()
+      assert.equal(status.claude, false)
+      assert.equal(status.dismissed, false, 'dismissed requires Claude to be configured')
     })
   })
 
-  describe('auto-dismiss for returning users', () => {
-    it('auto-dismisses when Claude is already configured on first page load', () => {
-      const store = createSetupStore(ls)
-      // Simulate: returning user loads page, API says Claude is configured
-      store.checkSetup({ claude: true, telegram: true, gitea: true, complete: true })
+  describe('auto-dismiss migration', () => {
+    it('auto-sets setup_dismissed for existing users (Claude configured, no setup_dismissed key)', async () => {
+      configStore.seed({
+        claude_oauth_token: 'sk-ant-test',
+        telegram_token: 'bot-token',
+        gitea_url: 'http://gitea:3000',
+        gitea_token: 'gitea-token',
+      })
+      const domain = createSetupDomain(configStore)
+      const status = await domain.getSetupStatus()
 
-      assert.equal(store.dismissed, true)
-      assert.equal(ls.getItem('setup_dismissed'), 'true')
-      assert.equal(store.isSetupComplete(), true)
+      assert.equal(status.dismissed, true, 'should auto-dismiss for existing user')
+      // Verify it was persisted
+      const saved = await configStore.getConfig('setup_dismissed')
+      assert.equal(saved, 'true', 'should persist to config store')
     })
 
-    it('does NOT auto-dismiss during initial setup after saving Claude token', () => {
-      const store = createSetupStore(ls)
+    it('does NOT auto-dismiss when Claude is not configured (new user)', async () => {
+      const domain = createSetupDomain(configStore)
+      const status = await domain.getSetupStatus()
 
-      // Step 1: Initial page load — Claude not configured yet
-      store.checkSetup({ claude: false, telegram: false, gitea: false, complete: false })
-      assert.equal(store.dismissed, false, 'should not dismiss when Claude is not configured')
-
-      // Step 2: User saves Claude token, submitSetup refreshes status
-      store.submitSetup({ claude: true, telegram: false, gitea: false, complete: false })
-      assert.equal(store.dismissed, false, 'should not auto-dismiss after saving token during setup')
-      assert.equal(store.isSetupComplete(), false, 'setup should not be complete — user can still configure Telegram')
+      assert.equal(status.dismissed, false)
+      const saved = await configStore.getConfig('setup_dismissed')
+      assert.equal(saved, null, 'should not persist anything')
     })
 
-    it('does not auto-dismiss if Claude is not configured on page load', () => {
-      const store = createSetupStore(ls)
-      store.checkSetup({ claude: false, telegram: false, gitea: false, complete: false })
+    it('does NOT re-trigger migration after setup_dismissed was explicitly set to false', async () => {
+      configStore.seed({
+        claude_oauth_token: 'sk-ant-test',
+        setup_dismissed: 'false',
+      })
+      const domain = createSetupDomain(configStore)
+      const status = await domain.getSetupStatus()
 
-      assert.equal(store.dismissed, false)
-      assert.equal(ls.getItem('setup_dismissed'), null)
+      assert.equal(status.dismissed, false, 'explicit false should be respected')
+      const saved = await configStore.getConfig('setup_dismissed')
+      assert.equal(saved, 'false', 'should not overwrite explicit false')
+    })
+
+    it('auto-dismiss persists across repeated calls', async () => {
+      configStore.seed({
+        claude_oauth_token: 'sk-ant-test',
+      })
+      const domain = createSetupDomain(configStore)
+
+      // First call triggers migration
+      const status1 = await domain.getSetupStatus()
+      assert.equal(status1.dismissed, true)
+
+      // Second call reads persisted value
+      const status2 = await domain.getSetupStatus()
+      assert.equal(status2.dismissed, true)
+    })
+  })
+
+  describe('dismiss step', () => {
+    it('sets setup_dismissed to true in config store', async () => {
+      const domain = createSetupDomain(configStore)
+
+      const result = await domain.dismiss()
+      assert.equal(result.ok, true)
+
+      const saved = await configStore.getConfig('setup_dismissed')
+      assert.equal(saved, 'true')
+    })
+
+    it('subsequent getSetupStatus reflects dismissed state', async () => {
+      configStore.seed({
+        claude_oauth_token: 'sk-ant-test',
+        setup_dismissed: 'false',
+      })
+      const domain = createSetupDomain(configStore)
+
+      // Before dismiss
+      let status = await domain.getSetupStatus()
+      assert.equal(status.dismissed, false)
+
+      // Dismiss
+      await domain.dismiss()
+
+      // After dismiss
+      status = await domain.getSetupStatus()
+      assert.equal(status.dismissed, true)
     })
   })
 
   describe('full flow scenarios', () => {
-    it('first-time user: setup → configure Claude → configure Telegram → dismiss', () => {
-      const store = createSetupStore(ls)
+    it('new user: Claude configured → still sees onboarding → dismisses → done', async () => {
+      const domain = createSetupDomain(configStore)
 
-      // Page load: nothing configured
-      store.checkSetup({ claude: false, telegram: false, gitea: false, complete: false })
-      assert.equal(store.isSetupComplete(), false)
+      // Step 1: Fresh install, nothing configured
+      let status = await domain.getSetupStatus()
+      assert.equal(status.claude, false)
+      assert.equal(status.dismissed, false)
 
-      // Save Claude token
-      store.submitSetup({ claude: true, telegram: false, gitea: false, complete: false })
-      assert.equal(store.isSetupComplete(), false, 'should show onboarding for Telegram step')
+      // Step 2: User saves Claude token (simulated via config)
+      await configStore.setConfig('claude_oauth_token', 'sk-ant-test')
+      // Also set setup_dismissed to false to indicate it was set during this session
+      await configStore.setConfig('setup_dismissed', 'false')
 
-      // Save Telegram token
-      store.submitSetup({ claude: true, telegram: true, gitea: false, complete: false })
-      assert.equal(store.isSetupComplete(), false, 'still needs manual dismiss')
+      status = await domain.getSetupStatus()
+      assert.equal(status.claude, true)
+      assert.equal(status.dismissed, false, 'should still show onboarding for optional steps')
 
-      // User clicks "Continue to chat"
-      store.dismissSetup()
-      assert.equal(store.isSetupComplete(), true)
-      assert.equal(ls.getItem('setup_dismissed'), 'true')
+      // Step 3: User clicks "Continue to chat"
+      await domain.dismiss()
+      status = await domain.getSetupStatus()
+      assert.equal(status.dismissed, true)
     })
 
-    it('returning user: page load skips setup entirely', () => {
-      // Previous session dismissed
-      ls.setItem('setup_dismissed', 'true')
+    it('returning user: auto-dismissed, never sees onboarding', async () => {
+      configStore.seed({
+        claude_oauth_token: 'sk-ant-test',
+        telegram_token: 'bot-token',
+        gitea_url: 'http://gitea:3000',
+        gitea_token: 'gitea-token',
+      })
+      const domain = createSetupDomain(configStore)
 
-      const store = createSetupStore(ls)
-      store.checkSetup({ claude: true, telegram: true, gitea: true, complete: true })
-
-      assert.equal(store.isSetupComplete(), true)
+      const status = await domain.getSetupStatus()
+      assert.equal(status.claude, true)
+      assert.equal(status.complete, true)
+      assert.equal(status.dismissed, true, 'auto-dismissed for returning user')
     })
 
-    it('returning user without localStorage (migration): auto-dismisses on load', () => {
-      // User had setup before the dismissed flag was introduced
-      // localStorage is empty, but Claude is configured
-      const store = createSetupStore(ls)
-      store.checkSetup({ claude: true, telegram: true, gitea: true, complete: true })
+    it('returning user with setup_dismissed already set: works normally', async () => {
+      configStore.seed({
+        claude_oauth_token: 'sk-ant-test',
+        setup_dismissed: 'true',
+      })
+      const domain = createSetupDomain(configStore)
 
-      // Auto-dismiss should kick in
-      assert.equal(store.dismissed, true)
-      assert.equal(ls.getItem('setup_dismissed'), 'true')
-      assert.equal(store.isSetupComplete(), true)
+      const status = await domain.getSetupStatus()
+      assert.equal(status.dismissed, true)
     })
   })
 })

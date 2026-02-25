@@ -3,6 +3,10 @@
  *
  * Checks if the platform is configured (Claude token, Gitea, etc.)
  * and exposes setup status + actions.
+ *
+ * The `dismissed` flag is persisted server-side in the PostgreSQL config
+ * store (not localStorage) so it survives browser clears and works
+ * across devices.
  */
 
 // ── Types ─────────────────────────────────────────────────────────────
@@ -12,6 +16,7 @@ export interface SetupStatus {
   telegram: boolean
   gitea: boolean
   complete: boolean
+  dismissed: boolean
 }
 
 export interface SetupResult {
@@ -25,7 +30,6 @@ export interface SetupResult {
 let status = $state<SetupStatus | null>(null)
 let loading = $state(true)
 let error = $state<string | null>(null)
-let dismissed = $state(localStorage.getItem('setup_dismissed') === 'true')
 
 // ── API ───────────────────────────────────────────────────────────────
 
@@ -35,20 +39,11 @@ export async function checkSetup(): Promise<void> {
   try {
     const res = await fetch('/api/setup/status')
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    const prev = status
     status = await res.json()
-    // Auto-dismiss for returning users on initial page load:
-    // If Claude was already configured before we checked (not just saved during
-    // this session via submitSetup), and user hasn't dismissed yet, they're a
-    // returning user who set up before the dismissed flag existed.
-    if (prev === null && status?.claude && !dismissed) {
-      dismissed = true
-      localStorage.setItem('setup_dismissed', 'true')
-    }
   } catch (err) {
     error = (err as Error).message
     // If we can't reach the API, assume not set up
-    status = { claude: false, telegram: false, gitea: false, complete: false }
+    status = { claude: false, telegram: false, gitea: false, complete: false, dismissed: false }
   } finally {
     loading = false
   }
@@ -78,12 +73,20 @@ export function isSetupLoading(): boolean {
 }
 
 export function isSetupComplete(): boolean {
-  return status?.claude === true && dismissed
+  return status?.claude === true && status?.dismissed === true
 }
 
-export function dismissSetup(): void {
-  dismissed = true
-  localStorage.setItem('setup_dismissed', 'true')
+export async function dismissSetup(): Promise<void> {
+  // Persist server-side
+  await fetch('/api/setup/dismiss', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({}),
+  })
+  // Update local state immediately
+  if (status) {
+    status = { ...status, dismissed: true }
+  }
 }
 
 export function getSetupError(): string | null {

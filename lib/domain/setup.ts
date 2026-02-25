@@ -12,6 +12,7 @@ export interface SetupStatus {
   telegram: boolean
   gitea: boolean
   complete: boolean
+  dismissed: boolean
 }
 
 export interface SetupResult {
@@ -22,11 +23,29 @@ export interface SetupResult {
 
 export const getSetupStatus = async (): Promise<SetupStatus> => {
   const config = await getAllConfig()
+  const claude = !!config.claude_oauth_token
+  const dismissed = config.setup_dismissed === 'true'
+
+  // Auto-dismiss migration: if Claude is configured but setup_dismissed
+  // was never set (pre-existing user), persist it now so the onboarding
+  // screen never shows again.
+  if (claude && !dismissed && config.setup_dismissed === undefined) {
+    await setConfig('setup_dismissed', 'true')
+    return {
+      claude,
+      telegram: !!config.telegram_token,
+      gitea: !!config.gitea_url && !!config.gitea_token,
+      complete: !!config.claude_oauth_token && !!config.telegram_token && !!config.gitea_token,
+      dismissed: true,
+    }
+  }
+
   return {
-    claude: !!config.claude_oauth_token,
+    claude,
     telegram: !!config.telegram_token,
     gitea: !!config.gitea_url && !!config.gitea_token,
     complete: !!config.claude_oauth_token && !!config.telegram_token && !!config.gitea_token,
+    dismissed: claude && dismissed,
   }
 }
 
@@ -65,6 +84,11 @@ export const setupStep = async (step: string, data: Record<string, string>): Pro
       } catch (err) {
         return { ok: false, error: `Gitea connection failed: ${(err as Error).message}` }
       }
+    }
+
+    case 'dismiss': {
+      await setConfig('setup_dismissed', 'true')
+      return { ok: true, message: 'Setup dismissed' }
     }
 
     case 'webhook_secret': {
