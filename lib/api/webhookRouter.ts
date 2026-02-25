@@ -112,9 +112,45 @@ const extractTags = (event: string, payload: WebhookPayload): string[] => {
 // ─── Thread + Conversation Resolution ────────────────────────────────
 
 /**
+ * Find ALL threads that reference a given (repo, ref_type, number).
+ * Unlike findThreadByRef (which returns LIMIT 1), this returns all matches
+ * so we can pick the best one and detect duplicates.
+ */
+const findAllThreadsByRef = async (
+  repo: string,
+  refType: string,
+  number: number
+): Promise<threads.ThreadWithRefs[]> => {
+  const pool = store.getPool()
+  const { rows } = await pool.query(
+    `SELECT t.* FROM threads t
+     JOIN thread_refs r ON r.thread_id = t.id
+     WHERE r.repo = $1 AND r.ref_type = $2 AND r.number = $3
+     ORDER BY t.updated_at DESC`,
+    [repo, refType, number]
+  )
+  // Enrich with refs
+  const results: threads.ThreadWithRefs[] = []
+  for (const row of rows) {
+    const { rows: refs } = await pool.query(
+      'SELECT * FROM thread_refs WHERE thread_id = $1 ORDER BY created_at ASC',
+      [row.id]
+    )
+    results.push({ ...row, refs })
+  }
+  return results
+}
+
+/**
  * Find a conversation by thread_refs first, then fall back to tag-based lookup.
  * This is the hybrid approach during migration: thread_refs are preferred,
  * but old conversations that predate the thread model are still found by tags.
+ *
+ * DEDUP FIX: When multiple threads reference the same issue/PR, prefer
+ * the one with a web-originated conversation (where the user is chatting)
+ * over webhook-created ones. Also accept stopped conversations from
+ * thread_refs to prevent falling through to tag-based lookup and finding
+ * a different conversation.
  */
 const findConversation = async (
   refs: WebhookRef[],
@@ -122,13 +158,43 @@ const findConversation = async (
 ): Promise<{ conversation: store.Conversation; threadId: string | null } | null> => {
   // 1. Try thread_refs lookup (preferred — unified model)
   for (const ref of refs) {
-    const thread = await threads.findThreadByRef(ref.repo, ref.ref_type, ref.number)
-    if (thread && thread.conversation_id) {
+    const matchingThreads = await findAllThreadsByRef(ref.repo, ref.ref_type, ref.number)
+    if (matchingThreads.length === 0) continue
+
+    if (matchingThreads.length > 1) {
+      console.warn(`[webhookRouter] Multiple threads (${matchingThreads.length}) for ref ${ref.repo}/${ref.ref_type}#${ref.number} — picking best match`)
+    }
+
+    // Score threads: prefer active/paused web-originated conversations
+    let bestMatch: { conversation: store.Conversation; threadId: string } | null = null
+    let bestScore = -1
+
+    for (const thread of matchingThreads) {
+      if (!thread.conversation_id) continue
       const conv = await store.getConversation(thread.conversation_id)
-      if (conv && (conv.status === 'active' || conv.status === 'paused')) {
-        console.log(`[webhookRouter] Found thread ${thread.id} via ref ${ref.repo}/${ref.ref_type}#${ref.number}`)
-        return { conversation: conv, threadId: thread.id }
+      if (!conv) continue
+
+      // Score: higher = better
+      let score = 0
+      if (conv.status === 'active') score += 10
+      else if (conv.status === 'paused') score += 5
+      else if (conv.status === 'stopped') score += 1
+      // archived = 0
+
+      // Prefer web-originated conversations (user is actively chatting there)
+      if (conv.channel === 'web') score += 3
+      // Webhook-created conversations are less preferred
+      if (conv.channel === 'webhook') score += 0
+
+      if (score > bestScore) {
+        bestScore = score
+        bestMatch = { conversation: conv, threadId: thread.id }
       }
+    }
+
+    if (bestMatch) {
+      console.log(`[webhookRouter] Found thread ${bestMatch.threadId} via ref ${ref.repo}/${ref.ref_type}#${ref.number} (conversation: ${bestMatch.conversation.id}, status: ${bestMatch.conversation.status}, channel: ${bestMatch.conversation.channel})`)
+      return bestMatch
     }
   }
 
@@ -169,6 +235,10 @@ const shouldAutoCreate = (event: string, payload: WebhookPayload): boolean => {
 /**
  * Create a conversation + thread for a new webhook event.
  * Links the thread to the issue/PR via thread_refs.
+ *
+ * DEDUP FIX: Before creating, check if a thread already exists for any
+ * of the refs (e.g., created by autoLinkRefs in the web chat router).
+ * If so, reuse that thread's conversation instead of creating a duplicate.
  */
 const createForWebhook = async (
   event: string,
@@ -176,6 +246,22 @@ const createForWebhook = async (
   tags: string[],
   refs: WebhookRef[]
 ): Promise<{ conversation: store.Conversation; threadId: string }> => {
+  // Check if a thread already exists for any of the refs (race condition guard)
+  for (const ref of refs) {
+    const existing = await threads.findThreadByRef(ref.repo, ref.ref_type, ref.number)
+    if (existing && existing.conversation_id) {
+      const conv = await store.getConversation(existing.conversation_id)
+      if (conv) {
+        console.log(`[webhookRouter] Reusing existing conversation ${conv.id} + thread ${existing.id} (avoids duplicate for ${ref.repo}/${ref.ref_type}#${ref.number})`)
+        // Ensure tags are merged
+        if (tags.length > 0) {
+          try { await store.addTags(conv.id, tags) } catch { /* ignore */ }
+        }
+        return { conversation: conv, threadId: existing.id }
+      }
+    }
+  }
+
   const repo = payload.repository?.name
   let topic: string | null = null
 

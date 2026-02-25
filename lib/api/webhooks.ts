@@ -76,6 +76,36 @@ const verifySignature = (payload: string, signature: string, secret: string): bo
   }
 }
 
+// ─── Delivery Deduplication ──────────────────────────────────────────
+
+/**
+ * Track recently processed webhook deliveries to prevent duplicates.
+ * Gitea sends X-Gitea-Delivery UUID with each webhook. If the same
+ * event arrives twice (org + repo webhooks, retries, etc.), skip it.
+ */
+const recentDeliveries = new Map<string, number>()
+const DELIVERY_TTL_MS = 5 * 60 * 1000 // 5 minutes
+const MAX_DELIVERY_CACHE = 500
+
+const isDeliveryDuplicate = (deliveryId: string): boolean => {
+  if (!deliveryId) return false
+
+  // Cleanup old entries periodically
+  if (recentDeliveries.size > MAX_DELIVERY_CACHE) {
+    const now = Date.now()
+    for (const [id, ts] of recentDeliveries) {
+      if (now - ts > DELIVERY_TTL_MS) recentDeliveries.delete(id)
+    }
+  }
+
+  if (recentDeliveries.has(deliveryId)) return true
+  recentDeliveries.set(deliveryId, Date.now())
+  return false
+}
+
+/** Exposed for testing */
+export const _testDeliveryDedup = { recentDeliveries, isDeliveryDuplicate }
+
 // ─── Webhook Handler ────────────────────────────────────────────────
 
 export const handleWebhook = async (c: Context): Promise<Response> => {
@@ -83,13 +113,20 @@ export const handleWebhook = async (c: Context): Promise<Response> => {
   const body = await c.req.text()
   const signature = c.req.header('x-gitea-signature') || ''
   const event = c.req.header('x-gitea-event') || 'unknown'
+  const deliveryId = c.req.header('x-gitea-delivery') || ''
 
   if (secret && !verifySignature(body, signature, secret)) {
     return c.json({ error: 'Invalid signature' }, 401)
   }
 
+  // Deduplicate: skip if this exact delivery was already processed
+  if (isDeliveryDuplicate(deliveryId)) {
+    console.log(`[webhook] Duplicate delivery ${deliveryId} for ${event}, skipping`)
+    return c.json({ ok: true, skipped: 'duplicate-delivery', deliveryId })
+  }
+
   const payload: WebhookPayload = JSON.parse(body)
-  console.log(`Webhook: ${event}`, payload.action || '')
+  console.log(`Webhook: ${event}`, payload.action || '', deliveryId ? `(delivery: ${deliveryId})` : '')
 
   const isSelfGenerated = await isSelfEvent(event, payload)
   if (isSelfGenerated) {
