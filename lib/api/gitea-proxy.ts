@@ -115,9 +115,10 @@ export const createGiteaProxy = (): Hono => {
       // For each repo, get open issues count, PRs count, recent PRs, and recent issues in parallel
       const perRepoData = await Promise.all(
         activeRepos.map(async (repo) => {
-          const [openIssues, openPulls, recentPulls, recentIssues] = await Promise.allSettled([
+          const [openIssues, openPulls, recentOpenPulls, recentClosedPulls, recentIssues] = await Promise.allSettled([
             gitea.issues.list(org, repo.name, { state: 'open', limit: 1, type: 'issues' }),
             gitea.pulls.list(org, repo.name, { state: 'open', limit: 1 }),
+            gitea.pulls.list(org, repo.name, { state: 'open', limit: 5, sort: 'updated' }),
             gitea.pulls.list(org, repo.name, { state: 'closed', limit: 5, sort: 'updated' }),
             gitea.issues.list(org, repo.name, { state: 'all', limit: 5, type: 'issues' }),
           ])
@@ -138,8 +139,23 @@ export const createGiteaProxy = (): Hono => {
               size: (repo as Record<string, unknown>).size || 0,
               open_pr_count: openPulls.status === 'fulfilled' ? openPulls.value.length : 0,
             },
-            recentPRs: recentPulls.status === 'fulfilled'
-              ? recentPulls.value.map(pr => ({
+            openPRs: recentOpenPulls.status === 'fulfilled'
+              ? recentOpenPulls.value.map(pr => ({
+                  number: pr.number,
+                  title: pr.title,
+                  state: 'open' as const,
+                  user: pr.user ? { login: pr.user.login, avatar_url: pr.user.avatar_url } : null,
+                  repo: repo.name,
+                  head_branch: pr.head?.ref ?? '',
+                  base_branch: pr.base?.ref ?? '',
+                  html_url: pr.html_url,
+                  created_at: pr.created_at,
+                  updated_at: pr.updated_at,
+                  merged_at: pr.merged_at,
+                }))
+              : [],
+            closedPRs: recentClosedPulls.status === 'fulfilled'
+              ? recentClosedPulls.value.map(pr => ({
                   number: pr.number,
                   title: pr.title,
                   state: pr.merged ? 'merged' : pr.state,
@@ -181,24 +197,31 @@ export const createGiteaProxy = (): Hono => {
         return dateB - dateA
       })
 
-      // Merge and sort recent PRs across all repos (top 5)
-      const allRecentPRs = perRepoData
-        .flatMap(d => d.recentPRs)
-        .sort((a, b) => {
-          const dateA = a.updated_at ? new Date(a.updated_at).getTime() : 0
-          const dateB = b.updated_at ? new Date(b.updated_at).getTime() : 0
-          return dateB - dateA
-        })
+      // Merge and sort open PRs across all repos (most recent first)
+      const byDateDesc = (a: { updated_at: string }, b: { updated_at: string }) => {
+        const dateA = a.updated_at ? new Date(a.updated_at).getTime() : 0
+        const dateB = b.updated_at ? new Date(b.updated_at).getTime() : 0
+        return dateB - dateA
+      }
+
+      const allOpenPRs = perRepoData
+        .flatMap(d => d.openPRs)
+        .sort(byDateDesc)
         .slice(0, 8)
 
-      // Merge and sort recent issues across all repos (top 5)
+      // Merge and sort closed/merged PRs across all repos (most recent first)
+      const allClosedPRs = perRepoData
+        .flatMap(d => d.closedPRs)
+        .sort(byDateDesc)
+        .slice(0, 8)
+
+      // Combined for backwards compat: open first, then closed
+      const allRecentPRs = [...allOpenPRs, ...allClosedPRs].slice(0, 8)
+
+      // Merge and sort recent issues across all repos (most recent first)
       const allRecentIssues = perRepoData
         .flatMap(d => d.recentIssues)
-        .sort((a, b) => {
-          const dateA = a.updated_at ? new Date(a.updated_at).getTime() : 0
-          const dateB = b.updated_at ? new Date(b.updated_at).getTime() : 0
-          return dateB - dateA
-        })
+        .sort(byDateDesc)
         .slice(0, 8)
 
       return c.json({
@@ -208,6 +231,8 @@ export const createGiteaProxy = (): Hono => {
         totalOpenIssues: repoSummaries.reduce((sum, r) => sum + (r.open_issues_count || 0), 0),
         totalOpenPRs: repoSummaries.reduce((sum, r) => sum + r.open_pr_count, 0),
         recentPRs: allRecentPRs,
+        openPRs: allOpenPRs,
+        closedPRs: allClosedPRs,
         recentIssues: allRecentIssues,
       })
     } catch (err) {

@@ -74,6 +74,8 @@
     totalOpenIssues: number
     totalOpenPRs: number
     recentPRs: RecentPR[]
+    openPRs?: RecentPR[]
+    closedPRs?: RecentPR[]
     recentIssues: RecentIssue[]
   }
 
@@ -373,7 +375,12 @@
 
       <!-- Right column -->
       <div class="grid-column">
-        <RecentPRsWidget prs={overview?.recentPRs ?? []} owner={overview?.org?.name ?? 'idea'} loading={loading} />
+        <RecentPRsWidget
+          openPRs={overview?.openPRs ?? []}
+          closedPRs={overview?.closedPRs ?? []}
+          owner={overview?.org?.name ?? 'idea'}
+          loading={loading}
+        />
         <RecentIssuesWidget issues={overview?.recentIssues ?? []} owner={overview?.org?.name ?? 'idea'} loading={loading} />
       </div>
     </div>

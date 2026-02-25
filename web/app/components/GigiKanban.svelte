@@ -796,6 +796,7 @@
   .column {
     flex: 1;
     min-width: 200px;
+    max-width: 320px;
     display: flex;
     flex-direction: column;
     background: var(--gigi-bg-primary);

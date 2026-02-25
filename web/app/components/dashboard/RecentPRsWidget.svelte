@@ -1,9 +1,10 @@
 <script lang="ts">
   /**
-   * Recent Pull Requests Widget
+   * Pull Requests Widget
    *
-   * Shows the latest PRs (open + recently merged) across all repos.
-   * Data comes from the overview API response.
+   * Shows open PRs prominently sorted recent → old.
+   * When no open PRs exist, shows Gigi zen logo with a
+   * collapsible archive drawer for recently closed/merged PRs.
    */
 
   import { formatRelativeTime } from '$lib/utils/format'
@@ -24,12 +25,17 @@
   }
 
   interface Props {
-    prs: RecentPR[]
+    openPRs: RecentPR[]
+    closedPRs: RecentPR[]
     owner: string
     loading?: boolean
   }
 
-  let { prs, owner, loading = false }: Props = $props()
+  let { openPRs, closedPRs, owner, loading = false }: Props = $props()
+
+  let archiveOpen = $state(false)
+
+  const hasOpenPRs = $derived(openPRs.length > 0)
 
   function getStateIcon(state: string): string {
     switch (state) {
@@ -39,6 +45,10 @@
       default: return 'open'
     }
   }
+
+  function toggleArchive(): void {
+    archiveOpen = !archiveOpen
+  }
 </script>
 
 <section class="widget">
@@ -46,9 +56,9 @@
     <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
       <path d="M2 2h8v8H7v12H5V10H2V2zm2 2v4h4V4H4zm8 1h7.09v9H22v8h-8v-8h3.09V7H12V5zm4 11v4h4v-4h-4z"/>
     </svg>
-    Recent PRs
-    {#if prs.length > 0}
-      <span class="widget-count">{prs.length}</span>
+    Pull Requests
+    {#if openPRs.length > 0}
+      <span class="widget-count">{openPRs.length} open</span>
     {/if}
   </h2>
 
@@ -58,26 +68,17 @@
         <div class="skeleton-row"></div>
       {/each}
     </div>
-  {:else if prs.length === 0}
-    <div class="widget-empty">
-      <p>No recent pull requests</p>
-    </div>
-  {:else}
+  {:else if hasOpenPRs}
+    <!-- Open PRs list -->
     <div class="pr-list">
-      {#each prs as pr}
+      {#each openPRs as pr}
         <button
           class="pr-item"
           onclick={() => navigateToPull(owner, pr.repo, pr.number)}
           title="#{pr.number} {pr.title}"
         >
-          <span class="pr-state pr-state-{getStateIcon(pr.state)}">
-            {#if pr.state === 'merged'}
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M2 2h8v8H7v12H5V10H2V2zm2 2v4h4V4H4zm8 1h7.09v9H22v8h-8v-8h3.09V7H12V5zm4 11v4h4v-4h-4z"/></svg>
-            {:else if pr.state === 'open'}
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M2 2h8v8H7v12H5V10H2V2zm2 2v4h4V4H4zm8 1h7.09v9H22v8h-8v-8h3.09V7H12V5zm4 11v4h4v-4h-4z"/></svg>
-            {:else}
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M2 2h8v8H7v12H5V10H2V2zm2 2v4h4V4H4zm8 1h7.09v9H22v8h-8v-8h3.09V7H12V5zm4 11v4h4v-4h-4z"/></svg>
-            {/if}
+          <span class="pr-state pr-state-open">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M2 2h8v8H7v12H5V10H2V2zm2 2v4h4V4H4zm8 1h7.09v9H22v8h-8v-8h3.09V7H12V5zm4 11v4h4v-4h-4z"/></svg>
           </span>
           <div class="pr-info">
             <div class="pr-header">
@@ -87,17 +88,99 @@
               </span>
             </div>
             <div class="pr-meta">
-              <span class="pr-label pr-label-{getStateIcon(pr.state)}">{pr.state}</span>
+              <span class="pr-label pr-label-open">open</span>
               <span class="pr-repo">{pr.repo}</span>
               {#if pr.user}
                 <span class="pr-author">{pr.user.login}</span>
               {/if}
-              <span class="pr-time">{formatRelativeTime(pr.merged_at ?? pr.updated_at)}</span>
+              <span class="pr-time">{formatRelativeTime(pr.updated_at)}</span>
             </div>
           </div>
         </button>
       {/each}
     </div>
+
+    <!-- Archive drawer for closed PRs when open PRs exist -->
+    {#if closedPRs.length > 0}
+      <button class="archive-toggle" onclick={toggleArchive}>
+        <svg class="archive-chevron" class:archive-chevron-open={archiveOpen} width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M10 17V7l5 5-5 5z"/>
+        </svg>
+        {closedPRs.length} recently closed
+      </button>
+      {#if archiveOpen}
+        <div class="pr-list archive-list">
+          {#each closedPRs as pr}
+            <button
+              class="pr-item pr-item-archived"
+              onclick={() => navigateToPull(owner, pr.repo, pr.number)}
+              title="#{pr.number} {pr.title}"
+            >
+              <span class="pr-state pr-state-{getStateIcon(pr.state)}">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M2 2h8v8H7v12H5V10H2V2zm2 2v4h4V4H4zm8 1h7.09v9H22v8h-8v-8h3.09V7H12V5zm4 11v4h4v-4h-4z"/></svg>
+              </span>
+              <div class="pr-info">
+                <div class="pr-header">
+                  <span class="pr-title">
+                    <span class="pr-number">#{pr.number}</span>
+                    {pr.title}
+                  </span>
+                </div>
+                <div class="pr-meta">
+                  <span class="pr-label pr-label-{getStateIcon(pr.state)}">{pr.state}</span>
+                  <span class="pr-repo">{pr.repo}</span>
+                  <span class="pr-time">{formatRelativeTime(pr.merged_at ?? pr.updated_at)}</span>
+                </div>
+              </div>
+            </button>
+          {/each}
+        </div>
+      {/if}
+    {/if}
+  {:else}
+    <!-- No open PRs: zen state -->
+    <div class="zen-state">
+      <img src="/gigi-zen.png" alt="Gigi zen" class="zen-logo" width="96" />
+      <p class="zen-text">All clear — no open pull requests</p>
+    </div>
+
+    <!-- Archive drawer for closed PRs -->
+    {#if closedPRs.length > 0}
+      <button class="archive-toggle" onclick={toggleArchive}>
+        <svg class="archive-chevron" class:archive-chevron-open={archiveOpen} width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M10 17V7l5 5-5 5z"/>
+        </svg>
+        See the latest {closedPRs.length} closed PRs
+      </button>
+      {#if archiveOpen}
+        <div class="pr-list archive-list">
+          {#each closedPRs as pr}
+            <button
+              class="pr-item pr-item-archived"
+              onclick={() => navigateToPull(owner, pr.repo, pr.number)}
+              title="#{pr.number} {pr.title}"
+            >
+              <span class="pr-state pr-state-{getStateIcon(pr.state)}">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M2 2h8v8H7v12H5V10H2V2zm2 2v4h4V4H4zm8 1h7.09v9H22v8h-8v-8h3.09V7H12V5zm4 11v4h4v-4h-4z"/></svg>
+              </span>
+              <div class="pr-info">
+                <div class="pr-header">
+                  <span class="pr-title">
+                    <span class="pr-number">#{pr.number}</span>
+                    {pr.title}
+                  </span>
+                </div>
+                <div class="pr-meta">
+                  <span class="pr-label pr-label-{getStateIcon(pr.state)}">{pr.state}</span>
+                  <span class="pr-repo">{pr.repo}</span>
+                  <span class="pr-time">{formatRelativeTime(pr.merged_at ?? pr.updated_at)}</span>
+                </div>
+              </div>
+            </button>
+          {/each}
+        </div>
+      {/if}
+    {/if}
   {/if}
 </section>
 
@@ -120,8 +203,8 @@
 
   .widget-count {
     font-size: var(--gigi-font-size-xs);
-    background: var(--gigi-bg-elevated);
-    color: var(--gigi-text-muted);
+    background: rgba(63, 185, 80, 0.12);
+    color: var(--gigi-accent-green);
     padding: 1px 7px;
     border-radius: var(--gigi-radius-full);
     font-weight: 500;
@@ -153,6 +236,14 @@
   .pr-item:hover {
     border-color: var(--gigi-accent-purple);
     background: var(--gigi-bg-hover);
+  }
+
+  .pr-item-archived {
+    opacity: 0.7;
+  }
+
+  .pr-item-archived:hover {
+    opacity: 1;
   }
 
   .pr-state {
@@ -245,7 +336,72 @@
     color: var(--gigi-text-muted);
   }
 
-  /* Loading / Empty */
+  /* ── Zen / Empty State ──────────────────────────────────────── */
+
+  .zen-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--gigi-space-sm);
+    padding: var(--gigi-space-xl) var(--gigi-space-lg);
+  }
+
+  .zen-logo {
+    opacity: 0.5;
+    filter: grayscale(0.3);
+    transition: opacity var(--gigi-transition-fast);
+  }
+
+  .zen-state:hover .zen-logo {
+    opacity: 0.7;
+  }
+
+  .zen-text {
+    font-size: var(--gigi-font-size-sm);
+    color: var(--gigi-text-muted);
+    text-align: center;
+  }
+
+  /* ── Archive Drawer ──────────────────────────────────────────── */
+
+  .archive-toggle {
+    display: flex;
+    align-items: center;
+    gap: var(--gigi-space-xs);
+    width: 100%;
+    margin-top: var(--gigi-space-sm);
+    padding: var(--gigi-space-xs) var(--gigi-space-sm);
+    background: none;
+    border: none;
+    border-radius: var(--gigi-radius-sm);
+    color: var(--gigi-text-muted);
+    font-size: var(--gigi-font-size-xs);
+    font-family: var(--gigi-font-sans);
+    cursor: pointer;
+    transition: all var(--gigi-transition-fast);
+    text-align: left;
+  }
+
+  .archive-toggle:hover {
+    color: var(--gigi-text-secondary);
+    background: var(--gigi-bg-hover);
+  }
+
+  .archive-chevron {
+    transition: transform var(--gigi-transition-fast);
+    flex-shrink: 0;
+  }
+
+  .archive-chevron-open {
+    transform: rotate(90deg);
+  }
+
+  .archive-list {
+    margin-top: var(--gigi-space-xs);
+    padding-left: 0;
+  }
+
+  /* Loading */
   .loading-list {
     display: flex;
     flex-direction: column;
@@ -263,12 +419,5 @@
   @keyframes shimmer {
     0%, 100% { opacity: 0.5; }
     50% { opacity: 0.8; }
-  }
-
-  .widget-empty {
-    text-align: center;
-    padding: var(--gigi-space-lg);
-    color: var(--gigi-text-muted);
-    font-size: var(--gigi-font-size-sm);
   }
 </style>

@@ -49,6 +49,22 @@ function mergeAndSortPRs(perRepoData: { recentPRs: RecentPR[] }[], limit: number
     .slice(0, limit)
 }
 
+/** Simulate the new split open/closed aggregation from gitea-proxy */
+function splitAndSortPRs(
+  perRepoData: { openPRs: RecentPR[]; closedPRs: RecentPR[] }[],
+  limit: number,
+): { openPRs: RecentPR[]; closedPRs: RecentPR[]; combined: RecentPR[] } {
+  const byDateDesc = (a: { updated_at: string }, b: { updated_at: string }) => {
+    const dateA = a.updated_at ? new Date(a.updated_at).getTime() : 0
+    const dateB = b.updated_at ? new Date(b.updated_at).getTime() : 0
+    return dateB - dateA
+  }
+  const openPRs = perRepoData.flatMap(d => d.openPRs).sort(byDateDesc).slice(0, limit)
+  const closedPRs = perRepoData.flatMap(d => d.closedPRs).sort(byDateDesc).slice(0, limit)
+  const combined = [...openPRs, ...closedPRs].slice(0, limit)
+  return { openPRs, closedPRs, combined }
+}
+
 function mergeAndSortIssues(perRepoData: { recentIssues: RecentIssue[] }[], limit: number): RecentIssue[] {
   return perRepoData
     .flatMap(d => d.recentIssues)
@@ -118,6 +134,72 @@ describe('mergeAndSortPRs — cross-repo aggregation', () => {
   })
 })
 
+describe('splitAndSortPRs — open/closed separation', () => {
+  const repo1Data = {
+    openPRs: [
+      { number: 15, title: 'WIP feature', state: 'open', repo: 'gigi', updated_at: '2026-02-24T10:00:00Z', merged_at: null },
+    ] as RecentPR[],
+    closedPRs: [
+      { number: 10, title: 'Fix A', state: 'merged', repo: 'gigi', updated_at: '2026-02-23T10:00:00Z', merged_at: '2026-02-23T10:00:00Z' },
+    ] as RecentPR[],
+  }
+  const repo2Data = {
+    openPRs: [
+      { number: 5, title: 'Open infra', state: 'open', repo: 'infra', updated_at: '2026-02-24T08:00:00Z', merged_at: null },
+    ] as RecentPR[],
+    closedPRs: [
+      { number: 3, title: 'Old infra', state: 'merged', repo: 'infra', updated_at: '2026-02-22T12:00:00Z', merged_at: '2026-02-22T12:00:00Z' },
+    ] as RecentPR[],
+  }
+
+  it('separates open and closed PRs', () => {
+    const result = splitAndSortPRs([repo1Data, repo2Data], 10)
+    assert.equal(result.openPRs.length, 2)
+    assert.equal(result.closedPRs.length, 2)
+    assert.ok(result.openPRs.every(p => p.state === 'open'))
+  })
+
+  it('sorts open PRs by updated_at descending', () => {
+    const result = splitAndSortPRs([repo1Data, repo2Data], 10)
+    assert.equal(result.openPRs[0].number, 15) // most recent
+    assert.equal(result.openPRs[1].number, 5)
+  })
+
+  it('sorts closed PRs by updated_at descending', () => {
+    const result = splitAndSortPRs([repo1Data, repo2Data], 10)
+    assert.equal(result.closedPRs[0].number, 10) // most recent
+    assert.equal(result.closedPRs[1].number, 3)
+  })
+
+  it('combined puts open first, then closed', () => {
+    const result = splitAndSortPRs([repo1Data, repo2Data], 10)
+    // First two should be open, next two closed
+    assert.equal(result.combined[0].state, 'open')
+    assert.equal(result.combined[1].state, 'open')
+    assert.equal(result.combined[2].state, 'merged')
+    assert.equal(result.combined[3].state, 'merged')
+  })
+
+  it('handles no open PRs (zen state)', () => {
+    const noOpen = {
+      openPRs: [] as RecentPR[],
+      closedPRs: repo1Data.closedPRs,
+    }
+    const result = splitAndSortPRs([noOpen], 10)
+    assert.equal(result.openPRs.length, 0)
+    assert.equal(result.closedPRs.length, 1)
+    assert.equal(result.combined.length, 1)
+  })
+
+  it('handles no PRs at all', () => {
+    const empty = { openPRs: [] as RecentPR[], closedPRs: [] as RecentPR[] }
+    const result = splitAndSortPRs([empty], 10)
+    assert.equal(result.openPRs.length, 0)
+    assert.equal(result.closedPRs.length, 0)
+    assert.equal(result.combined.length, 0)
+  })
+})
+
 describe('mergeAndSortIssues — cross-repo aggregation', () => {
   const repo1Issues: RecentIssue[] = [
     { number: 105, title: 'Dashboard widgets', state: 'open', repo: 'gigi', labels: [{ name: 'status/in-progress', color: 'e4e669' }, { name: 'type/feature', color: '0075ca' }], updated_at: '2026-02-23T14:00:00Z' },
@@ -183,7 +265,7 @@ describe('displayLabels — status label filtering', () => {
 })
 
 describe('overview response shape', () => {
-  it('includes recentPRs and recentIssues fields', () => {
+  it('includes recentPRs, openPRs, closedPRs, and recentIssues fields', () => {
     // Simulate the response shape the overview endpoint returns
     const response = {
       org: { id: 1, name: 'idea' },
@@ -192,13 +274,17 @@ describe('overview response shape', () => {
       totalOpenIssues: 0,
       totalOpenPRs: 0,
       recentPRs: [] as RecentPR[],
+      openPRs: [] as RecentPR[],
+      closedPRs: [] as RecentPR[],
       recentIssues: [] as RecentIssue[],
     }
 
     assert.ok('recentPRs' in response)
+    assert.ok('openPRs' in response)
+    assert.ok('closedPRs' in response)
     assert.ok('recentIssues' in response)
-    assert.ok(Array.isArray(response.recentPRs))
-    assert.ok(Array.isArray(response.recentIssues))
+    assert.ok(Array.isArray(response.openPRs))
+    assert.ok(Array.isArray(response.closedPRs))
   })
 
   it('PR items have required fields for widget rendering', () => {
