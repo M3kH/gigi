@@ -19,6 +19,14 @@
   <a href="#license">License</a>
 </p>
 
+<p align="center">
+  <a href="https://www.youtube.com/watch?v=Fe8QzM1vuks">
+    <img src="https://img.youtube.com/vi/Fe8QzM1vuks/maxresdefault.jpg" alt="Gigi Introduction Video" width="600" />
+  </a>
+  <br/>
+  <em>▶️ Watch the introduction video</em>
+</p>
+
 ---
 
 > [!NOTE]
