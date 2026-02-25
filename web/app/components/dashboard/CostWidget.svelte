@@ -226,6 +226,9 @@
 
 <style>
   .cost-widget {
+    min-height: 100%;
+    display: flex;
+    flex-direction: column;
     background: var(--gigi-bg-secondary);
     border: var(--gigi-border-width) solid var(--gigi-border-default);
     border-radius: var(--gigi-radius-md);
