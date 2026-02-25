@@ -85,55 +85,55 @@ function isGiteaPage(cleanPath: string): boolean {
 
 describe('parseGiteaPath — existing types', () => {
   it('parses issue paths', () => {
-    const ctx = parseGiteaPath('/idea/gigi/issues/42')
+    const ctx = parseGiteaPath('/gigi/gigi/issues/42')
     assert.equal(ctx.type, 'issue')
-    assert.equal(ctx.owner, 'idea')
+    assert.equal(ctx.owner, 'gigi')
     assert.equal(ctx.repo, 'gigi')
     assert.equal(ctx.number, 42)
   })
 
   it('parses pull paths', () => {
-    const ctx = parseGiteaPath('/idea/gigi/pulls/10')
+    const ctx = parseGiteaPath('/gigi/gigi/pulls/10')
     assert.equal(ctx.type, 'pull')
-    assert.equal(ctx.owner, 'idea')
+    assert.equal(ctx.owner, 'gigi')
     assert.equal(ctx.repo, 'gigi')
     assert.equal(ctx.number, 10)
   })
 
   it('parses file paths', () => {
-    const ctx = parseGiteaPath('/idea/gigi/src/branch/main/lib/core/router.ts')
+    const ctx = parseGiteaPath('/gigi/gigi/src/branch/main/lib/core/router.ts')
     assert.equal(ctx.type, 'file')
-    assert.equal(ctx.owner, 'idea')
+    assert.equal(ctx.owner, 'gigi')
     assert.equal(ctx.repo, 'gigi')
     assert.equal(ctx.branch, 'main')
     assert.equal(ctx.filepath, 'lib/core/router.ts')
   })
 
   it('parses commit paths', () => {
-    const ctx = parseGiteaPath('/idea/gigi/commit/abc123def')
+    const ctx = parseGiteaPath('/gigi/gigi/commit/abc123def')
     assert.equal(ctx.type, 'commit')
     assert.equal(ctx.commitSha, 'abc123def')
   })
 
   it('parses bare repo paths', () => {
-    const ctx = parseGiteaPath('/idea/gigi')
+    const ctx = parseGiteaPath('/gigi/gigi')
     assert.equal(ctx.type, 'repo')
-    assert.equal(ctx.owner, 'idea')
+    assert.equal(ctx.owner, 'gigi')
     assert.equal(ctx.repo, 'gigi')
   })
 
   it('parses bare repo paths with trailing slash', () => {
-    const ctx = parseGiteaPath('/idea/gigi/')
+    const ctx = parseGiteaPath('/gigi/gigi/')
     assert.equal(ctx.type, 'repo')
   })
 
   it('strips /gitea prefix before parsing', () => {
-    const ctx = parseGiteaPath('/gitea/idea/gigi/issues/5')
+    const ctx = parseGiteaPath('/gitea/gigi/gigi/issues/5')
     assert.equal(ctx.type, 'issue')
-    assert.equal(ctx.owner, 'idea')
+    assert.equal(ctx.owner, 'gigi')
     assert.equal(ctx.repo, 'gigi')
     assert.equal(ctx.number, 5)
-    assert.equal(ctx.rawPath, '/gitea/idea/gigi/issues/5')
+    assert.equal(ctx.rawPath, '/gitea/gigi/gigi/issues/5')
   })
 
   it('returns overview for root path', () => {
@@ -144,55 +144,55 @@ describe('parseGiteaPath — existing types', () => {
 
 describe('parseGiteaPath — new context types', () => {
   it('parses actions run paths with subId', () => {
-    const ctx = parseGiteaPath('/idea/gigi/actions/runs/42')
+    const ctx = parseGiteaPath('/gigi/gigi/actions/runs/42')
     assert.equal(ctx.type, 'actions')
-    assert.equal(ctx.owner, 'idea')
+    assert.equal(ctx.owner, 'gigi')
     assert.equal(ctx.repo, 'gigi')
     assert.equal(ctx.subId, '42')
   })
 
   it('parses actions list path', () => {
-    const ctx = parseGiteaPath('/idea/gigi/actions')
+    const ctx = parseGiteaPath('/gigi/gigi/actions')
     assert.equal(ctx.type, 'actions')
-    assert.equal(ctx.owner, 'idea')
+    assert.equal(ctx.owner, 'gigi')
     assert.equal(ctx.repo, 'gigi')
     assert.equal(ctx.subId, undefined)
   })
 
   it('parses releases path', () => {
-    const ctx = parseGiteaPath('/idea/gigi/releases')
+    const ctx = parseGiteaPath('/gigi/gigi/releases')
     assert.equal(ctx.type, 'releases')
-    assert.equal(ctx.owner, 'idea')
+    assert.equal(ctx.owner, 'gigi')
     assert.equal(ctx.repo, 'gigi')
   })
 
   it('parses wiki path', () => {
-    const ctx = parseGiteaPath('/idea/gigi/wiki')
+    const ctx = parseGiteaPath('/gigi/gigi/wiki')
     assert.equal(ctx.type, 'wiki')
   })
 
   it('parses milestones path', () => {
-    const ctx = parseGiteaPath('/idea/gigi/milestones')
+    const ctx = parseGiteaPath('/gigi/gigi/milestones')
     assert.equal(ctx.type, 'milestones')
   })
 
   it('parses labels path', () => {
-    const ctx = parseGiteaPath('/idea/gigi/labels')
+    const ctx = parseGiteaPath('/gigi/gigi/labels')
     assert.equal(ctx.type, 'labels')
   })
 
   it('parses settings path', () => {
-    const ctx = parseGiteaPath('/idea/gigi/settings')
+    const ctx = parseGiteaPath('/gigi/gigi/settings')
     assert.equal(ctx.type, 'settings')
   })
 
   it('parses activity path', () => {
-    const ctx = parseGiteaPath('/idea/gigi/activity')
+    const ctx = parseGiteaPath('/gigi/gigi/activity')
     assert.equal(ctx.type, 'activity')
   })
 
   it('parses projects path', () => {
-    const ctx = parseGiteaPath('/idea/gigi/projects')
+    const ctx = parseGiteaPath('/gigi/gigi/projects')
     assert.equal(ctx.type, 'projects')
   })
 
@@ -209,29 +209,29 @@ describe('parseGiteaPath — new context types', () => {
   })
 
   it('parses org pages', () => {
-    const ctx = parseGiteaPath('/idea')
+    const ctx = parseGiteaPath('/gigi')
     assert.equal(ctx.type, 'org')
-    assert.equal(ctx.owner, 'idea')
+    assert.equal(ctx.owner, 'gigi')
     assert.equal(ctx.repo, undefined)
   })
 
   it('parses org pages with trailing slash', () => {
-    const ctx = parseGiteaPath('/idea/')
+    const ctx = parseGiteaPath('/gigi/')
     assert.equal(ctx.type, 'org')
-    assert.equal(ctx.owner, 'idea')
+    assert.equal(ctx.owner, 'gigi')
   })
 
   it('falls back to unknown for unrecognized sub-pages', () => {
-    const ctx = parseGiteaPath('/idea/gigi/some-unknown-page')
+    const ctx = parseGiteaPath('/gigi/gigi/some-unknown-page')
     assert.equal(ctx.type, 'unknown')
-    assert.equal(ctx.owner, 'idea')
+    assert.equal(ctx.owner, 'gigi')
     assert.equal(ctx.repo, 'gigi')
   })
 
   it('preserves rawPath in all new types', () => {
     const paths = [
-      '/idea/gigi/actions', '/idea/gigi/releases', '/idea/gigi/wiki',
-      '/-/admin', '/idea',
+      '/gigi/gigi/actions', '/gigi/gigi/releases', '/gigi/gigi/wiki',
+      '/-/admin', '/gigi',
     ]
     for (const p of paths) {
       assert.equal(parseGiteaPath(p).rawPath, p, `rawPath preserved for ${p}`)
@@ -242,25 +242,25 @@ describe('parseGiteaPath — new context types', () => {
 describe('parseGiteaPath — priority ordering', () => {
   it('issues take priority over generic subpage matching', () => {
     // "issues" is not in REPO_SUBPAGE_TYPES, so /issues/42 must match the issue regex
-    const ctx = parseGiteaPath('/idea/gigi/issues/42')
+    const ctx = parseGiteaPath('/gigi/gigi/issues/42')
     assert.equal(ctx.type, 'issue')
     assert.equal(ctx.number, 42)
   })
 
   it('pulls take priority over generic subpage matching', () => {
-    const ctx = parseGiteaPath('/idea/gigi/pulls/5')
+    const ctx = parseGiteaPath('/gigi/gigi/pulls/5')
     assert.equal(ctx.type, 'pull')
     assert.equal(ctx.number, 5)
   })
 
   it('actions/runs/N takes priority over generic actions subpage', () => {
-    const ctx = parseGiteaPath('/idea/gigi/actions/runs/99')
+    const ctx = parseGiteaPath('/gigi/gigi/actions/runs/99')
     assert.equal(ctx.type, 'actions')
     assert.equal(ctx.subId, '99')
   })
 
   it('commit path takes priority over subpage matching', () => {
-    const ctx = parseGiteaPath('/idea/gigi/commit/deadbeef')
+    const ctx = parseGiteaPath('/gigi/gigi/commit/deadbeef')
     assert.equal(ctx.type, 'commit')
     assert.equal(ctx.commitSha, 'deadbeef')
   })
@@ -270,21 +270,21 @@ describe('parseGiteaPath — priority ordering', () => {
 
 describe('GITEA_PAGE_PATTERNS — broadened matching', () => {
   it('matches owner/repo paths', () => {
-    assert.ok(isGiteaPage('/idea/gigi'))
+    assert.ok(isGiteaPage('/gigi/gigi'))
   })
 
   it('matches owner/repo sub-pages', () => {
-    assert.ok(isGiteaPage('/idea/gigi/actions'))
-    assert.ok(isGiteaPage('/idea/gigi/releases'))
-    assert.ok(isGiteaPage('/idea/gigi/wiki/Home'))
-    assert.ok(isGiteaPage('/idea/gigi/milestones'))
-    assert.ok(isGiteaPage('/idea/gigi/labels'))
-    assert.ok(isGiteaPage('/idea/gigi/settings'))
+    assert.ok(isGiteaPage('/gigi/gigi/actions'))
+    assert.ok(isGiteaPage('/gigi/gigi/releases'))
+    assert.ok(isGiteaPage('/gigi/gigi/wiki/Home'))
+    assert.ok(isGiteaPage('/gigi/gigi/milestones'))
+    assert.ok(isGiteaPage('/gigi/gigi/labels'))
+    assert.ok(isGiteaPage('/gigi/gigi/settings'))
   })
 
   it('matches org pages', () => {
-    assert.ok(isGiteaPage('/idea'))
-    assert.ok(isGiteaPage('/idea/'))
+    assert.ok(isGiteaPage('/gigi'))
+    assert.ok(isGiteaPage('/gigi/'))
   })
 
   it('matches admin pages', () => {
@@ -294,7 +294,7 @@ describe('GITEA_PAGE_PATTERNS — broadened matching', () => {
 
   it('filters out API paths', () => {
     assert.ok(!isGiteaPage('/api/v1/repos'))
-    assert.ok(!isGiteaPage('/api/v1/repos/idea/gigi'))
+    assert.ok(!isGiteaPage('/api/v1/repos/gigi/gigi'))
   })
 
   it('filters out asset paths', () => {
@@ -311,10 +311,10 @@ describe('GITEA_PAGE_PATTERNS — broadened matching', () => {
   })
 
   it('still matches issue/PR/commit URLs (backwards compat)', () => {
-    assert.ok(isGiteaPage('/idea/gigi/issues/42'))
-    assert.ok(isGiteaPage('/idea/gigi/pulls/10'))
-    assert.ok(isGiteaPage('/idea/gigi/commit/abc123'))
-    assert.ok(isGiteaPage('/idea/gigi/src/branch/main/README.md'))
+    assert.ok(isGiteaPage('/gigi/gigi/issues/42'))
+    assert.ok(isGiteaPage('/gigi/gigi/pulls/10'))
+    assert.ok(isGiteaPage('/gigi/gigi/commit/abc123'))
+    assert.ok(isGiteaPage('/gigi/gigi/src/branch/main/README.md'))
   })
 })
 
@@ -328,7 +328,7 @@ describe('ViewContextSchema — new types', () => {
       'settings', 'activity', 'projects', 'org', 'admin',
     ]
     for (const t of newTypes) {
-      const result = ViewContextSchema.safeParse({ type: t, owner: 'idea', repo: 'gigi' })
+      const result = ViewContextSchema.safeParse({ type: t, owner: 'gigi', repo: 'gigi' })
       assert.ok(result.success, `ViewContextSchema should accept type "${t}"`)
     }
   })
@@ -337,7 +337,7 @@ describe('ViewContextSchema — new types', () => {
     const { ViewContextSchema } = await import('../lib/core/protocol')
     const result = ViewContextSchema.safeParse({
       type: 'actions',
-      owner: 'idea',
+      owner: 'gigi',
       repo: 'gigi',
       subId: '42',
     })
@@ -349,7 +349,7 @@ describe('ViewContextSchema — new types', () => {
     const { ViewContextSchema } = await import('../lib/core/protocol')
     const result = ViewContextSchema.safeParse({
       type: 'actions',
-      owner: 'idea',
+      owner: 'gigi',
       repo: 'gigi',
     })
     assert.ok(result.success, 'ViewContextSchema should not require subId')
@@ -380,7 +380,7 @@ describe('ChatSend — context with new types', () => {
     const result = ChatSend.safeParse({
       type: 'chat:send',
       message: 'hello',
-      context: { type: 'actions', owner: 'idea', repo: 'gigi', subId: '42' },
+      context: { type: 'actions', owner: 'gigi', repo: 'gigi', subId: '42' },
     })
     assert.ok(result.success, 'ChatSend should accept actions context with subId')
   })
@@ -390,7 +390,7 @@ describe('ChatSend — context with new types', () => {
     const result = ChatSend.safeParse({
       type: 'chat:send',
       message: 'hello',
-      context: { type: 'org', owner: 'idea' },
+      context: { type: 'org', owner: 'gigi' },
     })
     assert.ok(result.success, 'ChatSend should accept org context')
   })

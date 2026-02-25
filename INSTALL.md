@@ -108,11 +108,11 @@ After setup, verify:
 ```bash
 # Check org labels
 curl -H "Authorization: token $GITEA_TOKEN" \
-  "$GITEA_URL/api/v1/orgs/idea/labels"
+  "$GITEA_URL/api/v1/orgs/acme/labels"
 
 # Check repos
 curl -H "Authorization: token $GITEA_TOKEN" \
-  "$GITEA_URL/api/v1/orgs/idea/repos"
+  "$GITEA_URL/api/v1/orgs/acme/repos"
 ```
 
 ## Troubleshooting

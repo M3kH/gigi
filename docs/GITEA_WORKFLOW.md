@@ -4,7 +4,7 @@ This document explains how Gigi should work with Gitea project boards and labels
 
 ## Label System
 
-The `idea` org uses a standardized label system across all repositories:
+The `gigi` org uses a standardized label system across all repositories:
 
 ### Priority Labels
 - `priority/critical` - Blocks core functionality
@@ -44,7 +44,7 @@ The `idea` org uses a standardized label system across all repositories:
 
 ## Project Board Structure
 
-The **idea Command Center** project board (`idea/-/projects/2`) tracks work across all repositories.
+The **gigi Command Center** project board (`gigi/-/projects/2`) tracks work across all repositories.
 
 ### Board Columns
 
@@ -72,7 +72,7 @@ When working with issues, Gigi should:
 // Create the issue
 const issue = await createIssue(repo, title, body, labels)
 
-// Add to project board (project_id = 2 for "idea Command Center")
+// Add to project board (project_id = 2 for "gigi Command Center")
 await addIssueToProject(repo, issue.number, 2)
 ```
 
@@ -168,7 +168,7 @@ curl -X POST \
 curl -X PUT \
   -H "Authorization: token $GITEA_TOKEN" \
   -H "Content-Type: application/json" \
-  "http://your-host-ip:3000/api/v1/repos/idea/{repo}/issues/{number}/labels" \
+  "http://your-host-ip:3000/api/v1/repos/gigi/{repo}/issues/{number}/labels" \
   -d '{"labels": [1, 2, 3]}'  # Label IDs
 ```
 

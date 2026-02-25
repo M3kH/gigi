@@ -41,8 +41,12 @@ enable_program() {
 # Copy base config (don't modify the original)
 cp /etc/supervisor/conf.d/gigi-aio.conf.template "$SUPERVISORD_CONF"
 
-# Always enable Gigi
-enable_program gigi
+# Enable Gigi unless running in infra-only mode (for local dev with HMR)
+if [ "$INFRA_ONLY" != "true" ]; then
+  enable_program gigi
+else
+  echo "[aio] INFRA_ONLY=true — skipping Gigi process (run locally with npm run dev)"
+fi
 
 if [ "$ENABLE_GITEA" = "true" ]; then
   enable_program gitea
@@ -134,7 +138,7 @@ EOINI
   ADMIN_USER="${ADMIN_USER:-admin}"
   ADMIN_PASSWORD="${ADMIN_PASSWORD:-admin}"
   ADMIN_EMAIL="${ADMIN_EMAIL:-admin@localhost}"
-  ORG_NAME="${ORG_NAME:-idea}"
+  ORG_NAME="${ORG_NAME:-acme}"
   GIGI_PASSWORD="gigi-local-dev"
 
   echo "[aio] Creating admin user: $ADMIN_USER"
@@ -210,13 +214,32 @@ EOINI
   fi
 
   # Create default repositories
-  INIT_REPOS="${INIT_REPOS:-gigi gigi-infra}"
+  INIT_REPOS="${INIT_REPOS:-gigi}"
   for repo in $INIT_REPOS; do
     echo "[aio] Creating repo: ${ORG_NAME}/${repo}"
     curl -s -X POST "http://localhost:3300/api/v1/orgs/${ORG_NAME}/repos" \
       -H "$AUTH" -H "Content-Type: application/json" \
       -d "{\"name\":\"${repo}\",\"private\":false,\"auto_init\":false}" > /dev/null 2>&1 || true
   done
+
+  # Push source code into gigi repo (source is at /app from Docker build)
+  if echo "$INIT_REPOS" | grep -qw "gigi"; then
+    echo "[aio] Pushing source code to ${ORG_NAME}/gigi..."
+    PUSH_DIR=$(mktemp -d)
+    (
+      cp -a /app/. "$PUSH_DIR/"
+      rm -rf "$PUSH_DIR/node_modules" "$PUSH_DIR/dist"
+      cd "$PUSH_DIR"
+      git config --global --add safe.directory "$PUSH_DIR"
+      git config --global init.defaultBranch main
+      git init -q
+      git add -A
+      git -c user.name="gigi" -c user.email="gigi@localhost" commit -q -m "Initial commit"
+      git push "http://${ADMIN_USER}:${ADMIN_PASSWORD}@localhost:3300/${ORG_NAME}/gigi.git" main 2>&1
+    ) || echo "[aio] Warning: failed to push source code (non-fatal)"
+    cd /
+    rm -rf "$PUSH_DIR"
+  fi
 
   # Register webhook
   WEBHOOK_SECRET=$(openssl rand -hex 16)
@@ -287,8 +310,12 @@ EOINI
     [ -n "$CLAUDE_TOKEN" ] && psql "$DATABASE_URL" -c "INSERT INTO config (key,value) VALUES ('claude_oauth_token','$CLAUDE_TOKEN') ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_at=now();" 2>/dev/null || true
   fi
 
-  # Stop temporary Gitea (supervisord will restart it)
-  kill -TERM $GITEA_PID 2>/dev/null || true
+  # Stop temporary Gitea (supervisord will restart it with updated config)
+  # Kill the process group — su spawns gitea as a child, SIGTERM to su alone
+  # leaves the gitea child running and hogging port 3300.
+  kill -TERM -$GITEA_PID 2>/dev/null || kill -TERM $GITEA_PID 2>/dev/null || true
+  # Also kill any remaining gitea processes from the init phase
+  pkill -f "gitea web --config" 2>/dev/null || true
   wait $GITEA_PID 2>/dev/null || true
   sleep 2
   # Clean up LevelDB locks left by init Gitea (prevents queue lock errors)
@@ -297,7 +324,12 @@ EOINI
   # Reconfigure for production: subpath + SSH
   GITEA_CONF="/data/gitea/conf/app.ini"
   INSTANCE_URL="${GIGI_INSTANCE_URL:-http://localhost:3000}"
+
+  # Set ROOT_URL to match the Gigi proxy path — the backend strips /gitea
+  # and handles auth + HTML rewriting. Gitea needs to know the external URL
+  # so redirects use the correct prefix.
   sed -i "s|ROOT_URL = http://localhost:3300/|ROOT_URL = ${INSTANCE_URL}/gitea/|" "$GITEA_CONF"
+
   sed -i 's/START_SSH_SERVER = false/START_SSH_SERVER = true/' "$GITEA_CONF"
   if ! grep -q "SSH_PORT" "$GITEA_CONF"; then
     DOMAIN=$(echo "$INSTANCE_URL" | sed 's|^https\?://||; s|/.*||; s|:.*||')

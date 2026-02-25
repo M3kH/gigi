@@ -43,7 +43,7 @@ describe('detectUnfinishedWork — completed responses', () => {
   })
 
   it('should NOT flag a response that says "completed" with PR link', () => {
-    const text = `All changes completed. Here's the PR: https://gitea.local/idea/gigi/pulls/5`
+    const text = `All changes completed. Here's the PR: https://gitea.local/gigi/gigi/pulls/5`
     const result = detectUnfinishedWork(text, true)
     assert.equal(result.hasUnfinishedWork, false)
   })
@@ -114,7 +114,7 @@ describe('detectUnfinishedWork — code change signals', () => {
   })
 
   it('should NOT flag code changes WITH a PR link', () => {
-    const text = `I've committed the changes and pushed to feat/webhook-fix. Created PR: https://gitea.local/idea/gigi/pulls/29`
+    const text = `I've committed the changes and pushed to feat/webhook-fix. Created PR: https://gitea.local/gigi/gigi/pulls/29`
     const result = detectUnfinishedWork(text, true)
     assert.equal(result.hasUnfinishedWork, false)
   })
@@ -137,7 +137,7 @@ describe('detectUnfinishedWork — PR without link', () => {
   })
 
   it('should NOT flag PR mention when link is present', () => {
-    const text = `I created a PR for these changes: https://gitea.local/idea/gigi/pulls/30. It includes the webhook notifier fix.`
+    const text = `I created a PR for these changes: https://gitea.local/gigi/gigi/pulls/30. It includes the webhook notifier fix.`
     const result = detectUnfinishedWork(text, true)
     assert.equal(result.hasUnfinishedWork, false)
   })

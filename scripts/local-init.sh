@@ -9,7 +9,7 @@ GITEA_URL="${GITEA_URL:-http://gitea:3000}"
 ADMIN_USER="${ADMIN_USER:-admin}"
 ADMIN_EMAIL="${ADMIN_EMAIL:-admin@localhost}"
 ADMIN_PASSWORD="${ADMIN_PASSWORD:-admin}"
-ORG_NAME="${ORG_NAME:-idea}"
+ORG_NAME="${ORG_NAME:-acme}"
 GITEA_CONFIG="/data/gitea/conf/app.ini"
 GIGI_PASSWORD="gigi-local-dev"
 
@@ -201,6 +201,7 @@ psql -c "INSERT INTO config (key, value) VALUES ('gitea_token', '${GIGI_TOKEN}')
 psql -c "INSERT INTO config (key, value) VALUES ('gitea_password', '${GIGI_PASSWORD}') ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now();"
 psql -c "INSERT INTO config (key, value) VALUES ('admin_user', '${ADMIN_USER}') ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now();"
 psql -c "INSERT INTO config (key, value) VALUES ('webhook_secret', '${WEBHOOK_SECRET}') ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now();"
+psql -c "INSERT INTO config (key, value) VALUES ('gitea_org', '${ORG_NAME}') ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now();"
 
 if [ -n "$TELEGRAM_TOKEN" ]; then
   echo "Setting Telegram token..."

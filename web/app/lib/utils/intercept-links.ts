@@ -25,7 +25,7 @@ const GITEA_PAGE_PATTERNS = [
 
 /**
  * Extract a Gitea-relative path from an absolute or relative URL.
- * Returns the path (e.g. "/idea/gigi/pulls/5") or null if not a Gitea link.
+ * Returns the path (e.g. "/gigi/gigi/pulls/5") or null if not a Gitea link.
  *
  * Exported for testing.
  */

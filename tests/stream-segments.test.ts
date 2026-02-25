@@ -71,12 +71,12 @@ describe('applyEvent — full story', () => {
     segs = applyEvent(segs, { type: 'tool_result', toolUseId: 't3', result: 'committed' }, t)
     if (segs[6].type === 'tool') assert.equal(segs[6].status, 'done')
 
-    // 12. text_chunk "Done! [repo](/idea/...)"
-    segs = applyEvent(segs, { type: 'text_chunk', text: 'Done! [repo](/idea/my-plugin)' }, t)
+    // 12. text_chunk "Done! [repo](/gigi/...)"
+    segs = applyEvent(segs, { type: 'text_chunk', text: 'Done! [repo](/gigi/my-plugin)' }, t)
     assert.equal(segs.length, 8)
 
     // 13. gitea_event push
-    segs = applyEvent(segs, { type: 'gitea_event', event: 'push', action: 'created', repo: 'idea/my-plugin' }, t)
+    segs = applyEvent(segs, { type: 'gitea_event', event: 'push', action: 'created', repo: 'gigi/my-plugin' }, t)
     assert.equal(segs.length, 9)
 
     // Final type sequence
@@ -211,7 +211,7 @@ describe('Multiple concurrent ask_user questions', () => {
 
 describe('formatGiteaEvent', () => {
   it('formats push event with repo', () => {
-    assert.equal(formatGiteaEvent('push', 'created', 'idea/my-plugin'), 'Push: created — idea/my-plugin')
+    assert.equal(formatGiteaEvent('push', 'created', 'gigi/my-plugin'), 'Push: created — gigi/my-plugin')
   })
 
   it('formats event without action or repo', () => {

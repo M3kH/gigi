@@ -7,7 +7,7 @@
  * Usage:
  *   const gitea = createGiteaClient('http://localhost:3300', token)
  *   const repos = await gitea.repos.list()
- *   const issue = await gitea.issues.get('idea', 'gigi', 56)
+ *   const issue = await gitea.issues.get('gigi', 'gigi', 56)
  */
 
 import { z } from 'zod'

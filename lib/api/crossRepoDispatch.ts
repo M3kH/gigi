@@ -9,6 +9,8 @@
 
 import { getConfig } from '../core/store'
 
+const getOrg = () => process.env.GITEA_ORG || 'acme'
+
 interface DispatchConfig {
   /** Source repo name that triggers the dispatch */
   sourceRepo: string
@@ -28,11 +30,11 @@ interface DispatchConfig {
  * Registry of cross-repo triggers.
  * When a push matches sourceRepo + sourceRef, dispatch the target workflow.
  */
-const DISPATCH_RULES: DispatchConfig[] = [
+const getDispatchRules = (): DispatchConfig[] => [
   {
     sourceRepo: 'gigi',
     sourceRef: 'refs/heads/main',
-    targetOwner: 'idea',
+    targetOwner: getOrg(),
     targetRepo: 'gigi-infra',
     workflowFile: 'build-gigi.yml',
   },
@@ -47,7 +49,7 @@ export const handlePushDispatch = async (
   ref: string,
   headSha?: string
 ): Promise<void> => {
-  const matchingRules = DISPATCH_RULES.filter(
+  const matchingRules = getDispatchRules().filter(
     (r) => r.sourceRepo === repoName && r.sourceRef === ref
   )
 

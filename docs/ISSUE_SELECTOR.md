@@ -21,10 +21,10 @@ Total possible score: 100 points
 import { getCandidateIssues, scoreIssue } from './lib/issueSelector.js';
 
 // Get all candidate issues from an organization
-const candidates = await getCandidateIssues('idea', null, 50);
+const candidates = await getCandidateIssues('gigi', null, 50);
 
 // Get candidates from a specific repo
-const repoCandidates = await getCandidateIssues('idea', 'gigi', 50);
+const repoCandidates = await getCandidateIssues('gigi', 'gigi', 50);
 
 // Score a single issue
 const score = scoreIssue(issue);
@@ -36,14 +36,14 @@ const score = scoreIssue(issue);
 # Test the scoring algorithm
 node scripts/run-selector-tests.js
 
-# Find candidate issues (defaults to 'idea' org, all repos, 50+ score)
+# Find candidate issues (defaults to 'gigi' org, all repos, 50+ score)
 node scripts/test-issue-selector.js
 
 # Find candidates in specific repo
-node scripts/test-issue-selector.js idea gigi
+node scripts/test-issue-selector.js gigi gigi
 
 # Use custom threshold
-node scripts/test-issue-selector.js idea null 60
+node scripts/test-issue-selector.js gigi null 60
 ```
 
 ## Scoring Details

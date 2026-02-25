@@ -9,7 +9,8 @@ import { execSync } from 'node:child_process'
 
 const GITEA_URL = process.env.GITEA_URL || 'http://localhost:3300'
 const GITEA_TOKEN = process.env.GITEA_TOKEN
-const PROJECT_ID = 2 // idea Command Center
+const GITEA_ORG = process.env.GITEA_ORG || 'acme'
+const PROJECT_ID = 2 // gigi Command Center
 
 // ─── Types ──────────────────────────────────────────────────────────
 
@@ -92,7 +93,7 @@ export const isIssueOnProject = async (repo: string, issueNumber: number): Promi
 }
 
 export const addIssueToProject = async (repo: string, issueNumber: number): Promise<void> => {
-  const issue = apiCall('GET', `/repos/idea/${repo}/issues/${issueNumber}`) as Issue
+  const issue = apiCall('GET', `/repos/${GITEA_ORG}/${repo}/issues/${issueNumber}`) as Issue
 
   if (!issue.id) throw new Error(`Could not find issue ${repo}#${issueNumber}`)
 
@@ -139,14 +140,14 @@ export const updateIssueLabels = async (
   labelsToAdd: string[] = [],
   labelsToRemove: string[] = []
 ): Promise<void> => {
-  const issue = apiCall('GET', `/repos/idea/${repo}/issues/${issueNumber}`) as Issue
+  const issue = apiCall('GET', `/repos/${GITEA_ORG}/${repo}/issues/${issueNumber}`) as Issue
 
   let currentLabels = issue.labels ? issue.labels.map((l) => l.name) : []
   currentLabels = currentLabels.filter((l) => !labelsToRemove.includes(l))
   currentLabels = [...new Set([...currentLabels, ...labelsToAdd])]
 
   try {
-    apiCall('PUT', `/repos/idea/${repo}/issues/${issueNumber}/labels`, { labels: currentLabels })
+    apiCall('PUT', `/repos/${GITEA_ORG}/${repo}/issues/${issueNumber}/labels`, { labels: currentLabels })
     console.log(`[project] Updated labels for ${repo}#${issueNumber}`)
   } catch (err) {
     throw new Error(`Failed to update labels: ${(err as Error).message}`)
@@ -179,7 +180,7 @@ export const ensureIssueTracked = async (repo: string, issueNumber: number): Pro
     await addIssueToProject(repo, issueNumber)
   }
 
-  const issue = apiCall('GET', `/repos/idea/${repo}/issues/${issueNumber}`) as Issue
+  const issue = apiCall('GET', `/repos/${GITEA_ORG}/${repo}/issues/${issueNumber}`) as Issue
   const statusLabel = issue.labels?.find((l) => l.name.startsWith('status/'))
 
   if (!statusLabel) {

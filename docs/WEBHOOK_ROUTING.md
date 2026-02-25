@@ -49,21 +49,21 @@ System messages use emojis and concise formatting:
 ### Issue Events
 ```
 📋 Issue #16 opened: "Webhook routing" by @gigi
-http://gitea.example.com/idea/gigi/issues/16
+http://gitea.example.com/gigi/gigi/issues/16
 ```
 
 ### PR Events
 ```
 ✅ PR #7 merged: "Add dark mode"
 feat/dark-mode → main
-http://gitea.example.com/idea/gigi/pulls/7
+http://gitea.example.com/gigi/gigi/pulls/7
 ```
 
 ### Comments
 ```
 💬 @user commented on issue #16:
 "This looks great! Let's merge it."
-http://gitea.example.com/idea/gigi/issues/16#comment-123
+http://gitea.example.com/gigi/gigi/issues/16#comment-123
 ```
 
 ### Push Events

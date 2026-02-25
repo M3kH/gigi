@@ -7,7 +7,7 @@ services:
       DATABASE_URL: postgresql://gigi:gigi@postgres:5432/gigi
       ADMIN_USER: admin
       ADMIN_PASSWORD: admin
-      ORG_NAME: idea
+      ORG_NAME: acme
     ports:
       - "3100:3000"   # Gigi web
       - "6080:6080"   # noVNC browser viewer

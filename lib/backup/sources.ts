@@ -13,7 +13,7 @@ export interface RepoInfo {
   name: string
   cloneUrl: string
   description: string
-  /** Full name like "idea/gigi" */
+  /** Full name like "gigi/gigi" */
   fullName: string
 }
 
@@ -86,7 +86,7 @@ const resolveOrgSource = async (gitea: GiteaClient, orgName: string, baseCloneUr
 }
 
 /**
- * Resolve a single repo source like "idea/gigi".
+ * Resolve a single repo source like "gigi/gigi".
  */
 const resolveRepoSource = async (gitea: GiteaClient, repoSpec: string, baseCloneUrl: string): Promise<RepoInfo[]> => {
   const [owner, name] = repoSpec.split('/')

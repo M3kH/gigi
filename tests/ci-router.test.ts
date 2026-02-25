@@ -25,15 +25,15 @@ import {
 
 describe('CI routing decisions', () => {
   beforeEach(() => {
-    resetFixAttempts('idea', 'gigi', 10)
-    resetFixAttempts('idea', 'gigi', 20)
-    resetFixAttempts('idea', 'gigi', 30)
+    resetFixAttempts('gigi', 'gigi', 10)
+    resetFixAttempts('gigi', 'gigi', 20)
+    resetFixAttempts('gigi', 'gigi', 30)
   })
 
   it('ignores non-completed workflow_run events', () => {
     const payload = {
       action: 'requested',
-      repository: { name: 'gigi', full_name: 'idea/gigi', owner: { login: 'idea' } },
+      repository: { name: 'gigi', full_name: 'gigi/gigi', owner: { login: 'gigi' } },
       workflow_run: { id: 1, conclusion: '', status: 'queued' },
     }
     const result = parseWorkflowRunPayload(payload)
@@ -43,7 +43,7 @@ describe('CI routing decisions', () => {
   it('parses completed success runs (for counter reset)', () => {
     const payload = {
       action: 'completed',
-      repository: { name: 'gigi', full_name: 'idea/gigi', owner: { login: 'idea' } },
+      repository: { name: 'gigi', full_name: 'gigi/gigi', owner: { login: 'gigi' } },
       workflow_run: {
         id: 1,
         name: 'Test',
@@ -58,36 +58,36 @@ describe('CI routing decisions', () => {
     assert.equal(result.conclusion, 'success')
 
     // Simulate what the router would do: reset counter
-    trackFixAttempt('idea', 'gigi', 10)
-    assert.equal(shouldAutoFix('idea', 'gigi', 10), true) // still under limit
-    resetFixAttempts('idea', 'gigi', 10)
-    assert.equal(shouldAutoFix('idea', 'gigi', 10), true)
+    trackFixAttempt('gigi', 'gigi', 10)
+    assert.equal(shouldAutoFix('gigi', 'gigi', 10), true) // still under limit
+    resetFixAttempts('gigi', 'gigi', 10)
+    assert.equal(shouldAutoFix('gigi', 'gigi', 10), true)
   })
 
   it('blocks auto-fix after max attempts are exhausted', () => {
     // Simulate two failed fix attempts
     for (let i = 0; i < MAX_FIX_ATTEMPTS; i++) {
-      trackFixAttempt('idea', 'gigi', 20)
+      trackFixAttempt('gigi', 'gigi', 20)
     }
 
-    assert.equal(shouldAutoFix('idea', 'gigi', 20), false,
+    assert.equal(shouldAutoFix('gigi', 'gigi', 20), false,
       'should not allow auto-fix after max attempts')
   })
 
   it('resets counter when CI succeeds after failures', () => {
     // Simulate a failure attempt
-    trackFixAttempt('idea', 'gigi', 30)
-    assert.equal(shouldAutoFix('idea', 'gigi', 30), true, 'still has retries left')
+    trackFixAttempt('gigi', 'gigi', 30)
+    assert.equal(shouldAutoFix('gigi', 'gigi', 30), true, 'still has retries left')
 
     // Simulate CI success → reset
-    resetFixAttempts('idea', 'gigi', 30)
-    assert.equal(shouldAutoFix('idea', 'gigi', 30), true, 'counter should be reset')
+    resetFixAttempts('gigi', 'gigi', 30)
+    assert.equal(shouldAutoFix('gigi', 'gigi', 30), true, 'counter should be reset')
   })
 
   it('handles cancelled/skipped runs gracefully', () => {
     const payload = {
       action: 'completed',
-      repository: { name: 'gigi', full_name: 'idea/gigi', owner: { login: 'idea' } },
+      repository: { name: 'gigi', full_name: 'gigi/gigi', owner: { login: 'gigi' } },
       workflow_run: {
         id: 5,
         name: 'Test',

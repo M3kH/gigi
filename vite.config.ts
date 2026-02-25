@@ -18,8 +18,18 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
+      // Gitea assets: direct to Gitea (no auth/rewriting needed, avoids
+      // Parse Error from backend response streaming).
+      '/gitea/assets': {
+        target: 'http://localhost:3300',
+        changeOrigin: true,
+        rewrite: (path: string) => path.replace(/^\/gitea/, ''),
+      },
+      // Gitea pages: proxy through Gigi backend which handles auth
+      // (X-WEBAUTH-USER), HTML rewriting, and theme injection.
       '/gitea': {
-        target: 'http://localhost:3000',
+        target: process.env.GIGI_API_URL || 'http://localhost:3000',
+        changeOrigin: true,
       },
       '/api': {
         // Proxy to the live Gigi app running on the cluster

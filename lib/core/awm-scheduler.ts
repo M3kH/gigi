@@ -58,7 +58,7 @@ const findReadyIssues = async (): Promise<{ summary: string; count: number }> =>
   const gitea = await getGiteaClient()
   if (!gitea) return { summary: '', count: 0 }
 
-  const org = process.env.GITEA_ORG || 'idea'
+  const org = process.env.GITEA_ORG || 'acme'
 
   try {
     const repos = await gitea.orgs.listRepos(org)

@@ -24,7 +24,7 @@ export interface AgentConfig {
   name: string
   /** Agent description/role (default: "a persistent AI coordinator") */
   description: string
-  /** Gitea org (default: from GITEA_ORG env or "idea") */
+  /** Gitea org (default: from GITEA_ORG env or "acme") */
   org: string
   /** Git identity for commits */
   git: {
@@ -53,7 +53,7 @@ export interface AgentConfig {
 const DEFAULT_CONFIG: AgentConfig = {
   name: 'Gigi',
   description: 'a persistent AI coordinator',
-  org: process.env.GITEA_ORG || 'idea',
+  org: process.env.GITEA_ORG || 'acme',
   git: {
     name: 'Gigi',
     email: 'gigi@localhost',
@@ -179,7 +179,7 @@ export const fetchRepoContext = async (org?: string): Promise<string> => {
   if (!giteaUrl || !giteaToken) return '_Gitea not configured — repo list unavailable_'
 
   try {
-    const targetOrg = org || process.env.GITEA_ORG || 'idea'
+    const targetOrg = org || process.env.GITEA_ORG || 'acme'
     const res = await fetch(`${giteaUrl}/api/v1/orgs/${targetOrg}/repos?limit=50`, {
       headers: { 'Authorization': `token ${giteaToken}` },
     })

@@ -1,59 +1,38 @@
 services:
-  gitea:
-    image: gitea/gitea:latest
+  # AIO provides Gitea + Chrome in infra-only mode (no Gigi process).
+  # Gigi runs locally via `npm run dev` for HMR.
+  aio:
+    build:
+      context: .
+      dockerfile: Dockerfile.aio
     environment:
-      - GITEA__security__INSTALL_LOCK=true
-      - GITEA__database__DB_TYPE=sqlite3
-      - GITEA__server__ROOT_URL=http://localhost:3300/gitea
-      - GITEA__server__SSH_DOMAIN=localhost
-      - GITEA__server__SSH_PORT=2222
-      - GITEA__server__SSH_LISTEN_PORT=2222
-      - GITEA__server__START_SSH_SERVER=true
-      - GITEA__server__BUILTIN_SSH_SERVER_USER=git
-      - GITEA__service__DISABLE_REGISTRATION=true
-      - GITEA__service__ENABLE_REVERSE_PROXY_AUTHENTICATION=true
-      - GITEA__service__ENABLE_REVERSE_PROXY_AUTO_REGISTRATION=false
-      - GITEA__ui__DEFAULT_THEME=gitea-dark
-      - GITEA__ui__APP_LOGO=assets/img/logo.png
-      - GITEA__webhook__ALLOWED_HOST_LIST=*
+      DATABASE_URL: postgresql://gigi:gigi@postgres:5432/gigi
+      ADMIN_USER: ${ADMIN_USER:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
+      ORG_NAME: ${ORG_NAME:-acme}
+      TELEGRAM_TOKEN: ${TELEGRAM_TOKEN:-}
+      CLAUDE_TOKEN: ${CLAUDE_TOKEN:-}
+      INFRA_ONLY: "true"
+      GIGI_INSTANCE_URL: http://localhost:3000
     ports:
-      - "3300:3000"
-      - "2222:2222"
+      - "3300:3300"    # Gitea API
+      - "2222:2222"    # Gitea SSH
+      - "6080:6080"    # noVNC (visual browser access)
+      - "9223:9223"    # CDP via nginx relay
+    shm_size: "2gb"
     volumes:
-      - gitea-data:/data
-      - ./gitea/custom/templates:/data/gitea/templates:ro
-      - ./gitea/custom/public:/data/gitea/custom/public:ro
+      - gigi-data:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
     networks:
       - gigi-local
     healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:3000/api/v1/version"]
+      test: ["CMD", "curl", "-sf", "http://localhost:3300/api/v1/version"]
       interval: 5s
       timeout: 3s
       retries: 30
-      start_period: 10s
-
-  chrome:
-    build:
-      context: ./chrome
-      dockerfile: Dockerfile
-    shm_size: "2gb"
-    ports:
-      - "6080:6080"    # noVNC (visual browser access)
-      - "9223:9223"    # CDP via nginx relay
-    environment:
-      DISPLAY: ":99"
-    networks:
-      - gigi-local
-    cap_add:
-      - SYS_ADMIN
-    security_opt:
-      - seccomp:unconfined
-    healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:9223/json/version || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 20s
+      start_period: 60s
 
   postgres:
     image: postgres:16-alpine
@@ -74,48 +53,22 @@ services:
       timeout: 3s
       retries: 10
 
-  init:
-    image: gitea/gitea:latest
-    depends_on:
-      gitea:
-        condition: service_healthy
-      postgres:
-        condition: service_healthy
-    environment:
-      GITEA_URL: http://gitea:3000
-      ADMIN_USER: ${ADMIN_USER:-admin}
-      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@localhost}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
-      ORG_NAME: ${ORG_NAME:-idea}
-      TELEGRAM_TOKEN: ${TELEGRAM_TOKEN:-}
-      CLAUDE_TOKEN: ${CLAUDE_TOKEN:-}
-      PGHOST: postgres
-      PGUSER: gigi
-      PGPASSWORD: gigi
-      PGDATABASE: gigi
-    volumes:
-      - gitea-data:/data
-      - ./scripts/local-init.sh:/local-init.sh:ro
-      - ${REPOSITORIES_PATH:-/dev/null}:/repositories:ro
-    networks:
-      - gigi-local
-    entrypoint: ["sh", "-c", "apk add --no-cache postgresql-client curl && sh /local-init.sh"]
-    restart: "no"
-
   # Full build — production-like. No HMR.
-  #   docker-compose -f docker-compose.local.yml up
+  #   docker-compose -f docker-compose.local.yml --profile prod up --build
   gigi:
     build:
       context: .
       dockerfile: Dockerfile
+    profiles: ["prod"]
     depends_on:
-      init:
-        condition: service_completed_successfully
+      aio:
+        condition: service_healthy
     environment:
       DATABASE_URL: postgresql://gigi:gigi@postgres:5432/gigi
+      GITEA_URL: http://aio:3300
       BROWSER_MODE: chrome
       BROWSER_VIEW_URL: /browser/
-      CHROME_CDP_URL: http://chrome:9223
+      CHROME_CDP_URL: http://aio:9223
       PORT: 3000
     ports:
       - "3100:3000"
@@ -125,7 +78,7 @@ services:
       - gigi-local
 
 volumes:
-  gitea-data:
+  gigi-data:
   postgres-data:
   workspace:
 

@@ -90,7 +90,8 @@
   const conversations = $derived(getConversations())
 
   const userRepos = $derived(overview?.repos ?? [])
-  const isEmpty = $derived(!loading && !error && userRepos.length === 0)
+  const hasUserRepos = $derived(userRepos.some(r => r.name !== 'gigi'))
+  const isEmpty = $derived(!loading && !error && !hasUserRepos)
   const totalOpenIssues = $derived(overview?.totalOpenIssues ?? 0)
   const totalOpenPRs = $derived(overview?.totalOpenPRs ?? 0)
 
@@ -219,7 +220,7 @@
           </svg>
           Ask Gigi
         </button>
-        <button class="action-chip" onclick={() => navigateToGitea(`/${overview?.org?.name ?? 'idea'}`)} title="Open Gitea">
+        <button class="action-chip" onclick={() => navigateToGitea(`/${overview?.org?.name ?? 'acme'}`)} title="Open Gitea">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
             <path d="M8 5h2v2H8V5zM6 7h2v2H6V7zM4 9h2v2H4V9zm-2 2h2v2H2v-2zm2 2h2v2H4v-2zm2 2h2v2H6v-2zm2 2h2v2H8v-2zm8-12h-2v2h2V5zm2 2h-2v2h2V7zm2 2h-2v2h2V9zm2 2h-2v2h2v-2zm-2 2h-2v2h2v-2zm-2 2h-2v2h2v-2zm-2 2h-2v2h2v-2z"/>
           </svg>
@@ -284,7 +285,7 @@
     <div class="dashboard-grid">
       <!-- Left column -->
       <div class="grid-column">
-        <ActionsWidget owner={overview?.org?.name ?? 'idea'} />
+        <ActionsWidget owner={overview?.org?.name ?? 'acme'} />
         <!-- Repositories -->
         <section class="section">
           <h2 class="section-title">

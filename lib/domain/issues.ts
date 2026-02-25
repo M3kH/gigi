@@ -8,6 +8,8 @@
 import { execSync } from 'node:child_process'
 import { ensureIssueTracked } from './projects'
 
+const getOrg = () => process.env.GITEA_ORG || 'acme'
+
 // ─── Types ──────────────────────────────────────────────────────────
 
 export interface IssueCommand {
@@ -46,7 +48,7 @@ export const loadIssue = async (repo: string, number: number): Promise<IssueCont
 
   if (!giteaToken) throw new Error('GITEA_TOKEN not set')
 
-  const url = `${giteaUrl}/api/v1/repos/idea/${repo}/issues/${number}`
+  const url = `${giteaUrl}/api/v1/repos/${getOrg()}/${repo}/issues/${number}`
 
   try {
     const response = execSync(
@@ -94,7 +96,7 @@ export const formatIssueContext = (): string => {
 
   return `## Current Issue Context
 
-**Repository**: idea/${currentIssue.repo}
+**Repository**: ${getOrg()}/${currentIssue.repo}
 **Issue**: #${currentIssue.number} - ${currentIssue.title}
 **State**: ${currentIssue.state}
 **Labels**: ${labels || 'none'}
@@ -110,7 +112,7 @@ You are now working on this issue.
 
 ## Your Responsibilities
 
-1. **Ensure proper tracking**: This issue has been automatically added to the "idea Command Center" project board.
+1. **Ensure proper tracking**: This issue has been automatically added to the "gigi Command Center" project board.
 
 2. **Update status as you work**: Use the project_manager functions to sync status:
    - \`syncIssueStatus(repo, number, 'status/in-progress')\` when starting work

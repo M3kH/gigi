@@ -297,15 +297,48 @@ export const createApp = (): Hono => {
       return c.json({ available: false })
     }
 
-    // Selenium standalone serves a self-contained noVNC viewer on port 7900.
-    // Caddy routes /browser/* directly to browser:7900, stripping the prefix.
-    const browserUrl = `${viewUrl}?autoconnect=true&resize=scale`
+    // noVNC connects via WebSocket to the same host. When behind a path-stripping
+    // proxy (/browser/* → :6080), we must tell noVNC to use that path for the WS
+    // connection too, otherwise it tries ws://host:port/websockify which misses the proxy.
+    const wsPath = viewUrl.replace(/^\//, '') + 'websockify'
+    const browserUrl = `${viewUrl}?autoconnect=true&resize=scale&path=${encodeURIComponent(wsPath)}`
 
     return c.json({
       mode: browserMode,
       browserUrl,
       available: true,
     })
+  })
+
+  // ── Browser proxy (noVNC) ─────────────────────────────────────────
+  // Forwards /browser/* to the noVNC server (websockify on port 6080),
+  // stripping the /browser prefix. WebSocket upgrades are handled in server.ts.
+  app.all('/browser/*', async (c) => {
+    const noVncUrl = process.env.NOVNC_URL || 'http://localhost:6080'
+    const path = c.req.path.replace(/^\/browser/, '') || '/'
+    const query = c.req.url.includes('?') ? c.req.url.slice(c.req.url.indexOf('?')) : ''
+    const targetUrl = `${noVncUrl}${path}${query}`
+
+    const headers = new Headers()
+    for (const key of ['accept', 'accept-language', 'content-type']) {
+      const val = c.req.header(key)
+      if (val) headers.set(key, val)
+    }
+
+    const hasBody = c.req.method !== 'GET' && c.req.method !== 'HEAD'
+    const body = hasBody ? await c.req.arrayBuffer() : undefined
+
+    try {
+      const resp = await fetch(targetUrl, { method: c.req.method, headers, body, redirect: 'manual' })
+      const respHeaders = new Headers()
+      for (const [k, v] of resp.headers.entries()) {
+        if (k.toLowerCase() === 'transfer-encoding') continue
+        respHeaders.set(k, v)
+      }
+      return new Response(resp.body, { status: resp.status, headers: respHeaders })
+    } catch {
+      return c.text('Browser service unavailable', 502)
+    }
   })
 
   // Internal: ask-user bridge (MCP process → main process → frontend)
@@ -646,7 +679,7 @@ export const createApp = (): Hono => {
     for (const [k, v] of resp.headers.entries()) {
       if (skipHeaders.has(k.toLowerCase())) continue
       if (k.toLowerCase() === 'location') {
-        // Gitea redirects use ROOT_URL paths (e.g. /gitea/idea/repo)
+        // Gitea redirects use ROOT_URL paths (e.g. /gitea/gigi/repo)
         // which already match our proxy prefix — pass through as-is
         respHeaders.set(k, v)
       } else if (k.toLowerCase() === 'set-cookie') {

@@ -11,7 +11,8 @@
   import { checkSetup, isSetupLoading, isSetupComplete } from '$lib/stores/setup.svelte'
 
   const loading: boolean = $derived(isSetupLoading())
-  const ready: boolean = $derived(isSetupComplete())
+  const forceSetup = window.location.pathname === '/setup'
+  const ready: boolean = $derived(!forceSetup && isSetupComplete())
 
   onMount(() => {
     checkSetup()

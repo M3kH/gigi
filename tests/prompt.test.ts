@@ -53,8 +53,8 @@ describe('interpolateTemplate', () => {
   })
 
   it('replaces same placeholder multiple times', () => {
-    const result = interpolateTemplate('{{org}}/repo under {{org}}', { org: 'idea' })
-    assert.equal(result, 'idea/repo under idea')
+    const result = interpolateTemplate('{{org}}/repo under {{org}}', { org: 'gigi' })
+    assert.equal(result, 'gigi/repo under gigi')
   })
 })
 
@@ -336,11 +336,11 @@ describe('buildSystemPrompt', () => {
     const prompt = await buildSystemPrompt({
       name: 'Gigi',
       description: 'a persistent AI coordinator',
-      org: 'idea',
+      org: 'gigi',
       git: { name: 'Gigi', email: 'gigi@localhost' },
     })
     assert.ok(prompt.includes('You are Gigi 🤵🏻‍♂️, a persistent AI coordinator'))
-    assert.ok(prompt.includes('owner: "idea"'))
+    assert.ok(prompt.includes('owner: "gigi"'))
     assert.ok(prompt.includes('Be concise, upbeat, and proactive.'))
   })
 
@@ -353,14 +353,14 @@ describe('buildSystemPrompt', () => {
     })
     assert.ok(prompt.includes('You are CustomBot 🤵🏻‍♂️, a helpful assistant'))
     assert.ok(prompt.includes('owner: "myteam"'))
-    assert.ok(!prompt.includes('owner: "idea"'))
+    assert.ok(!prompt.includes('owner: "gigi"'))
   })
 
   it('includes infrastructure section when provided', async () => {
     const prompt = await buildSystemPrompt({
       name: 'Gigi',
       description: 'a persistent AI coordinator',
-      org: 'idea',
+      org: 'gigi',
       git: { name: 'Gigi', email: 'gigi@localhost' },
       infrastructure: '3-node ARM64 cluster running Docker Swarm',
     })
@@ -372,7 +372,7 @@ describe('buildSystemPrompt', () => {
     const prompt = await buildSystemPrompt({
       name: 'Gigi',
       description: 'a persistent AI coordinator',
-      org: 'idea',
+      org: 'gigi',
       git: { name: 'Gigi', email: 'gigi@localhost' },
       extraSections: '## Custom Rules\n- Always use TypeScript',
     })
@@ -385,7 +385,7 @@ describe('buildSystemPrompt', () => {
     const prompt = await buildSystemPrompt({
       name: 'Gigi',
       description: 'a persistent AI coordinator',
-      org: 'idea',
+      org: 'gigi',
       git: { name: 'Gigi', email: 'gigi@localhost' },
       extraPromptFile: testPromptFile,
     })
@@ -397,7 +397,7 @@ describe('buildSystemPrompt', () => {
     const prompt = await buildSystemPrompt({
       name: 'Gigi',
       description: 'a persistent AI coordinator',
-      org: 'idea',
+      org: 'gigi',
       git: { name: 'Gigi', email: 'gigi@localhost' },
     })
     assert.ok(!prompt.includes('## Infrastructure Details'))
@@ -408,7 +408,7 @@ describe('buildSystemPrompt', () => {
     const prompt = await buildSystemPrompt({
       name: 'Gigi',
       description: 'a persistent AI coordinator',
-      org: 'idea',
+      org: 'gigi',
       git: { name: 'Gigi', email: 'gigi@localhost' },
     })
     assert.ok(prompt.includes('$GITEA_URL'))
@@ -418,7 +418,7 @@ describe('buildSystemPrompt', () => {
     const prompt = await buildSystemPrompt({
       name: 'Gigi',
       description: 'a persistent AI coordinator',
-      org: 'idea',
+      org: 'gigi',
       git: { name: 'Gigi', email: 'gigi@localhost' },
     })
     assert.ok(prompt.includes('## Organization Repositories'))
@@ -428,7 +428,7 @@ describe('buildSystemPrompt', () => {
     const prompt = await buildSystemPrompt({
       name: 'Gigi',
       description: 'a persistent AI coordinator',
-      org: 'idea',
+      org: 'gigi',
       git: { name: 'Gigi', email: 'gigi@localhost' },
     })
     assert.ok(prompt.includes('Co-Authored-By: Claude <noreply@anthropic.com>'))
@@ -439,7 +439,7 @@ describe('buildSystemPrompt', () => {
     const prompt = await buildSystemPrompt({
       name: 'Gigi',
       description: 'a persistent AI coordinator',
-      org: 'idea',
+      org: 'gigi',
       git: {
         name: 'Gigi',
         email: 'gigi@ideabile.com',
@@ -457,7 +457,7 @@ describe('buildSystemPrompt', () => {
     const prompt = await buildSystemPrompt({
       name: 'Gigi',
       description: 'a persistent AI coordinator',
-      org: 'idea',
+      org: 'gigi',
       git: { name: 'Gigi', email: 'gigi@localhost' },
     })
     assert.ok(prompt.includes('## Git commit formatting'))

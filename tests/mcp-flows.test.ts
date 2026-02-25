@@ -41,8 +41,8 @@ const handlers = [
   http.get(`${GITEA_URL}/api/v1/user/repos`, () => {
     apiCalls.push({ method: 'GET', path: '/user/repos' })
     return HttpResponse.json([
-      { id: 1, name: 'gigi', full_name: 'idea/gigi', html_url: `${GITEA_URL}/idea/gigi` },
-      { id: 2, name: 'website', full_name: 'idea/website', html_url: `${GITEA_URL}/idea/website` },
+      { id: 1, name: 'gigi', full_name: 'gigi/gigi', html_url: `${GITEA_URL}/gigi/gigi` },
+      { id: 2, name: 'website', full_name: 'gigi/website', html_url: `${GITEA_URL}/gigi/website` },
     ])
   }),
 
@@ -165,14 +165,14 @@ describe('Gitea Tool → API Flows', () => {
   it('create_repo with owner should call POST /orgs/{owner}/repos', async () => {
     const result = await runGitea({
       action: 'create_repo',
-      owner: 'idea',
+      owner: 'gigi',
       repo: 'test-project',
       body: 'A test project',
     })
 
     assert.equal(apiCalls.length, 1)
     assert.equal(apiCalls[0].method, 'POST')
-    assert.equal(apiCalls[0].path, '/orgs/idea/repos')
+    assert.equal(apiCalls[0].path, '/orgs/gigi/repos')
     assert.deepEqual((apiCalls[0].body as Record<string, unknown>).name, 'test-project')
     assert.deepEqual((apiCalls[0].body as Record<string, unknown>).description, 'A test project')
     assert.ok(result)
@@ -186,29 +186,29 @@ describe('Gitea Tool → API Flows', () => {
   })
 
   it('list_issues should call correct endpoint with owner/repo', async () => {
-    const result = await runGitea({ action: 'list_issues', owner: 'idea', repo: 'gigi' })
+    const result = await runGitea({ action: 'list_issues', owner: 'gigi', repo: 'gigi' })
 
-    assert.equal(apiCalls[0].path, '/repos/idea/gigi/issues')
+    assert.equal(apiCalls[0].path, '/repos/gigi/gigi/issues')
     assert.ok(Array.isArray(result))
   })
 
   it('get_issue should include issue number in path', async () => {
-    await runGitea({ action: 'get_issue', owner: 'idea', repo: 'gigi', number: 42 })
+    await runGitea({ action: 'get_issue', owner: 'gigi', repo: 'gigi', number: 42 })
 
-    assert.equal(apiCalls[0].path, '/repos/idea/gigi/issues/42')
+    assert.equal(apiCalls[0].path, '/repos/gigi/gigi/issues/42')
   })
 
   it('create_issue should send title and body', async () => {
     const result = await runGitea({
       action: 'create_issue',
-      owner: 'idea',
+      owner: 'gigi',
       repo: 'gigi',
       title: 'Bug: something broken',
       body: 'Steps to reproduce...',
     })
 
     assert.equal(apiCalls[0].method, 'POST')
-    assert.equal(apiCalls[0].path, '/repos/idea/gigi/issues')
+    assert.equal(apiCalls[0].path, '/repos/gigi/gigi/issues')
     assert.equal((apiCalls[0].body as Record<string, unknown>).title, 'Bug: something broken')
     assert.equal((apiCalls[0].body as Record<string, unknown>).body, 'Steps to reproduce...')
     assert.equal((result as { number: number }).number, 5)
@@ -217,20 +217,20 @@ describe('Gitea Tool → API Flows', () => {
   it('comment_issue should POST to issue comments endpoint', async () => {
     await runGitea({
       action: 'comment_issue',
-      owner: 'idea',
+      owner: 'gigi',
       repo: 'gigi',
       number: 1,
       body: 'Fixed in PR #3',
     })
 
-    assert.equal(apiCalls[0].path, '/repos/idea/gigi/issues/1/comments')
+    assert.equal(apiCalls[0].path, '/repos/gigi/gigi/issues/1/comments')
     assert.equal((apiCalls[0].body as Record<string, unknown>).body, 'Fixed in PR #3')
   })
 
   it('create_pr should send title, body, head, base', async () => {
     const result = await runGitea({
       action: 'create_pr',
-      owner: 'idea',
+      owner: 'gigi',
       repo: 'gigi',
       title: 'feat: add ask_user',
       body: 'Closes #5',
@@ -238,7 +238,7 @@ describe('Gitea Tool → API Flows', () => {
       base: 'main',
     })
 
-    assert.equal(apiCalls[0].path, '/repos/idea/gigi/pulls')
+    assert.equal(apiCalls[0].path, '/repos/gigi/gigi/pulls')
     assert.equal((apiCalls[0].body as Record<string, unknown>).title, 'feat: add ask_user')
     assert.equal((apiCalls[0].body as Record<string, unknown>).head, 'feat/ask-user')
     assert.equal((apiCalls[0].body as Record<string, unknown>).base, 'main')
@@ -413,12 +413,12 @@ describe('Gitea Tool Error Handling', () => {
 
   it('should return error message on 404', async () => {
     server.use(
-      http.get(`${GITEA_URL}/api/v1/repos/idea/nonexistent/issues/999`, () => {
+      http.get(`${GITEA_URL}/api/v1/repos/gigi/nonexistent/issues/999`, () => {
         return HttpResponse.json({ message: 'Not Found' }, { status: 404 })
       })
     )
 
-    const result = await runGitea({ action: 'get_issue', owner: 'idea', repo: 'nonexistent', number: 999 })
+    const result = await runGitea({ action: 'get_issue', owner: 'gigi', repo: 'nonexistent', number: 999 })
     assert.ok(typeof result === 'string')
     assert.ok((result as string).includes('404'))
   })

@@ -12,7 +12,7 @@ agent:
   # Short description/role shown in the system prompt
   description: ${AGENT_DESCRIPTION:-a persistent AI coordinator}
   # Gitea organization for repo operations
-  org: ${GITEA_ORG:-idea}
+  org: ${GITEA_ORG:-acme}
   # Git identity for the agent (used as Co-Authored-By when author override is set)
   git:
     name: ${AGENT_GIT_NAME:-Gigi}
@@ -32,8 +32,8 @@ agent:
 
 backup:
   sources:
-    # Back up all repos in the "idea" org
-    - org: idea
+    # Back up all repos in the configured org
+    - org: gigi
 
   targets:
     # Git mirror to secondary Gitea (optional)

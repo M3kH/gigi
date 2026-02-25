@@ -53,8 +53,8 @@ export const signPayload = (body: string, secret: string): string => {
 
 const baseRepo = (opts: WebhookOptions) => ({
   name: opts.repo || DEFAULT_REPO,
-  full_name: opts.repoFullName || `idea/${opts.repo || DEFAULT_REPO}`,
-  html_url: `http://localhost:3000/idea/${opts.repo || DEFAULT_REPO}`,
+  full_name: opts.repoFullName || `gigi/${opts.repo || DEFAULT_REPO}`,
+  html_url: `http://localhost:3000/gigi/${opts.repo || DEFAULT_REPO}`,
 })
 
 const baseUser = (opts: WebhookOptions) => ({
@@ -73,7 +73,7 @@ export const issueEvent = (opts: WebhookOptions = {}): WebhookRequest => {
       number: opts.issueNumber || 1,
       title: opts.issueTitle || 'Test Issue',
       body: opts.issueBody || 'Test issue body',
-      html_url: `http://localhost:3000/idea/${opts.repo || DEFAULT_REPO}/issues/${opts.issueNumber || 1}`,
+      html_url: `http://localhost:3000/gigi/${opts.repo || DEFAULT_REPO}/issues/${opts.issueNumber || 1}`,
       user: baseUser(opts),
     },
   }
@@ -91,13 +91,13 @@ export const issueCommentEvent = (opts: WebhookOptions = {}): WebhookRequest => 
       number: opts.issueNumber || 1,
       title: opts.issueTitle || 'Test Issue',
       body: opts.issueBody || '',
-      html_url: `http://localhost:3000/idea/${opts.repo || DEFAULT_REPO}/issues/${opts.issueNumber || 1}`,
+      html_url: `http://localhost:3000/gigi/${opts.repo || DEFAULT_REPO}/issues/${opts.issueNumber || 1}`,
       user: baseUser(opts),
     },
     comment: {
       body: opts.commentBody || 'Test comment',
       user: baseUser(opts),
-      html_url: `http://localhost:3000/idea/${opts.repo || DEFAULT_REPO}/issues/${opts.issueNumber || 1}#comment-1`,
+      html_url: `http://localhost:3000/gigi/${opts.repo || DEFAULT_REPO}/issues/${opts.issueNumber || 1}#comment-1`,
     },
   }
   return buildRequest('issue_comment', payload, opts.secret || DEFAULT_SECRET)
@@ -120,7 +120,7 @@ export const pullRequestEvent = (opts: WebhookOptions = {}): WebhookRequest => {
       base: { ref: opts.baseBranch || 'main' },
       merged: opts.merged || false,
       user: baseUser(opts),
-      html_url: `http://localhost:3000/idea/${opts.repo || DEFAULT_REPO}/pulls/${prNum}`,
+      html_url: `http://localhost:3000/gigi/${opts.repo || DEFAULT_REPO}/pulls/${prNum}`,
     },
   }
   return buildRequest('pull_request', payload, opts.secret || DEFAULT_SECRET)
@@ -141,12 +141,12 @@ export const prReviewCommentEvent = (opts: WebhookOptions = {}): WebhookRequest 
       base: { ref: opts.baseBranch || 'main' },
       merged: false,
       user: baseUser(opts),
-      html_url: `http://localhost:3000/idea/${opts.repo || DEFAULT_REPO}/pulls/${prNum}`,
+      html_url: `http://localhost:3000/gigi/${opts.repo || DEFAULT_REPO}/pulls/${prNum}`,
     },
     comment: {
       body: opts.commentBody || 'Review comment',
       user: baseUser(opts),
-      html_url: `http://localhost:3000/idea/${opts.repo || DEFAULT_REPO}/pulls/${prNum}#comment-1`,
+      html_url: `http://localhost:3000/gigi/${opts.repo || DEFAULT_REPO}/pulls/${prNum}#comment-1`,
     },
   }
   return buildRequest('pull_request_review_comment', payload, opts.secret || DEFAULT_SECRET)

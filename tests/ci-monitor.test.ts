@@ -32,8 +32,8 @@ function makeWorkflowRunPayload(overrides: Record<string, unknown> = {}) {
     action: 'completed',
     repository: {
       name: 'gigi',
-      full_name: 'idea/gigi',
-      owner: { login: 'idea' },
+      full_name: 'gigi/gigi',
+      owner: { login: 'gigi' },
     },
     workflow_run: {
       id: 42,
@@ -43,7 +43,7 @@ function makeWorkflowRunPayload(overrides: Record<string, unknown> = {}) {
       status: 'completed',
       conclusion: 'failure',
       event: 'pull_request',
-      html_url: 'https://gitea.local/idea/gigi/actions/runs/42',
+      html_url: 'https://gitea.local/gigi/gigi/actions/runs/42',
       pull_requests: [{ number: 10 }],
       ...overrides,
     },
@@ -55,8 +55,8 @@ function makeWorkflowJobPayload(overrides: Record<string, unknown> = {}) {
     action: 'completed',
     repository: {
       name: 'gigi',
-      full_name: 'idea/gigi',
-      owner: { login: 'idea' },
+      full_name: 'gigi/gigi',
+      owner: { login: 'gigi' },
     },
     workflow_job: {
       id: 99,
@@ -67,7 +67,7 @@ function makeWorkflowJobPayload(overrides: Record<string, unknown> = {}) {
       head_sha: 'abc123def456',
       status: 'completed',
       conclusion: 'failure',
-      html_url: 'https://gitea.local/idea/gigi/actions/runs/42/jobs/99',
+      html_url: 'https://gitea.local/gigi/gigi/actions/runs/42/jobs/99',
       ...overrides,
     },
   }
@@ -77,13 +77,13 @@ function makeRunInfo(overrides: Partial<CIRunInfo> = {}): CIRunInfo {
   return {
     runId: 42,
     repo: 'gigi',
-    owner: 'idea',
+    owner: 'gigi',
     branch: 'feat/my-feature',
     headSha: 'abc123def456',
     workflowName: 'Test Pull Request',
     conclusion: 'failure',
     prNumber: 10,
-    htmlUrl: 'https://gitea.local/idea/gigi/actions/runs/42',
+    htmlUrl: 'https://gitea.local/gigi/gigi/actions/runs/42',
     ...overrides,
   }
 }
@@ -96,13 +96,13 @@ describe('parseWorkflowRunPayload', () => {
     assert.ok(result)
     assert.equal(result.runId, 42)
     assert.equal(result.repo, 'gigi')
-    assert.equal(result.owner, 'idea')
+    assert.equal(result.owner, 'gigi')
     assert.equal(result.branch, 'feat/my-feature')
     assert.equal(result.headSha, 'abc123def456')
     assert.equal(result.workflowName, 'Test Pull Request')
     assert.equal(result.conclusion, 'failure')
     assert.equal(result.prNumber, 10)
-    assert.equal(result.htmlUrl, 'https://gitea.local/idea/gigi/actions/runs/42')
+    assert.equal(result.htmlUrl, 'https://gitea.local/gigi/gigi/actions/runs/42')
   })
 
   it('parses a completed success workflow_run', () => {
@@ -149,7 +149,7 @@ describe('parseWorkflowRunPayload', () => {
     delete (payload.repository as Record<string, unknown>).owner
     const result = parseWorkflowRunPayload(payload)
     assert.ok(result)
-    assert.equal(result.owner, 'idea')
+    assert.equal(result.owner, 'gigi')
   })
 })
 
@@ -159,7 +159,7 @@ describe('parseWorkflowJobPayload', () => {
     assert.ok(result)
     assert.equal(result.runId, 42)
     assert.equal(result.repo, 'gigi')
-    assert.equal(result.owner, 'idea')
+    assert.equal(result.owner, 'gigi')
     assert.equal(result.branch, 'feat/my-feature')
     assert.equal(result.conclusion, 'failure')
     assert.equal(result.workflowName, 'Test Pull Request')
@@ -186,61 +186,61 @@ describe('parseWorkflowJobPayload', () => {
 describe('retry tracking', () => {
   beforeEach(() => {
     // Reset state between tests
-    resetFixAttempts('idea', 'gigi', 999)
+    resetFixAttempts('gigi', 'gigi', 999)
   })
 
   it('starts with 0 attempts', () => {
-    assert.equal(getFixAttempts('idea', 'gigi', 999), 0)
+    assert.equal(getFixAttempts('gigi', 'gigi', 999), 0)
   })
 
   it('allows auto-fix when under max attempts', () => {
-    assert.equal(shouldAutoFix('idea', 'gigi', 999), true)
+    assert.equal(shouldAutoFix('gigi', 'gigi', 999), true)
   })
 
   it('tracks fix attempts', () => {
-    const attempt1 = trackFixAttempt('idea', 'gigi', 999)
+    const attempt1 = trackFixAttempt('gigi', 'gigi', 999)
     assert.equal(attempt1, 1)
-    assert.equal(getFixAttempts('idea', 'gigi', 999), 1)
+    assert.equal(getFixAttempts('gigi', 'gigi', 999), 1)
 
-    const attempt2 = trackFixAttempt('idea', 'gigi', 999)
+    const attempt2 = trackFixAttempt('gigi', 'gigi', 999)
     assert.equal(attempt2, 2)
-    assert.equal(getFixAttempts('idea', 'gigi', 999), 2)
+    assert.equal(getFixAttempts('gigi', 'gigi', 999), 2)
   })
 
   it('blocks auto-fix after max attempts', () => {
     for (let i = 0; i < MAX_FIX_ATTEMPTS; i++) {
-      trackFixAttempt('idea', 'gigi', 999)
+      trackFixAttempt('gigi', 'gigi', 999)
     }
-    assert.equal(shouldAutoFix('idea', 'gigi', 999), false)
+    assert.equal(shouldAutoFix('gigi', 'gigi', 999), false)
   })
 
   it('resets fix attempts', () => {
-    trackFixAttempt('idea', 'gigi', 999)
-    trackFixAttempt('idea', 'gigi', 999)
-    assert.equal(getFixAttempts('idea', 'gigi', 999), 2)
+    trackFixAttempt('gigi', 'gigi', 999)
+    trackFixAttempt('gigi', 'gigi', 999)
+    assert.equal(getFixAttempts('gigi', 'gigi', 999), 2)
 
-    resetFixAttempts('idea', 'gigi', 999)
-    assert.equal(getFixAttempts('idea', 'gigi', 999), 0)
-    assert.equal(shouldAutoFix('idea', 'gigi', 999), true)
+    resetFixAttempts('gigi', 'gigi', 999)
+    assert.equal(getFixAttempts('gigi', 'gigi', 999), 0)
+    assert.equal(shouldAutoFix('gigi', 'gigi', 999), true)
   })
 
   it('tracks different PRs independently', () => {
-    trackFixAttempt('idea', 'gigi', 1)
-    trackFixAttempt('idea', 'gigi', 1)
-    trackFixAttempt('idea', 'gigi', 2)
+    trackFixAttempt('gigi', 'gigi', 1)
+    trackFixAttempt('gigi', 'gigi', 1)
+    trackFixAttempt('gigi', 'gigi', 2)
 
-    assert.equal(getFixAttempts('idea', 'gigi', 1), 2)
-    assert.equal(getFixAttempts('idea', 'gigi', 2), 1)
-    assert.equal(shouldAutoFix('idea', 'gigi', 1), false)
-    assert.equal(shouldAutoFix('idea', 'gigi', 2), true)
+    assert.equal(getFixAttempts('gigi', 'gigi', 1), 2)
+    assert.equal(getFixAttempts('gigi', 'gigi', 2), 1)
+    assert.equal(shouldAutoFix('gigi', 'gigi', 1), false)
+    assert.equal(shouldAutoFix('gigi', 'gigi', 2), true)
   })
 
   it('tracks different repos independently', () => {
-    trackFixAttempt('idea', 'gigi', 5)
-    trackFixAttempt('idea', 'other-repo', 5)
+    trackFixAttempt('gigi', 'gigi', 5)
+    trackFixAttempt('gigi', 'other-repo', 5)
 
-    assert.equal(getFixAttempts('idea', 'gigi', 5), 1)
-    assert.equal(getFixAttempts('idea', 'other-repo', 5), 1)
+    assert.equal(getFixAttempts('gigi', 'gigi', 5), 1)
+    assert.equal(getFixAttempts('gigi', 'other-repo', 5), 1)
   })
 })
 
@@ -258,7 +258,7 @@ describe('buildCIFailureMessage', () => {
 
     assert.ok(message.includes('[CI Failure — Auto-fix attempt 1/2]'))
     assert.ok(message.includes('Test Pull Request'))
-    assert.ok(message.includes('idea/gigi'))
+    assert.ok(message.includes('gigi/gigi'))
     assert.ok(message.includes('feat/my-feature'))
     assert.ok(message.includes('abc123de'))
     assert.ok(message.includes('#10'), 'should include PR number')

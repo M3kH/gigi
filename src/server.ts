@@ -6,7 +6,7 @@
  * incoming client messages (chat:send, chat:stop, ping, etc.).
  */
 
-import { WebSocketServer, type WebSocket } from 'ws'
+import { WebSocketServer, type WebSocket, WebSocket as WS } from 'ws'
 import type { IncomingMessage } from 'node:http'
 import type { Duplex } from 'node:stream'
 import { ClientMessage } from '../lib/core/protocol'
@@ -29,21 +29,48 @@ const clients = new Set<WSClient>()
 
 export const createWSServer = (server: { on: (event: string, listener: (...args: unknown[]) => void) => void }): void => {
   const wss = new WebSocketServer({ noServer: true })
+  const browserWss = new WebSocketServer({ noServer: true })
 
-  // Handle HTTP upgrade requests for /ws path
+  // Handle HTTP upgrade requests
   server.on('upgrade', (request: unknown, socket: unknown, head: unknown) => {
     const req = request as IncomingMessage
     const sock = socket as Duplex
     const hd = head as Buffer
     const url = new URL(req.url || '/', `http://${req.headers.host}`)
-    if (url.pathname !== '/ws') {
-      sock.destroy()
+
+    if (url.pathname === '/ws') {
+      wss.handleUpgrade(req, sock, hd, (ws) => {
+        wss.emit('connection', ws, req)
+      })
       return
     }
 
-    wss.handleUpgrade(req, sock, hd, (ws) => {
-      wss.emit('connection', ws, req)
-    })
+    // Proxy WebSocket for /browser/* → noVNC (websockify on :6080)
+    if (url.pathname.startsWith('/browser/') || url.pathname === '/browser') {
+      const noVncUrl = new URL(process.env.NOVNC_URL || 'http://localhost:6080')
+      const targetPath = url.pathname.replace(/^\/browser/, '') || '/'
+      const upstream = new WS(`ws://${noVncUrl.hostname}:${noVncUrl.port || 6080}${targetPath}`, {
+        headers: { origin: req.headers.origin || '' },
+      })
+      upstream.on('open', () => {
+        browserWss.handleUpgrade(req, sock, hd, (clientWs) => {
+          clientWs.on('message', (data) => {
+            if (upstream.readyState === WS.OPEN) upstream.send(data)
+          })
+          upstream.on('message', (data) => {
+            if (clientWs.readyState === WS.OPEN) clientWs.send(data)
+          })
+          clientWs.on('close', () => upstream.close())
+          upstream.on('close', () => clientWs.close())
+          clientWs.on('error', () => upstream.close())
+          upstream.on('error', () => clientWs.close())
+        })
+      })
+      upstream.on('error', () => sock.destroy())
+      return
+    }
+
+    sock.destroy()
   })
 
   wss.on('connection', (ws: WebSocket) => {

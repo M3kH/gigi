@@ -81,14 +81,14 @@ describe('extractGiteaPath', () => {
 
   it('relative paths are returned as-is', () => {
     // These are simple string checks that don't need window
-    assert.equal('/idea/gigi/issues/5'.startsWith('/'), true)
-    assert.equal('/idea/gigi/issues/5'.startsWith('//'), false)
+    assert.equal('/gigi/gigi/issues/5'.startsWith('/'), true)
+    assert.equal('/gigi/gigi/issues/5'.startsWith('//'), false)
   })
 
   it('/gitea/ prefix is stripped from relative paths', () => {
-    const href = '/gitea/idea/gigi/pulls/3'
+    const href = '/gitea/gigi/gigi/pulls/3'
     const stripped = href.replace(/^\/gitea/, '')
-    assert.equal(stripped, '/idea/gigi/pulls/3')
+    assert.equal(stripped, '/gigi/gigi/pulls/3')
   })
 
   it('same-origin absolute URLs match', () => {
@@ -126,11 +126,11 @@ describe('extractGiteaPath', () => {
       /^\/[^/]+\/[^/]+\/commit\/[a-f0-9]+/,
     ]
 
-    assert.ok(patterns[0].test('/idea/gigi/issues/42'))
-    assert.ok(patterns[1].test('/idea/gigi/pulls/10'))
-    assert.ok(patterns[2].test('/idea/gigi/commit/abc123def'))
+    assert.ok(patterns[0].test('/gigi/gigi/issues/42'))
+    assert.ok(patterns[1].test('/gigi/gigi/pulls/10'))
+    assert.ok(patterns[2].test('/gigi/gigi/commit/abc123def'))
     assert.ok(!patterns[0].test('/api/v1/repos'))
-    assert.ok(!patterns[1].test('/idea'))
+    assert.ok(!patterns[1].test('/gigi'))
   })
 
   it('external URLs are not intercepted', () => {
@@ -140,9 +140,9 @@ describe('extractGiteaPath', () => {
     ]
 
     // API paths should not match
-    assert.ok(!patterns[0].test('/api/v1/repos/idea/gigi'))
+    assert.ok(!patterns[0].test('/api/v1/repos/gigi/gigi'))
     // Single-segment paths should not match
-    assert.ok(!patterns[0].test('/idea'))
+    assert.ok(!patterns[0].test('/gigi'))
   })
 
   // Cleanup

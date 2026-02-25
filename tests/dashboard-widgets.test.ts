@@ -268,7 +268,7 @@ describe('overview response shape', () => {
   it('includes recentPRs, openPRs, closedPRs, and recentIssues fields', () => {
     // Simulate the response shape the overview endpoint returns
     const response = {
-      org: { id: 1, name: 'idea' },
+      org: { id: 1, name: 'gigi' },
       repos: [],
       totalRepos: 0,
       totalOpenIssues: 0,

@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-ORG="${1:-idea}"
+ORG="${1:-acme}"
 GITEA_URL="${GITEA_URL:?Set GITEA_URL env var}"
 GITEA_TOKEN="${GITEA_TOKEN:?GITEA_TOKEN environment variable is required}"
 

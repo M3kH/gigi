@@ -78,7 +78,7 @@ const handlers = [
   http.get('http://localhost/api/gitea/board', () => {
     apiCalls.push({ method: 'GET', path: '/api/gitea/board' })
     return HttpResponse.json({
-      org: 'idea',
+      org: 'gigi',
       totalIssues: 10,
       repos: ['gigi'],
       columns: [

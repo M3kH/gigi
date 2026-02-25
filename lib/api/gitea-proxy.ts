@@ -27,7 +27,7 @@ const getClient = async (): Promise<GiteaClient> => {
 
 const getOrg = async (): Promise<string> => {
   if (!orgName) {
-    orgName = process.env.GITEA_ORG || await getConfig('gitea_org') || 'gigi'
+    orgName = process.env.GITEA_ORG || await getConfig('gitea_org') || 'acme'
   }
   return orgName
 }

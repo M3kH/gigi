@@ -11,7 +11,7 @@ On top of that, Gigi has three runtime capabilities: sandboxed code execution, a
 Each Gigi org contains a `gigi` repository — Gigi's "dotfiles":
 
 ```
-idea/gigi
+gigi/gigi
   ├── CLAUDE.md          # System prompt extensions, personality, project context
   ├── skills/            # Custom skills (task-specific workflows)
   └── mcp/               # MCP server definitions (extend Gigi's tool capabilities)
@@ -125,7 +125,7 @@ Example flow:
 │  │  Backend │  │          │  │              │  │
 │  └────┬─────┘  └──────────┘  └──────────────┘  │
 │       │                                         │
-│       ├── reads idea/gigi repo (CLAUDE.md,      │
+│       ├── reads gigi/gigi repo (CLAUDE.md,      │
 │       │   skills/, mcp/)                        │
 │       │                                         │
 │       ├── controls ──┐                          │
@@ -145,7 +145,7 @@ Example flow:
 │       └── runs ──────┐                          │
 │                      ▼                          │
 │          ┌──────────────┐                       │
-│          │  MCP Servers  │ ← from idea/gigi/mcp │
+│          │  MCP Servers  │ ← from gigi/gigi/mcp │
 │          │  (sandboxed)  │                      │
 │          └──────────────┘                       │
 └─────────────────────────────────────────────────┘
@@ -154,9 +154,9 @@ Example flow:
 ## Implementation Phases
 
 ### Phase 1: Self-Extension Basics
-- Gigi reads `idea/gigi/CLAUDE.md` on conversation start (inject into system prompt)
+- Gigi reads `gigi/gigi/CLAUDE.md` on conversation start (inject into system prompt)
 - Gigi can edit the repo via existing git tools
-- Skills loaded from `idea/gigi/skills/`
+- Skills loaded from `gigi/gigi/skills/`
 
 ### Phase 2: Embedded Browser
 - Chrome sidecar container in docker-compose (Xvfb + Chrome + noVNC)
@@ -171,7 +171,7 @@ Example flow:
 - Auto-URL exposure for running services
 
 ### Phase 4: Sandboxed MCP
-- MCP server definitions in `idea/gigi/mcp/`
+- MCP server definitions in `gigi/gigi/mcp/`
 - Each MCP server runs in its own container
 - Secret injection via explicit configuration (not ambient)
 - Hot-reload when repo changes
@@ -187,6 +187,6 @@ The browser, the Docker manager, the logs — these are Gigi's senses, not just 
 | Chrome browser (CDP) | Inspect DOM, read console.error, screenshot, e2e test | Live browser stream (noVNC), can take over |
 | Docker manager | Read logs, spot errors, restart services, check health | Container list, log viewer, terminal |
 | MCP extensions | Gain new tools at runtime (Slack, monitoring, etc.) | Extended capabilities in chat |
-| Self-extension repo | Update his own personality, skills, tools | Changes in idea/gigi repo |
+| Self-extension repo | Update his own personality, skills, tools | Changes in gigi/gigi repo |
 
 Gigi is not a chat assistant with tools. He's an **autonomous developer with his own browser, his own containers, and the ability to extend himself**. The user watches, guides, and takes over when needed — but Gigi can close the loop independently.

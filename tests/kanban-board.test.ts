@@ -40,7 +40,7 @@ function makeCard(
     linked_pr_details: [],
     linked_chats: 0,
     linked_chat_details: [],
-    html_url: `https://gitea.local/idea/gigi/issues/${overrides.number}`,
+    html_url: `https://gitea.local/gigi/gigi/issues/${overrides.number}`,
     ...overrides,
   }
 }
@@ -215,7 +215,7 @@ const apiCalls: Array<{ method: string; path: string; body?: unknown }> = []
 const handlers = [
   // Gitea: list org repos
   http.get(`${GITEA_URL}/api/v1/orgs/:org/repos`, () => {
-    apiCalls.push({ method: 'GET', path: '/orgs/idea/repos' })
+    apiCalls.push({ method: 'GET', path: '/orgs/gigi/repos' })
     return HttpResponse.json([{ name: 'gigi', archived: false, open_issues_count: 5 }])
   }),
 
@@ -230,7 +230,7 @@ const handlers = [
       state: 'open',
       labels: [],
       comments: 0,
-      html_url: `${GITEA_URL}/idea/${params.repo}/issues/42`,
+      html_url: `${GITEA_URL}/gigi/${params.repo}/issues/42`,
       created_at: '2026-02-22T00:00:00Z',
       updated_at: '2026-02-22T00:00:00Z',
     })
@@ -260,7 +260,7 @@ const server = setupServer(...handlers)
 // Override env for the gitea-proxy module
 process.env.GITEA_URL = GITEA_URL
 process.env.GITEA_TOKEN = 'test-token'
-process.env.GITEA_ORG = 'idea'
+process.env.GITEA_ORG = 'gigi'
 
 describe('POST /board/create endpoint', () => {
   let createGiteaProxy: () => import('hono').Hono
