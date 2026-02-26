@@ -5,3 +5,4 @@ node_modules/
 dist/
 .worktrees
 .DS_Store
+coverage/

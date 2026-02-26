@@ -20,7 +20,135 @@ jobs:
       - name: Type check
         run: npx tsc --noEmit
 
-      - name: Run tests
-        run: npm test
+      - name: Run unit tests with coverage
+        id: tests
+        run: |
+          # Run unit tests only (no DB required), with coverage + JSON reporter
+          npx vitest run --project unit \
+            --coverage \
+            --coverage.reporter=json-summary \
+            --coverage.reporter=text \
+            --reporter=default \
+            --reporter=json \
+            --outputFile.json=test-results.json \
+            2>&1 | tee test-output.txt
+
+          echo "exit_code=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
         env:
           CI: true
+        continue-on-error: true
+
+      - name: Generate PR comment
+        if: always()
+        env:
+          GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          TEST_EXIT_CODE: ${{ steps.tests.outputs.exit_code }}
+        run: |
+          # Build the comment body
+          COMMENT="## 🧪 Test Results\n\n"
+
+          if [ "$TEST_EXIT_CODE" = "0" ]; then
+            COMMENT+="✅ **All unit tests passed**\n\n"
+          else
+            COMMENT+="❌ **Some tests failed**\n\n"
+          fi
+
+          # Extract coverage summary if available
+          if [ -f coverage/coverage-summary.json ]; then
+            TOTAL_LINES=$(node -e "
+              const c = require('./coverage/coverage-summary.json');
+              const t = c.total;
+              console.log(JSON.stringify({
+                lines: t.lines.pct,
+                branches: t.branches.pct,
+                functions: t.functions.pct,
+                statements: t.statements.pct
+              }));
+            ")
+            LINES_PCT=$(echo "$TOTAL_LINES" | node -e "const d=JSON.parse(require('fs').readFileSync(0,'utf8')); console.log(d.lines)")
+            BRANCHES_PCT=$(echo "$TOTAL_LINES" | node -e "const d=JSON.parse(require('fs').readFileSync(0,'utf8')); console.log(d.branches)")
+            FUNCTIONS_PCT=$(echo "$TOTAL_LINES" | node -e "const d=JSON.parse(require('fs').readFileSync(0,'utf8')); console.log(d.functions)")
+            STATEMENTS_PCT=$(echo "$TOTAL_LINES" | node -e "const d=JSON.parse(require('fs').readFileSync(0,'utf8')); console.log(d.statements)")
+
+            COMMENT+="### 📊 Coverage\n\n"
+            COMMENT+="| Metric | Coverage |\n"
+            COMMENT+="|--------|----------|\n"
+            COMMENT+="| Lines | ${LINES_PCT}% |\n"
+            COMMENT+="| Branches | ${BRANCHES_PCT}% |\n"
+            COMMENT+="| Functions | ${FUNCTIONS_PCT}% |\n"
+            COMMENT+="| Statements | ${STATEMENTS_PCT}% |\n\n"
+          fi
+
+          # Extract failing tests if any
+          if [ "$TEST_EXIT_CODE" != "0" ] && [ -f test-results.json ]; then
+            FAILURES=$(node -e "
+              const r = require('./test-results.json');
+              const fails = [];
+              for (const suite of (r.testResults || [])) {
+                for (const t of (suite.assertionResults || [])) {
+                  if (t.status === 'failed') {
+                    fails.push('- **' + t.ancestorTitles.join(' > ') + ' > ' + t.title + '**');
+                    if (t.failureMessages) {
+                      fails.push('  \`\`\`');
+                      fails.push('  ' + t.failureMessages[0].split('\\n').slice(0,5).join('\\n  '));
+                      fails.push('  \`\`\`');
+                    }
+                  }
+                }
+              }
+              console.log(fails.join('\\n'));
+            " 2>/dev/null || true)
+
+            if [ -n "$FAILURES" ]; then
+              COMMENT+="### ❌ Failing Tests\n\n"
+              COMMENT+="$FAILURES\n\n"
+            fi
+          fi
+
+          # Add test output summary (last 30 lines)
+          COMMENT+="<details><summary>Test output</summary>\n\n\`\`\`\n"
+          COMMENT+="$(tail -30 test-output.txt)\n"
+          COMMENT+="\`\`\`\n</details>\n"
+
+          # Determine Gitea API URL from the repo URL
+          REPO_URL="${{ github.server_url }}"
+          API_URL="${REPO_URL}/api/v1"
+
+          # Pick whichever token is available
+          TOKEN="${GITEA_TOKEN:-$GITHUB_TOKEN}"
+
+          # Post comment to PR
+          if [ -n "$TOKEN" ] && [ -n "$PR_NUMBER" ]; then
+            # Delete previous bot comments to avoid spam
+            EXISTING=$(curl -sf \
+              -H "Authorization: token $TOKEN" \
+              "${API_URL}/repos/${{ github.repository }}/issues/${PR_NUMBER}/comments" \
+              | node -e "
+                const comments = JSON.parse(require('fs').readFileSync(0, 'utf8'));
+                const bot = comments.filter(c => c.body.includes('## 🧪 Test Results'));
+                bot.forEach(c => console.log(c.id));
+              " 2>/dev/null || true)
+
+            for CID in $EXISTING; do
+              curl -sf -X DELETE \
+                -H "Authorization: token $TOKEN" \
+                "${API_URL}/repos/${{ github.repository }}/comments/${CID}" || true
+            done
+
+            # Post new comment
+            printf '%b' "$COMMENT" | node -e "
+              const body = require('fs').readFileSync(0, 'utf8');
+              const payload = JSON.stringify({ body });
+              process.stdout.write(payload);
+            " | curl -sf -X POST \
+              -H "Authorization: token $TOKEN" \
+              -H "Content-Type: application/json" \
+              -d @- \
+              "${API_URL}/repos/${{ github.repository }}/issues/${PR_NUMBER}/comments" > /dev/null
+          fi
+
+      - name: Fail if tests failed
+        if: steps.tests.outputs.exit_code != '0'
+        run: exit 1

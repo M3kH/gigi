@@ -25,6 +25,11 @@ export default defineConfig({
           environment: 'node',
           // Process isolation — some tests mutate process.env
           pool: 'forks',
+          coverage: {
+            provider: 'v8',
+            include: ['lib/**/*.ts', 'web/app/**/*.ts', 'web/app/**/*.svelte'],
+            exclude: ['lib/**/*.d.ts', '**/node_modules/**'],
+          },
         },
       },
       {
