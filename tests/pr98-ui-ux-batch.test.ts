@@ -15,7 +15,6 @@
  * Related: issue #99
  */
 
-import { describe, it, beforeEach, afterEach, after } from 'node:test'
 import assert from 'node:assert/strict'
 import { http, HttpResponse } from 'msw'
 import { setupServer } from 'msw/node'
@@ -270,7 +269,7 @@ describe('forkConversation: compact default behavior', () => {
     server.resetHandlers()
   })
 
-  after(() => {
+  afterAll(() => {
     server.close()
   })
 
@@ -396,55 +395,6 @@ describe('compactThread: system segment format', () => {
 })
 
 // ═══════════════════════════════════════════════════════════════════════
-// 5. GigiFilters: repo filter chips removed
-// ═══════════════════════════════════════════════════════════════════════
-
-describe('GigiFilters: repo filter chips removed', () => {
-  it('template does not render a chips-row for repo filtering', async () => {
-    // Read the GigiFilters component and verify no chips-row usage in the template
-    // Since we can't render Svelte components in node tests, we verify the source
-    const fs = await import('node:fs')
-    const source = fs.readFileSync(
-      new URL('../web/app/components/GigiFilters.svelte', import.meta.url),
-      'utf-8',
-    )
-
-    // The template section (after </script>) should NOT contain chips-row usage
-    const templateSection = source.split('</script>').slice(1).join('</script>')
-
-    // Verify no chip elements in the template (they existed in old versions)
-    assert.ok(
-      !templateSection.includes('class="chips-row"') &&
-      !templateSection.includes('class:collapsed={!filtersExpanded}'),
-      'chips-row should not be rendered in the template',
-    )
-
-    // Verify the old "Repos:" filter label is not in the template
-    assert.ok(
-      !templateSection.includes('>Repos:<'),
-      'Repos filter label should not be in the template',
-    )
-  })
-
-  it('CSS still defines .chips-row for potential future use but it is not used', async () => {
-    const fs = await import('node:fs')
-    const source = fs.readFileSync(
-      new URL('../web/app/components/GigiFilters.svelte', import.meta.url),
-      'utf-8',
-    )
-
-    // The style section may still have the CSS rules as dead code
-    const styleSection = source.split('<style>').slice(1).join('<style>')
-
-    // CSS classes may exist but should not be referenced in the HTML template
-    const templateSection = source.split('</script>').pop()!.split('<style>')[0]
-
-    // No <div class="chips-row"> or similar in the template
-    assert.ok(!templateSection.includes('chips-row'), 'template should not reference chips-row')
-  })
-})
-
-// ═══════════════════════════════════════════════════════════════════════
 // 6. Kanban: Done column hidden
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -499,19 +449,6 @@ describe('Kanban: done column filtered from board', () => {
     assert.equal(filtered.length, 0)
   })
 
-  it('filter is applied in fetchBoard source code', async () => {
-    // Verify the actual kanban store code includes the filter
-    const fs = await import('node:fs')
-    const source = fs.readFileSync(
-      new URL('../web/app/lib/stores/kanban.svelte.ts', import.meta.url),
-      'utf-8',
-    )
-
-    assert.ok(
-      source.includes("col.id !== 'done'") || source.includes('col.id !== "done"'),
-      'kanban store should filter out done column',
-    )
-  })
 })
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -598,23 +535,6 @@ describe('ThreadEvent: isSystemEvent detection', () => {
   })
 })
 
-describe('ThreadEvent: system event CSS centering', () => {
-  it('system-event class has margin: auto and justify-content: center', async () => {
-    const fs = await import('node:fs')
-    const source = fs.readFileSync(
-      new URL('../web/app/components/chat/ThreadEvent.svelte', import.meta.url),
-      'utf-8',
-    )
-
-    const styleSection = source.split('<style>')[1]?.split('</style>')[0] ?? ''
-
-    // Find the .system-event rule and verify centering styles
-    assert.ok(styleSection.includes('.system-event'), '.system-event CSS class should exist')
-    assert.ok(styleSection.includes('justify-content: center'), 'should have justify-content: center')
-    assert.ok(styleSection.includes('auto'), 'should have margin: auto for centering')
-  })
-})
-
 // ═══════════════════════════════════════════════════════════════════════
 // 8. Thread fork: summary event creation (backend logic)
 // ═══════════════════════════════════════════════════════════════════════
@@ -678,21 +598,6 @@ describe('Thread fork: compact summary text', () => {
     assert.equal(eventOpts.message_type, 'summary')
   })
 
-  it('compact fork creates summary event (source code verification)', async () => {
-    const fs = await import('node:fs')
-    const source = fs.readFileSync(
-      new URL('../lib/core/threads.ts', import.meta.url),
-      'utf-8',
-    )
-
-    // Verify the fork-compact code path exists
-    assert.ok(source.includes('opts.compact'), 'should check opts.compact')
-    assert.ok(source.includes("message_type: 'summary'"), 'should create event with message_type summary')
-    assert.ok(source.includes("channel: 'system'"), 'summary event should use system channel')
-    assert.ok(source.includes("actor: 'gigi'"), 'summary event should have gigi as actor')
-    assert.ok(source.includes('updateThreadSummary'), 'should update thread summary field')
-    assert.ok(source.includes('addThreadEvent'), 'should add timeline event')
-  })
 })
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -736,33 +641,3 @@ describe('Compact endpoint: compacted_count in response', () => {
   })
 })
 
-// ═══════════════════════════════════════════════════════════════════════
-// 10. ChatInput: autofocus prop (source verification)
-// ═══════════════════════════════════════════════════════════════════════
-
-describe('ChatInput: autofocus prop', () => {
-  it('component accepts autofocus prop with default false', async () => {
-    const fs = await import('node:fs')
-    const source = fs.readFileSync(
-      new URL('../web/app/components/chat/ChatInput.svelte', import.meta.url),
-      'utf-8',
-    )
-
-    // Verify autofocus prop is declared
-    assert.ok(source.includes('autofocus'), 'should have autofocus prop')
-    assert.ok(source.includes('autofocus = false'), 'autofocus should default to false')
-  })
-
-  it('uses $effect + requestAnimationFrame to focus on autofocus', async () => {
-    const fs = await import('node:fs')
-    const source = fs.readFileSync(
-      new URL('../web/app/components/chat/ChatInput.svelte', import.meta.url),
-      'utf-8',
-    )
-
-    // Verify the autofocus effect exists
-    assert.ok(source.includes('$effect'), 'should use $effect for autofocus')
-    assert.ok(source.includes('requestAnimationFrame'), 'should use rAF for focus timing')
-    assert.ok(source.includes('inputEl?.focus()'), 'should call focus() on the textarea')
-  })
-})

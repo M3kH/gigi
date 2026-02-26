@@ -5,7 +5,6 @@
  * against a real Postgres database with per-test isolation via truncation.
  */
 
-import { describe, it, before, after, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   connectTestDB,
@@ -22,11 +21,11 @@ import * as store from '../../lib/core/store'
 
 // ─── Suite Setup ────────────────────────────────────────────────────
 
-before(async () => {
+beforeAll(async () => {
   await connectTestDB()
 })
 
-after(async () => {
+afterAll(async () => {
   await disconnectTestDB()
 })
 

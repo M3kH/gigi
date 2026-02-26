@@ -6,7 +6,6 @@
  * the pure logic patterns rather than the reactive store directly.
  */
 
-import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 
 // ─── Panel state cycling logic ──────────────────────────────────────

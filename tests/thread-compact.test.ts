@@ -10,7 +10,6 @@
  * Pure function tests — no database or API calls required.
  */
 
-import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 
 // ─── Re-implement pure functions for testing (same logic as thread-compact.ts) ─

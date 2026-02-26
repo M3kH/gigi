@@ -6,7 +6,6 @@
  * and the combination logic that decides whether follow-up is needed.
  */
 
-import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import { detectUnfinishedWork } from '../lib/core/completion-detector'
 

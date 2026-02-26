@@ -11,7 +11,6 @@
  * 4. 100dvh instead of 100vh for full-screen chat mode
  */
 
-import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'

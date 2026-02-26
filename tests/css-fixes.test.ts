@@ -9,7 +9,6 @@
  * 3. Over-budget class binding — template conditional logic
  */
 
-import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 
 // ─── formatCost: the display logic CostWidget depends on ────────────

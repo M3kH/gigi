@@ -2,7 +2,6 @@
  * Tests for lib/core/registry.ts — Agent Tool Registry
  */
 
-import { describe, it, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
 import { z } from 'zod'
 import {

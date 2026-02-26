@@ -8,7 +8,6 @@
  * 3. Board response shape — linked_pr_details, linked_chat_details, repos
  */
 
-import { describe, it, beforeEach, afterEach, after } from 'node:test'
 import assert from 'node:assert/strict'
 import { http, HttpResponse } from 'msw'
 import { setupServer } from 'msw/node'
@@ -278,7 +277,7 @@ describe('POST /board/create endpoint', () => {
     server.resetHandlers()
   })
 
-  after(() => {
+  afterAll(() => {
     server.close()
   })
 

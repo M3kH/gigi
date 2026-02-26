@@ -5,7 +5,6 @@
  * Requires GITEA_URL and GITEA_TOKEN env vars.
  */
 
-import { describe, it, before, after } from 'node:test'
 import assert from 'node:assert/strict'
 import { createGiteaClient, GiteaApiError } from '../lib/api-gitea/index'
 import type { GiteaClient } from '../lib/api-gitea/index'
@@ -17,7 +16,7 @@ const GITEA_ORG = process.env.GITEA_ORG || 'idea'
 describe('lib/api-gitea', () => {
   let gitea: GiteaClient
 
-  before(() => {
+  beforeAll(() => {
     if (!GITEA_TOKEN) {
       console.log('⚠ GITEA_TOKEN not set — skipping integration tests')
       return
@@ -113,7 +112,7 @@ describe('lib/api-gitea', () => {
       assert.equal(comment.body, 'Test comment from api-gitea')
     })
 
-    after(async () => {
+    afterAll(async () => {
       // Clean up test issue by closing it
       if (testIssueNumber && GITEA_TOKEN) {
         await gitea.issues.edit(GITEA_ORG, 'gigi', testIssueNumber, { state: 'closed' })

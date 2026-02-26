@@ -7,7 +7,7 @@
  * - Onboarding doesn't auto-dismiss before user can configure optional steps
  */
 
-import { describe, it, beforeEach, mock } from 'node:test'
+import { vi } from 'vitest'
 import assert from 'node:assert/strict'
 
 // ── Mock store before importing setup domain ────────────────────────
@@ -16,13 +16,13 @@ import assert from 'node:assert/strict'
 let mockConfig: Record<string, string> = {}
 
 // We need to mock the store module before importing setup.ts
-const mockSetConfig = mock.fn(async (key: string, value: string) => {
+const mockSetConfig = vi.fn(async (key: string, value: string) => {
   mockConfig[key] = value
 })
 
-const mockGetAllConfig = mock.fn(async () => ({ ...mockConfig }))
+const mockGetAllConfig = vi.fn(async () => ({ ...mockConfig }))
 
-const mockResetClient = mock.fn(() => {})
+const mockResetClient = vi.fn(() => {})
 
 // Since we can't easily mock ES module imports in Node test runner,
 // we'll test the logic directly by reimplementing the setup functions
@@ -84,8 +84,8 @@ const setupStep = async (step: string, data: Record<string, string>): Promise<Se
 describe('Setup — Telegram token save', () => {
   beforeEach(() => {
     mockConfig = {}
-    mockSetConfig.mock.resetCalls()
-    mockGetAllConfig.mock.resetCalls()
+    mockSetConfig.mockClear()
+    mockGetAllConfig.mockClear()
   })
 
   describe('getSetupStatus', () => {

@@ -5,7 +5,6 @@
  * and the agent stub's event emission behavior.
  */
 
-import { describe, it, before, after, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   connectTestDB,
@@ -23,11 +22,11 @@ import { emit, subscribe } from '../../lib/core/events'
 
 // ─── Suite Setup ────────────────────────────────────────────────────
 
-before(async () => {
+beforeAll(async () => {
   await connectTestDB()
 })
 
-after(async () => {
+afterAll(async () => {
   await disconnectTestDB()
 })
 

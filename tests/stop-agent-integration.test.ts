@@ -13,7 +13,6 @@
  * simulate a long-running agent that respects AbortSignal.
  */
 
-import { describe, it, before, after } from 'node:test'
 import assert from 'node:assert/strict'
 import { createServer, type Server } from 'node:http'
 import { WebSocket, WebSocketServer, type WebSocket as WSType } from 'ws'
@@ -207,11 +206,11 @@ const collectMessages = (ws: WebSocket): Record<string, unknown>[] => {
 describe('Stop Agent — Full User Flow', () => {
   let server: TestServer
 
-  before(async () => {
+  beforeAll(async () => {
     server = await startTestServer()
   })
 
-  after(async () => {
+  afterAll(async () => {
     await server?.close()
   })
 

@@ -9,7 +9,6 @@
  * 4. Input validation across all tools
  */
 
-import { describe, it, beforeEach, afterEach, after } from 'node:test'
 import assert from 'node:assert/strict'
 import { http, HttpResponse } from 'msw'
 import { setupServer } from 'msw/node'
@@ -136,7 +135,7 @@ process.env.GITEA_URL = GITEA_URL
 process.env.GITEA_TOKEN = 'test-token'
 process.env.PORT = '19876' // Use port nothing listens on — ask_user fails fast with ECONNREFUSED
 
-after(() => {
+afterAll(() => {
   server.close()
 })
 

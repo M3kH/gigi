@@ -10,7 +10,6 @@
  * - isSetupComplete logic (Claude configured AND dismissed)
  */
 
-import { describe, it, beforeEach, mock } from 'node:test'
 import assert from 'node:assert/strict'
 
 // ── Mock config store ─────────────────────────────────────────────────

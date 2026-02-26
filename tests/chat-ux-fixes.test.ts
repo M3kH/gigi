@@ -6,7 +6,6 @@
  * - Protocol: ConversationUpdatedEvent schema
  */
 
-import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 
 // ─── #78: Protocol schema includes ConversationUpdatedEvent ───────────

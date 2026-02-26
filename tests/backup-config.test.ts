@@ -2,7 +2,6 @@
  * Tests for backup config loader: env var interpolation, YAML parsing, validation.
  */
 
-import { describe, it, beforeEach, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
 import { interpolateEnvVars, parseSimpleYaml, loadBackupConfig } from '../lib/backup/config'
 import { parseInterval } from '../lib/backup/scheduler'

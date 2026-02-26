@@ -9,7 +9,6 @@
  * - Actions endpoint error resilience
  */
 
-import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 
 // ─── Helper: simulate the PR state derivation logic from gitea-proxy ──

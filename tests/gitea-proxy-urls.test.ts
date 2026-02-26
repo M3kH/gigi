@@ -8,7 +8,6 @@
  * - enrichWithContext() — tested indirectly via router context descriptions
  */
 
-import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 
 // ─── parseGiteaPath ──────────────────────────────────────────────────

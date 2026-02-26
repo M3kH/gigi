@@ -6,7 +6,6 @@
  * complex messages get routed to Opus.
  */
 
-import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import { classifyMessage, MINIMAL_SYSTEM_PROMPT } from '../lib/core/llm-router'
 

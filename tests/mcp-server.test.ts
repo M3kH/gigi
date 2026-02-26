@@ -9,7 +9,7 @@
  * 4. Each tool is callable (accepts valid input, rejects invalid input)
  */
 
-import { describe, it, after } from 'node:test'
+
 import assert from 'node:assert/strict'
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { resolve } from 'node:path'
@@ -143,10 +143,10 @@ const EXPECTED_TOOLS = ['gitea', 'telegram_send', 'browser', 'ask_user']
 // The server imports playwright (via browser-manager) at module level, which
 // hangs when browser binaries aren't installed (e.g. ARM64 dev / CI without
 // playwright install step). Skip until playwright is lazy-loaded.
-describe('MCP Server', { skip: 'requires playwright browsers installed' }, () => {
+describe.skip('MCP Server', () => {
   let client: MCPTestClient
 
-  after(() => {
+  afterAll(() => {
     client?.kill()
   })
 
@@ -343,10 +343,10 @@ describe('loadMcpServers — env resolution', () => {
   })
 })
 
-describe('loadMcpServers → MCP handshake', { skip: 'requires playwright browsers installed' }, () => {
+describe.skip('loadMcpServers → MCP handshake', () => {
   let configClient: MCPTestClient | null = null
 
-  after(() => {
+  afterAll(() => {
     configClient?.kill()
   })
 

@@ -12,7 +12,6 @@
  * behavior by calling the HTTP bridge directly (what the MCP tool does).
  */
 
-import { describe, it, before, after } from 'node:test'
 import assert from 'node:assert/strict'
 import { createServer, type Server } from 'node:http'
 import { WebSocket } from 'ws'
@@ -142,11 +141,11 @@ const waitForMessage = (ws: WebSocket, predicate: (msg: Record<string, unknown>)
 describe('ask_user Integration — Full Round-Trip', () => {
   let server: TestServer
 
-  before(async () => {
+  beforeAll(async () => {
     server = await startTestServer()
   })
 
-  after(async () => {
+  afterAll(async () => {
     await server?.close()
   })
 

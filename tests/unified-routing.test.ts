@@ -7,7 +7,6 @@
  * Pure function tests — no database or network calls.
  */
 
-import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 
 // ── Ref Extraction Logic (mirrors webhookRouter.ts extractRefs) ─────

@@ -11,11 +11,12 @@
     "dev:server": "node --import tsx --watch src/index.ts",
     "build": "vite build --config vite.config.ts",
     "typecheck": "tsc --noEmit",
-    "test": "node --import tsx --test tests/*.test.ts",
-    "test:watch": "node --import tsx --test --watch tests/*.test.ts",
-    "test:integration": "TEST_DATABASE_URL=${TEST_DATABASE_URL:-postgresql://gigi_test:gigi_test@postgres:5432/gigi_test} node --import tsx --test --test-concurrency 1 tests/integration/*.integration.test.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:unit": "vitest run --project unit",
+    "test:integration": "TEST_DATABASE_URL=${TEST_DATABASE_URL:-postgresql://gigi_test:gigi_test@postgres:5432/gigi_test} vitest run --project integration",
     "pretest:integration": "bash scripts/backup-db.sh",
-    "test:ci": "node scripts/test-runner.js"
+    "test:ci": "vitest run --project unit && npm run test:integration"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.50",
@@ -42,11 +43,13 @@
     "@types/node": "^20.0.0",
     "@types/pg": "^8.11.0",
     "@types/ws": "^8.5.0",
+    "happy-dom": "^20.7.0",
     "msw": "^2.12.10",
     "svelte-check": "^4.4.0",
     "tsx": "^4.21.0",
     "typescript": "^5.7.0",
-    "vite": "^6.1.0"
+    "vite": "^6.1.0",
+    "vitest": "^4.0.18"
   },
   "engines": {
     "node": ">=20"

@@ -4,7 +4,6 @@
  * resolution logic works for both thread IDs and conversation IDs.
  */
 
-import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 
 describe('resolveThreadId export', () => {

@@ -4,7 +4,6 @@
  * Tests the pure segment builder without Svelte or DOM dependencies.
  */
 
-import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import { applyEvent, answerSegment, formatGiteaEvent, type SegmentEvent } from '../web/app/lib/utils/segment-builder'
 import type { StreamSegment } from '../web/app/lib/types/chat'
