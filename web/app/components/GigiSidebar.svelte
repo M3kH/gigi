@@ -202,6 +202,8 @@
 
   .section-footer {
     padding: var(--gigi-space-sm);
+    /* Push button above Safari's bottom navigation bar */
+    padding-bottom: max(var(--gigi-space-sm), env(safe-area-inset-bottom, 0px));
     border-top: var(--gigi-border-width) solid var(--gigi-border-default);
   }
 

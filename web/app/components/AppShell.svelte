@@ -307,7 +307,7 @@
         class:chat-compact={chatState === 'compact'}
         style:left={chatState === 'full' ? '0' : undefined}
         style:width={chatState === 'compact' ? `${chatWidth}px` : chatState === 'full' ? '100%' : undefined}
-        style:height={chatState === 'compact' ? `${chatHeight}px` : chatState === 'full' ? '100vh' : undefined}
+        style:height={chatState === 'compact' ? `${chatHeight}px` : chatState === 'full' ? '100dvh' : undefined}
       >
         {#if chatState === 'compact'}
           <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -543,7 +543,7 @@
 
   .chat-overlay-wrapper {
     position: fixed;
-    bottom: 0;
+    bottom: env(safe-area-inset-bottom, 0px);
     right: 16px;
     z-index: var(--gigi-z-overlay, 100);
     display: flex;
@@ -558,8 +558,10 @@
     top: 0;
     left: 0 !important;
     right: 0;
+    bottom: 0;
     border-radius: 0;
     height: 100vh;
+    height: 100dvh;
   }
 
   .chat-overlay-wrapper.chat-compact {
@@ -570,7 +572,7 @@
 
   .chat-collapsed-tab {
     position: fixed;
-    bottom: 0;
+    bottom: env(safe-area-inset-bottom, 0px);
     right: 16px;
     z-index: var(--gigi-z-overlay, 100);
     display: flex;

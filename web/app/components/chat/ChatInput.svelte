@@ -157,6 +157,8 @@
     align-items: flex-end;
     gap: var(--gigi-space-sm);
     padding: var(--gigi-space-sm) var(--gigi-space-md);
+    /* Push input above Safari's bottom navigation bar */
+    padding-bottom: max(var(--gigi-space-sm), env(safe-area-inset-bottom, 0px));
     border-top: var(--gigi-border-width) solid var(--gigi-border-muted);
   }
 
