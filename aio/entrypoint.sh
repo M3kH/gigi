@@ -99,6 +99,10 @@ HTTP_PORT = 3300
 ROOT_URL = http://localhost:3300/
 START_SSH_SERVER = false
 SSH_DISABLE_AUTHORIZED_KEYS_DB = true
+LFS_START_SERVER = true
+
+[lfs]
+PATH = /data/gitea/lfs
 
 ${DB_SECTION}
 
