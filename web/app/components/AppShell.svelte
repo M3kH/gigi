@@ -39,8 +39,11 @@
   let kanbanHeight = $derived(getKanbanHeight())
   let chatHeight = $derived(getChatHeight())
   let chatWidth = $derived(getChatWidth())
-  let mobileOverlay = $state(false)
   let isMobile = $state(false)
+
+  // Mobile sidebar overlay: derived from sidebar state + mobile detection.
+  // On mobile, sidebar renders as a slide-in overlay instead of inline panel.
+  const showMobileOverlay = $derived(isMobile && sidebarState === 'full')
 
   // Compute chat overlay left offset based on sidebar
   const chatLeftOffset = $derived(
@@ -62,9 +65,6 @@
     // Check mobile on mount + resize
     const checkMobile = () => {
       isMobile = window.innerWidth < 768
-      if (isMobile && sidebarState === 'full') {
-        mobileOverlay = true
-      }
     }
 
     checkMobile()
@@ -87,9 +87,9 @@
         e.preventDefault()
         togglePanel('chatOverlay')
       }
-      // Escape: close mobile overlay
-      if (e.key === 'Escape' && mobileOverlay) {
-        mobileOverlay = false
+      // Escape: close mobile sidebar overlay
+      if (e.key === 'Escape' && showMobileOverlay) {
+        setPanelState('sidebar', 'hidden')
       }
     }
 
@@ -192,7 +192,7 @@
   }
 
   function closeMobileOverlay() {
-    mobileOverlay = false
+    setPanelState('sidebar', 'hidden')
   }
 
 </script>
@@ -321,7 +321,7 @@
   {/if}
 
   <!-- Mobile sidebar overlay -->
-  {#if isMobile && mobileOverlay}
+  {#if showMobileOverlay}
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div class="mobile-overlay" onclick={closeMobileOverlay}>
       <!-- svelte-ignore a11y_no_static_element_interactions -->

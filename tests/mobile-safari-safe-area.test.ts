@@ -81,6 +81,80 @@ describe('Mobile Safari safe-area-inset fixes', () => {
   })
 })
 
+// ─── Mobile sidebar overlay state logic tests ──────────────────────
+
+describe('Mobile sidebar overlay state', () => {
+  describe('AppShell.svelte uses derived overlay state', () => {
+    const src = readFile('components/AppShell.svelte')
+
+    it('does NOT use mutable mobileOverlay state', () => {
+      // The old bug: mobileOverlay was a separate $state that got out of sync
+      // with sidebarState. The fix derives visibility from sidebarState.
+      assert.ok(
+        !src.includes('let mobileOverlay = $state'),
+        'Should not use a separate mobileOverlay $state (must be derived from sidebarState)'
+      )
+    })
+
+    it('derives mobile overlay visibility from sidebar state', () => {
+      assert.ok(
+        src.includes('$derived') && src.includes('sidebarState'),
+        'Mobile overlay should be derived from sidebarState'
+      )
+    })
+
+    it('closeMobileOverlay sets sidebar to hidden (not just a boolean)', () => {
+      // Closing the overlay must actually change sidebarState so it stays in sync
+      assert.ok(
+        src.includes("setPanelState('sidebar', 'hidden')"),
+        'closeMobileOverlay must set sidebar state to hidden'
+      )
+    })
+  })
+
+  /**
+   * Simulates the derived overlay logic:
+   * showMobileOverlay = isMobile && sidebarState === 'full'
+   */
+  type PanelState = 'full' | 'compact' | 'hidden'
+
+  function shouldShowOverlay(isMobile: boolean, sidebarState: PanelState): boolean {
+    return isMobile && sidebarState === 'full'
+  }
+
+  it('shows overlay on mobile when sidebar is full', () => {
+    assert.equal(shouldShowOverlay(true, 'full'), true)
+  })
+
+  it('hides overlay on mobile when sidebar is hidden', () => {
+    assert.equal(shouldShowOverlay(true, 'hidden'), false)
+  })
+
+  it('hides overlay on desktop even when sidebar is full', () => {
+    assert.equal(shouldShowOverlay(false, 'full'), false)
+  })
+
+  it('hides overlay on mobile when sidebar is compact', () => {
+    assert.equal(shouldShowOverlay(true, 'compact'), false)
+  })
+
+  it('collapse button closes overlay by changing sidebarState', () => {
+    // Simulates: user clicks collapse → sidebarState goes full → hidden
+    const before = shouldShowOverlay(true, 'full')
+    const after = shouldShowOverlay(true, 'hidden')
+    assert.equal(before, true, 'overlay should be visible before collapse')
+    assert.equal(after, false, 'overlay should be hidden after collapse')
+  })
+
+  it('hamburger button reopens overlay by changing sidebarState', () => {
+    // Simulates: user clicks hamburger → sidebarState goes hidden → full
+    const before = shouldShowOverlay(true, 'hidden')
+    const after = shouldShowOverlay(true, 'full')
+    assert.equal(before, false, 'overlay should be hidden before hamburger click')
+    assert.equal(after, true, 'overlay should be visible after hamburger click')
+  })
+})
+
 // ─── CSS value generation logic tests ───────────────────────────────
 
 describe('Safe-area CSS value logic', () => {
