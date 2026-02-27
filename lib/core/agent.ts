@@ -533,7 +533,7 @@ export const runAgent = async (
     allowDangerouslySkipPermissions: true,
     persistSession: true,
     mcpServers: effectiveMcpServers,
-    extraArgs: { worktree: null } as Record<string, string | null>,
+    extraArgs: {} as Record<string, string>,
     stderr: (data: string) => console.error('[claude-code]', data.trim()),
     hooks: {
       PreToolUse: [{

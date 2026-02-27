@@ -165,24 +165,25 @@ describe('System prompt testing requirements', () => {
 // ─── SDK query() options — regression for path.resolve crash ────────
 
 describe('Agent options compatibility', () => {
-  // Regression: SDK 0.2.50 crashed with "The paths[0] argument must be of type string"
-  // when extraArgs.worktree was null. The SDK called path.resolve(null) internally.
-  // Fixed by upgrading to 0.2.62+. This test ensures the options we build are safe.
+  // Regression: SDK 0.2.50 crashed with "paths[0] must be of type string" when
+  // extraArgs had worktree: null. SDK 0.2.62 fixed the crash but then passed
+  // --worktree to the CLI, which fails in non-git dirs. Fix: don't pass worktree at all.
 
-  it('extraArgs.worktree=null must not crash path.resolve', () => {
-    const { resolve } = require('node:path')
-    const extraArgs: Record<string, string | null> = { worktree: null }
-
-    // The SDK iterates extraArgs and may pass values to path.resolve.
-    // Ensure null values are filtered before any path resolution.
-    const safeArgs = Object.fromEntries(
-      Object.entries(extraArgs).filter(([, v]) => v !== null),
+  it('extraArgs must not contain worktree key', async () => {
+    // Import the agent module to check what options it builds.
+    // The extraArgs should be empty — no worktree flag.
+    const agentSrc = await import('node:fs').then(fs =>
+      fs.readFileSync(require.resolve('../lib/core/agent.ts'), 'utf-8'),
     )
-
-    // This should not throw — no null values to resolve
-    for (const [, v] of Object.entries(safeArgs)) {
-      assert.doesNotThrow(() => resolve(v), 'Filtered extraArgs should be safe for path.resolve')
-    }
+    // Must NOT have worktree in extraArgs
+    assert.ok(
+      !agentSrc.includes("worktree: null"),
+      'extraArgs must not contain worktree: null (causes --worktree flag in non-git dirs)',
+    )
+    assert.ok(
+      !agentSrc.includes("worktree:"),
+      'extraArgs must not reference worktree at all',
+    )
   })
 
   it('SDK query() should be importable and callable type', async () => {
