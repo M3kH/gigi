@@ -15,7 +15,7 @@
  *   /start, /new, /resume, /clear, /status
  */
 
-import { Bot } from 'grammy'
+import { Bot, type Context } from 'grammy'
 import { getConfig, setConfig } from '../core/store'
 import * as store from '../core/store'
 import {
@@ -58,7 +58,7 @@ const formatThread = (t: threads.ThreadWithRefs): string => {
 }
 
 /** Safe Telegram reply — falls back to plain text on Markdown parse failure */
-const safeReply = async (ctx: { reply: (text: string, opts?: unknown) => Promise<unknown> }, text: string): Promise<void> => {
+const safeReply = async (ctx: Context, text: string): Promise<void> => {
   try {
     await ctx.reply(text, { parse_mode: 'Markdown' })
   } catch {
@@ -67,7 +67,7 @@ const safeReply = async (ctx: { reply: (text: string, opts?: unknown) => Promise
 }
 
 /** Send long messages with chunking (Telegram 4096 char limit) */
-const sendLong = async (ctx: { reply: (text: string, opts?: unknown) => Promise<unknown> }, text: string): Promise<void> => {
+const sendLong = async (ctx: Context, text: string): Promise<void> => {
   if (text.length <= 4096) {
     await safeReply(ctx, text)
   } else {
