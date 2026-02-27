@@ -365,6 +365,171 @@ describe('widget navigation — in-app routing instead of external links', () =>
   })
 })
 
+// ─── Worker Status Widget tests ──────────────────────────────────────
+
+/** Runner status logic (matches WorkerStatusWidget) */
+interface Runner {
+  id: number
+  name: string
+  status: string
+  busy: boolean
+  labels: { name: string }[]
+  version?: string
+}
+
+function getRunnerStatusClass(runner: Runner): string {
+  if (runner.status === 'offline') return 'offline'
+  if (runner.busy) return 'busy'
+  return 'idle'
+}
+
+function getRunnerStatusLabel(runner: Runner): string {
+  if (runner.status === 'offline') return 'offline'
+  if (runner.busy) return 'busy'
+  return 'idle'
+}
+
+describe('Worker Status Widget — runner status classification', () => {
+  it('classifies online idle runner as "idle"', () => {
+    const runner: Runner = { id: 1, name: 'runner-1', status: 'online', busy: false, labels: [] }
+    assert.equal(getRunnerStatusClass(runner), 'idle')
+    assert.equal(getRunnerStatusLabel(runner), 'idle')
+  })
+
+  it('classifies busy runner as "busy"', () => {
+    const runner: Runner = { id: 2, name: 'runner-2', status: 'active', busy: true, labels: [] }
+    assert.equal(getRunnerStatusClass(runner), 'busy')
+    assert.equal(getRunnerStatusLabel(runner), 'busy')
+  })
+
+  it('classifies offline runner as "offline"', () => {
+    const runner: Runner = { id: 3, name: 'runner-3', status: 'offline', busy: false, labels: [] }
+    assert.equal(getRunnerStatusClass(runner), 'offline')
+    assert.equal(getRunnerStatusLabel(runner), 'offline')
+  })
+
+  it('offline takes precedence even if busy', () => {
+    const runner: Runner = { id: 4, name: 'runner-4', status: 'offline', busy: true, labels: [] }
+    assert.equal(getRunnerStatusClass(runner), 'offline')
+  })
+
+  it('counts online vs offline runners', () => {
+    const runners: Runner[] = [
+      { id: 1, name: 'r1', status: 'online', busy: false, labels: [] },
+      { id: 2, name: 'r2', status: 'online', busy: true, labels: [] },
+      { id: 3, name: 'r3', status: 'offline', busy: false, labels: [] },
+      { id: 4, name: 'r4', status: 'idle', busy: false, labels: [] },
+    ]
+    const onlineCount = runners.filter(r => r.status === 'online' || r.status === 'idle' || r.status === 'active').length
+    const busyCount = runners.filter(r => r.busy).length
+    assert.equal(onlineCount, 3)
+    assert.equal(busyCount, 1)
+    assert.equal(runners.length - onlineCount, 1) // offline
+  })
+})
+
+// ─── Workflow Trigger Widget tests ───────────────────────────────────
+
+interface DispatchableWorkflow {
+  repo: string
+  file: string
+  path: string
+  name: string
+  default_branch: string
+}
+
+describe('Workflow Trigger Widget — workflow detection', () => {
+  it('detects workflow_dispatch in YAML content', () => {
+    const content = `
+name: Deploy
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+`
+    assert.ok(content.includes('workflow_dispatch'))
+  })
+
+  it('does not match workflows without workflow_dispatch', () => {
+    const content = `
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+`
+    assert.ok(!content.includes('workflow_dispatch'))
+  })
+
+  it('extracts workflow name from YAML', () => {
+    const content = `name: My Deploy Workflow\non:\n  workflow_dispatch:\n`
+    const nameMatch = content.match(/^name:\s*['"]?(.+?)['"]?\s*$/m)
+    assert.ok(nameMatch)
+    assert.equal(nameMatch![1], 'My Deploy Workflow')
+  })
+
+  it('extracts quoted workflow name', () => {
+    const content = `name: "Deploy to Production"\non:\n  workflow_dispatch:\n`
+    const nameMatch = content.match(/^name:\s*['"]?(.+?)['"]?\s*$/m)
+    assert.ok(nameMatch)
+    assert.equal(nameMatch![1], 'Deploy to Production')
+  })
+
+  it('falls back to filename when name is missing', () => {
+    const content = `on:\n  workflow_dispatch:\njobs:\n  test:\n`
+    const fileName = 'deploy.yml'
+    const nameMatch = content.match(/^name:\s*['"]?(.+?)['"]?\s*$/m)
+    const workflowName = nameMatch?.[1] ?? fileName.replace(/\.(yml|yaml)$/, '')
+    assert.equal(workflowName, 'deploy')
+  })
+})
+
+describe('Workflow Trigger Widget — workflow key uniqueness', () => {
+  it('generates unique keys from repo + file', () => {
+    const workflows: DispatchableWorkflow[] = [
+      { repo: 'gigi', file: 'deploy.yml', path: '.gitea/workflows/deploy.yml', name: 'Deploy', default_branch: 'main' },
+      { repo: 'gigi', file: 'test.yml', path: '.gitea/workflows/test.yml', name: 'Test', default_branch: 'main' },
+      { repo: 'infra', file: 'deploy.yml', path: '.gitea/workflows/deploy.yml', name: 'Deploy', default_branch: 'main' },
+    ]
+    const keys = workflows.map(wf => `${wf.repo}/${wf.file}`)
+    const uniqueKeys = new Set(keys)
+    assert.equal(uniqueKeys.size, 3)
+  })
+})
+
+describe('Workflow Trigger Widget — sorting', () => {
+  it('sorts workflows by repo then name', () => {
+    const workflows: DispatchableWorkflow[] = [
+      { repo: 'infra', file: 'deploy.yml', path: '', name: 'Deploy', default_branch: 'main' },
+      { repo: 'gigi', file: 'test.yml', path: '', name: 'Test', default_branch: 'main' },
+      { repo: 'gigi', file: 'deploy.yml', path: '', name: 'Deploy', default_branch: 'main' },
+    ]
+    workflows.sort((a, b) => a.repo.localeCompare(b.repo) || a.name.localeCompare(b.name))
+    assert.equal(workflows[0].repo, 'gigi')
+    assert.equal(workflows[0].name, 'Deploy')
+    assert.equal(workflows[1].repo, 'gigi')
+    assert.equal(workflows[1].name, 'Test')
+    assert.equal(workflows[2].repo, 'infra')
+  })
+})
+
+describe('Workflow Trigger Widget — navigation paths', () => {
+  it('constructs correct action run path', () => {
+    const owner = 'idea'
+    const wf = { repo: 'gigi' }
+    const path = `/${owner}/${wf.repo}/actions`
+    assert.equal(path, '/idea/gigi/actions')
+  })
+})
+
+// ─── Existing CI status tests ────────────────────────────────────────
+
 describe('CI status widget data', () => {
   it('getStatusLabel maps CI statuses correctly', () => {
     // Replicate the widget logic

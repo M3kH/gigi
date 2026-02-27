@@ -52,6 +52,25 @@ interface ActionRun {
   repo?: string
 }
 
+/** Gitea Actions runner (worker) */
+interface ActionRunner {
+  id: number
+  name: string
+  status: string    // 'online' | 'offline' | 'idle' | 'active'
+  busy: boolean
+  labels: Array<{ id?: number; name: string; type?: string }>
+  version?: string
+}
+
+/** Workflow that supports manual dispatch */
+interface DispatchableWorkflow {
+  repo: string
+  file: string
+  path: string
+  name: string
+  default_branch: string
+}
+
 // ─── Status label definitions ────────────────────────────────────────
 
 const STATUS_LABELS = [
@@ -285,6 +304,173 @@ export const createGiteaProxy = (): Hono => {
     } catch (err) {
       console.error('[gitea-proxy] overview/actions error:', (err as Error).message)
       return c.json({ error: (err as Error).message, runs: [] }, 500)
+    }
+  })
+
+  /**
+   * GET /api/gitea/overview/runners
+   *
+   * Action runners (workers) status across the org.
+   */
+  api.get('/overview/runners', async (c) => {
+    try {
+      const gitea = await getClient()
+      const org = await getOrg()
+
+      // Try org-level runners first, fall back to admin endpoint
+      let runners: ActionRunner[] = []
+      try {
+        const data = await gitea.request<{ runners?: ActionRunner[] }>({
+          method: 'GET',
+          path: `/orgs/${org}/actions/runners`,
+        })
+        runners = data.runners ?? (Array.isArray(data) ? data : [])
+      } catch {
+        // Fallback: try repo-level runners from each repo
+        try {
+          const repos = await gitea.orgs.listRepos(org, { limit: 50 })
+          const activeRepos = repos.filter(r => !r.archived)
+
+          const perRepo = await Promise.all(
+            activeRepos.slice(0, 5).map(async (repo) => {
+              try {
+                const data = await gitea.request<{ runners?: ActionRunner[] }>({
+                  method: 'GET',
+                  path: `/repos/${org}/${repo.name}/actions/runners`,
+                })
+                return data.runners ?? (Array.isArray(data) ? data as ActionRunner[] : [])
+              } catch { return [] }
+            })
+          )
+          // Deduplicate by runner ID
+          const seen = new Set<number>()
+          for (const repoRunners of perRepo) {
+            for (const r of repoRunners) {
+              if (!seen.has(r.id)) {
+                seen.add(r.id)
+                runners.push(r)
+              }
+            }
+          }
+        } catch { /* ignore */ }
+      }
+
+      return c.json({ runners })
+    } catch (err) {
+      console.error('[gitea-proxy] overview/runners error:', (err as Error).message)
+      return c.json({ error: (err as Error).message, runners: [] }, 500)
+    }
+  })
+
+  /**
+   * GET /api/gitea/overview/workflows
+   *
+   * List workflows across all repos that support manual dispatch (workflow_dispatch).
+   */
+  api.get('/overview/workflows', async (c) => {
+    try {
+      const gitea = await getClient()
+      const org = await getOrg()
+      const repos = await gitea.orgs.listRepos(org, { limit: 50 })
+      const activeRepos = repos.filter(r => !r.archived)
+
+      const allWorkflows: DispatchableWorkflow[] = []
+
+      await Promise.all(
+        activeRepos.map(async (repo) => {
+          // Check both .gitea/workflows and .github/workflows directories
+          for (const dir of ['.gitea/workflows', '.github/workflows']) {
+            try {
+              const contents = await gitea.request<Array<{ name: string; path: string; type: string }>>({
+                method: 'GET',
+                path: `/repos/${org}/${repo.name}/contents/${dir}`,
+              })
+
+              if (!Array.isArray(contents)) continue
+
+              const yamlFiles = contents.filter(f =>
+                f.type === 'file' && (f.name.endsWith('.yml') || f.name.endsWith('.yaml'))
+              )
+
+              await Promise.all(
+                yamlFiles.map(async (file) => {
+                  try {
+                    const fileData = await gitea.request<{ content?: string; encoding?: string }>({
+                      method: 'GET',
+                      path: `/repos/${org}/${repo.name}/contents/${file.path}`,
+                    })
+
+                    let content = ''
+                    if (fileData.content && fileData.encoding === 'base64') {
+                      content = Buffer.from(fileData.content, 'base64').toString('utf-8')
+                    }
+
+                    // Check if workflow has workflow_dispatch trigger
+                    if (content.includes('workflow_dispatch')) {
+                      // Extract workflow name from the file content
+                      const nameMatch = content.match(/^name:\s*['"]?(.+?)['"]?\s*$/m)
+                      const workflowName = nameMatch?.[1] ?? file.name.replace(/\.(yml|yaml)$/, '')
+
+                      allWorkflows.push({
+                        repo: repo.name,
+                        file: file.name,
+                        path: file.path,
+                        name: workflowName,
+                        default_branch: repo.default_branch ?? 'main',
+                      })
+                    }
+                  } catch { /* skip unreadable files */ }
+                })
+              )
+            } catch { /* skip repos without workflow dirs */ }
+          }
+        })
+      )
+
+      // Sort by repo then name
+      allWorkflows.sort((a, b) => a.repo.localeCompare(b.repo) || a.name.localeCompare(b.name))
+
+      return c.json({ workflows: allWorkflows })
+    } catch (err) {
+      console.error('[gitea-proxy] overview/workflows error:', (err as Error).message)
+      return c.json({ error: (err as Error).message, workflows: [] }, 500)
+    }
+  })
+
+  /**
+   * POST /api/gitea/workflows/dispatch
+   *
+   * Trigger a workflow_dispatch workflow.
+   */
+  api.post('/workflows/dispatch', async (c) => {
+    try {
+      const gitea = await getClient()
+      const org = await getOrg()
+      const { repo, workflow, branch, inputs } = await c.req.json<{
+        repo: string
+        workflow: string
+        branch?: string
+        inputs?: Record<string, string>
+      }>()
+
+      if (!repo || !workflow) {
+        return c.json({ error: 'repo and workflow are required' }, 400)
+      }
+
+      // Use Gitea's workflow dispatch API
+      await gitea.request({
+        method: 'POST',
+        path: `/repos/${org}/${repo}/actions/workflows/${workflow}/dispatches`,
+        body: {
+          ref: branch || 'main',
+          inputs: inputs || {},
+        },
+      })
+
+      return c.json({ ok: true })
+    } catch (err) {
+      console.error('[gitea-proxy] workflows/dispatch error:', (err as Error).message)
+      return c.json({ error: (err as Error).message }, 500)
     }
   })
 

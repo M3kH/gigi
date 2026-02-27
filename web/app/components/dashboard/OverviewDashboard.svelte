@@ -18,6 +18,8 @@
   import { formatRelativeTime } from '$lib/utils/format'
   import CostWidget from '$components/dashboard/CostWidget.svelte'
   import ActionsWidget from '$components/dashboard/ActionsWidget.svelte'
+  import WorkerStatusWidget from '$components/dashboard/WorkerStatusWidget.svelte'
+  import WorkflowTriggerWidget from '$components/dashboard/WorkflowTriggerWidget.svelte'
   import RecentPRsWidget from '$components/dashboard/RecentPRsWidget.svelte'
   import RecentIssuesWidget from '$components/dashboard/RecentIssuesWidget.svelte'
 
@@ -286,6 +288,7 @@
       <!-- Left column -->
       <div class="grid-column">
         <ActionsWidget owner={overview?.org?.name ?? 'acme'} />
+        <WorkflowTriggerWidget owner={overview?.org?.name ?? 'acme'} />
         <!-- Repositories -->
         <section class="section">
           <h2 class="section-title">
@@ -376,6 +379,7 @@
 
       <!-- Right column -->
       <div class="grid-column">
+        <WorkerStatusWidget />
         <RecentPRsWidget
           openPRs={overview?.openPRs ?? []}
           closedPRs={overview?.closedPRs ?? []}
