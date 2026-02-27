@@ -337,9 +337,24 @@ export const handleMessage = async (
     }
   }
 
-  // Wrap onEvent to inject conversationId and channel, then broadcast
+  // Wrap onEvent to inject conversationId and channel, then broadcast.
+  // agent_done is deferred — the agent emits it before router stores the message,
+  // so we hold it and re-emit after the DB write to avoid a race where the frontend
+  // calls loadMessages() before the response is persisted.
+  let deferredAgentDone: import('./events').AgentEvent | null = null
+  const flushDeferredDone = () => {
+    if (!deferredAgentDone) return
+    const ev = deferredAgentDone
+    deferredAgentDone = null
+    try { emit(ev) } catch { /* ignore */ }
+    try { if (onEvent) onEvent(ev) } catch { /* ignore */ }
+  }
   const wrappedOnEvent: EventCallback = (event) => {
     const enriched: import('./events').AgentEvent = { ...event, type: event.type as string, conversationId: convId, channel }
+    if (event.type === 'agent_done') {
+      deferredAgentDone = enriched
+      return
+    }
     try { emit(enriched) } catch (err) {
       console.error('[router] emit error:', (err as Error).message)
     }
@@ -398,6 +413,8 @@ export const handleMessage = async (
     throw err
   } finally {
     runningAgents.delete(convId)
+    // Flush any deferred agent_done that wasn't emitted (e.g. agent threw before router stored)
+    flushDeferredDone()
   }
 
   // Pause thread (agent done with this turn)
@@ -450,6 +467,10 @@ export const handleMessage = async (
     tool_outputs: Object.keys(response.toolResults).length ? response.toolResults : undefined,
     usage: response.usage || undefined,
   })
+
+  // Flush deferred agent_done now that the message is persisted — the frontend's
+  // loadMessages() will find the response in the database.
+  flushDeferredDone()
 
   // ── Response Routing: determine delivery channels ──────────────
   const threadChannels = await getThreadActiveChannels(threadId, store.getPool)
@@ -512,6 +533,7 @@ export const handleMessage = async (
         tool_outputs: Object.keys(contResponse.toolResults).length ? contResponse.toolResults : undefined,
         usage: contResponse.usage || undefined,
       })
+      flushDeferredDone()
       // Auto-link from continuation too
       if (contResponse.toolCalls.length > 0) {
         await autoLinkRefs(threadId, contResponse.toolCalls, contResponse.toolResults)
@@ -562,6 +584,7 @@ export const handleMessage = async (
         tool_outputs: Object.keys(response2.toolResults).length ? response2.toolResults : undefined,
         usage: response2.usage || undefined,
       })
+      flushDeferredDone()
       // Auto-link from enforcement response
       if (response2.toolCalls.length > 0) {
         await autoLinkRefs(threadId, response2.toolCalls, response2.toolResults)
@@ -600,6 +623,7 @@ export const handleMessage = async (
         tool_outputs: Object.keys(response2.toolResults).length ? response2.toolResults : undefined,
         usage: response2.usage || undefined,
       })
+      flushDeferredDone()
 
       await markNotified(convId, enforcement.repo, enforcement.issueNumber)
     }
