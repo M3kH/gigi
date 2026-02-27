@@ -19,7 +19,7 @@
     "test:ci": "vitest run --project unit && npm run test:integration"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.50",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.62",
     "@hono/node-server": "^1.14.0",
     "@modelcontextprotocol/sdk": "^1.0.0",
     "@shoelace-style/shoelace": "^2.20.1",
