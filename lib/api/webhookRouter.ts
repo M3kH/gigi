@@ -24,7 +24,7 @@ import type { WebhookPayload, WebhookResult } from './webhooks'
 
 // ─── Ref Extraction ─────────────────────────────────────────────────
 
-interface WebhookRef {
+export interface WebhookRef {
   repo: string
   ref_type: 'issue' | 'pr'
   number: number
@@ -34,7 +34,7 @@ interface WebhookRef {
  * Extract structured refs from a webhook payload.
  * Returns the refs that should be used for thread lookup.
  */
-const extractRefs = (event: string, payload: WebhookPayload): WebhookRef[] => {
+export const extractRefs = (event: string, payload: WebhookPayload): WebhookRef[] => {
   const refs: WebhookRef[] = []
   const repo = payload.repository?.name
   if (!repo) return refs
@@ -74,7 +74,7 @@ const extractRefs = (event: string, payload: WebhookPayload): WebhookRef[] => {
 
 // ─── Legacy Tag Extraction (backward compat) ─────────────────────────
 
-const extractTags = (event: string, payload: WebhookPayload): string[] => {
+export const extractTags = (event: string, payload: WebhookPayload): string[] => {
   const tags: string[] = []
   const repo = payload.repository?.name
   if (!repo) return tags
@@ -226,7 +226,7 @@ const findConversation = async (
   return null
 }
 
-const shouldAutoCreate = (event: string, payload: WebhookPayload): boolean => {
+export const shouldAutoCreate = (event: string, payload: WebhookPayload): boolean => {
   return (
     (event === 'issues' && payload.action === 'opened') ||
     (event === 'pull_request' && payload.action === 'opened')
@@ -310,7 +310,7 @@ const createForWebhook = async (
   return { conversation, threadId: thread.id }
 }
 
-const shouldAutoClose = (event: string, payload: WebhookPayload, conversation: store.Conversation): boolean => {
+export const shouldAutoClose = (event: string, payload: WebhookPayload, conversation: { status: string }): boolean => {
   if (conversation.status === 'stopped' || conversation.status === 'archived') return false
   return (
     (event === 'issues' && payload.action === 'closed') ||
@@ -457,7 +457,7 @@ export const routeWebhook = async (event: string, payload: WebhookPayload): Prom
 
 // ─── Event Formatting ───────────────────────────────────────────────
 
-const formatWebhookEvent = (event: string, payload: WebhookPayload): string => {
+export const formatWebhookEvent = (event: string, payload: WebhookPayload): string => {
   const repo = payload.repository?.full_name || payload.repository?.name
 
   switch (event) {
@@ -476,19 +476,19 @@ const formatWebhookEvent = (event: string, payload: WebhookPayload): string => {
   }
 }
 
-const formatIssueEvent = (payload: WebhookPayload): string => {
+export const formatIssueEvent = (payload: WebhookPayload): string => {
   const { action, issue } = payload
   const emoji: Record<string, string> = { opened: '📋', closed: '✅', reopened: '🔄', edited: '✏️' }
   return `${emoji[action!] || '📋'} Issue #${issue!.number} ${action}: "${issue!.title}" by @${issue?.user?.login}\n${issue?.html_url || ''}`
 }
 
-const formatIssueCommentEvent = (payload: WebhookPayload): string => {
+export const formatIssueCommentEvent = (payload: WebhookPayload): string => {
   const { issue, comment } = payload
   const commentPreview = comment?.body?.slice(0, 200) || ''
   return `💬 @${comment?.user?.login} commented on issue #${issue!.number}:\n"${commentPreview}${commentPreview.length >= 200 ? '...' : ''}"\n${comment?.html_url || ''}`
 }
 
-const formatPREvent = (payload: WebhookPayload): string => {
+export const formatPREvent = (payload: WebhookPayload): string => {
   const { action, pull_request, number } = payload
   const pr = pull_request
   const prNum = number || pr?.number
@@ -503,14 +503,14 @@ const formatPREvent = (payload: WebhookPayload): string => {
   return `${emoji[action!] || '🔀'} PR #${prNum} ${status}: "${pr?.title}" by @${pr?.user?.login}\n${pr?.head?.ref || ''} → ${pr?.base?.ref || ''}\n${pr?.html_url || ''}`
 }
 
-const formatPushEvent = (payload: WebhookPayload): string => {
+export const formatPushEvent = (payload: WebhookPayload): string => {
   const commits = payload.commits || []
   const commitSummary = commits.slice(0, 3).map((c) => `  • ${c.message.split('\n')[0]}`).join('\n')
   const moreText = commits.length > 3 ? `\n  ... and ${commits.length - 3} more` : ''
   return `📤 @${payload.pusher?.login} pushed ${commits.length} commit(s) to ${payload.ref}:\n${commitSummary}${moreText}`
 }
 
-const formatPRReviewCommentEvent = (payload: WebhookPayload): string => {
+export const formatPRReviewCommentEvent = (payload: WebhookPayload): string => {
   const { comment, pull_request } = payload
   const commentPreview = comment?.body?.slice(0, 200) || ''
   return `💬 @${comment?.user?.login} commented on PR #${pull_request!.number}:\n"${commentPreview}${commentPreview.length >= 200 ? '...' : ''}"\n${comment?.html_url || ''}`

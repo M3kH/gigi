@@ -1,0 +1,17 @@
+{
+  "action": "closed",
+  "repository": {
+    "name": "gigi",
+    "full_name": "idea/gigi",
+    "html_url": "http://localhost:3300/idea/gigi"
+  },
+  "issue": {
+    "number": 42,
+    "title": "Bug: webhook fails on empty payload",
+    "body": "When a webhook arrives with an empty body, the notifier crashes.",
+    "html_url": "http://localhost:3300/idea/gigi/issues/42",
+    "user": { "login": "alice" },
+    "state": "closed"
+  },
+  "sender": { "login": "bob" }
+}

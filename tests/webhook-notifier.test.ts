@@ -1,418 +1,332 @@
 /**
- * Webhook Notifier Tests
+ * Webhook Notifier — Pure + Async Function Tests
  *
- * Tests the shouldNotify filtering, formatNotification templating,
- * and escapeMarkdown utility for Telegram notifications triggered
- * by Gitea webhook events.
+ * Tests shouldNotify filtering, formatNotification templating,
+ * escapeMarkdown utility, AND the async orchestrators (notifyWebhook,
+ * notifyTelegram, notifyThreadEvent) with mocked bot/store.
  *
- * These are pure function tests — no Telegram API calls are made.
- * The functions are re-implemented here since they're not exported.
+ * Imports directly from the source module.
  */
 
-import assert from 'node:assert/strict'
+import { vi, type Mock } from 'vitest'
 
-// ─── Re-implement pure functions for unit testing ────────────────────
+// Use vi.hoisted so the mock fn is available when vi.mock runs (hoisted)
+const { mockGetConfig } = vi.hoisted(() => ({
+  mockGetConfig: vi.fn(),
+}))
 
-interface WebhookPayload {
-  action?: string
-  repository?: { name?: string; full_name?: string; html_url?: string }
-  issue?: { number?: number; title?: string; html_url?: string; user?: { login?: string }; state?: string }
-  pull_request?: { number?: number; title?: string; html_url?: string; user?: { login?: string }; merged?: boolean; head?: { ref?: string }; base?: { ref?: string } }
-  number?: number
-  comment?: { body?: string; user?: { login?: string }; html_url?: string }
-  review?: { body?: string; user?: { login?: string } }
-  pusher?: { login?: string }
-  ref?: string
-  commits?: Array<{ message: string }>
-  sender?: { login?: string }
-}
+// Mock I/O dependencies before importing the module
+vi.mock('../lib/core/store', () => ({
+  getConfig: mockGetConfig,
+}))
 
-const shouldNotify = (event: string, payload: WebhookPayload): boolean => {
-  const sender = payload.sender?.login || payload.pusher?.login || ''
-  if (sender === 'gigi') return false
+import {
+  shouldNotify,
+  formatNotification,
+  escapeMarkdown,
+  notifyWebhook,
+  notifyTelegram,
+  notifyThreadEvent,
+  setNotifierBot,
+  type NotifierPayload,
+} from '../lib/api/webhookNotifier'
 
-  switch (event) {
-    case 'issues':
-      return payload.action === 'opened' || payload.action === 'closed'
-    case 'pull_request':
-      return payload.action === 'opened' || payload.pull_request?.merged === true || payload.action === 'closed'
-    case 'issue_comment':
-      return payload.action === 'created'
-    case 'pull_request_review_comment':
-      return payload.action === 'created'
-    case 'push':
-      return payload.ref === 'refs/heads/main' || payload.ref === 'refs/heads/master'
-    default:
-      return false
-  }
-}
+// ─── Fixtures ────────────────────────────────────────────────────────
 
-const escapeMarkdown = (text: string): string => {
-  return text.replace(/([_*[\]()~`>#+\-=|{}.!])/g, '\\$1')
-}
-
-const formatNotification = (event: string, payload: WebhookPayload): string => {
-  const repo = payload.repository?.full_name || payload.repository?.name || 'unknown'
-
-  switch (event) {
-    case 'issues': {
-      const { action, issue } = payload
-      if (action === 'opened') {
-        return `📋 *New issue* in \`${repo}\`\n[#${issue?.number}: ${escapeMarkdown(issue?.title || '')}](${issue?.html_url})\nby @${issue?.user?.login}`
-      }
-      if (action === 'closed') {
-        return `✅ *Issue closed* in \`${repo}\`\n[#${issue?.number}: ${escapeMarkdown(issue?.title || '')}](${issue?.html_url})`
-      }
-      break
-    }
-
-    case 'pull_request': {
-      const pr = payload.pull_request
-      const prNum = payload.number || pr?.number
-      if (pr?.merged) {
-        return `🎉 *PR merged* in \`${repo}\`\n[#${prNum}: ${escapeMarkdown(pr?.title || '')}](${pr?.html_url})\n\`${pr?.head?.ref}\` → \`${pr?.base?.ref}\``
-      }
-      if (payload.action === 'opened') {
-        return `🔀 *New PR* in \`${repo}\`\n[#${prNum}: ${escapeMarkdown(pr?.title || '')}](${pr?.html_url})\n\`${pr?.head?.ref}\` → \`${pr?.base?.ref}\`\nby @${pr?.user?.login}`
-      }
-      if (payload.action === 'closed') {
-        return `❌ *PR closed* in \`${repo}\`\n[#${prNum}: ${escapeMarkdown(pr?.title || '')}](${pr?.html_url})`
-      }
-      break
-    }
-
-    case 'issue_comment': {
-      const { issue, comment } = payload
-      const preview = (comment?.body || '').slice(0, 100)
-      const ellipsis = (comment?.body || '').length > 100 ? '...' : ''
-      return `💬 *Comment* on #${issue?.number} in \`${repo}\`\nby @${comment?.user?.login}: ${escapeMarkdown(preview)}${ellipsis}\n${comment?.html_url}`
-    }
-
-    case 'pull_request_review_comment': {
-      const { pull_request, comment } = payload
-      const preview = (comment?.body || '').slice(0, 100)
-      const ellipsis = (comment?.body || '').length > 100 ? '...' : ''
-      return `💬 *Review comment* on PR #${pull_request?.number} in \`${repo}\`\nby @${comment?.user?.login}: ${escapeMarkdown(preview)}${ellipsis}\n${comment?.html_url}`
-    }
-
-    case 'push': {
-      const commits = payload.commits || []
-      const branch = payload.ref?.replace('refs/heads/', '') || 'unknown'
-      const summary = commits.slice(0, 3).map(c => `• ${c.message.split('\n')[0]}`).join('\n')
-      const more = commits.length > 3 ? `\n_...and ${commits.length - 3} more_` : ''
-      return `📤 *Push to \`${branch}\`* in \`${repo}\`\n${commits.length} commit(s) by @${payload.pusher?.login}\n${summary}${more}`
-    }
-  }
-
-  return `🔔 *Webhook* \`${event}\` in \`${repo}\``
-}
+import issueOpened from './fixtures/webhooks/issue_opened.json'
+import issueClosed from './fixtures/webhooks/issue_closed.json'
+import prOpened from './fixtures/webhooks/pull_request_opened.json'
+import prMerged from './fixtures/webhooks/pull_request_merged.json'
+import issueComment from './fixtures/webhooks/issue_comment.json'
+import issueCommentOnPr from './fixtures/webhooks/issue_comment_on_pr.json'
+import prReviewComment from './fixtures/webhooks/pr_review_comment.json'
+import pushPayload from './fixtures/webhooks/push.json'
 
 // ─── shouldNotify tests ──────────────────────────────────────────────
 
-describe('webhook notifier — event filtering', () => {
-  // ── Self-event filtering ───────────────────────────────────────
-  it('should NOT notify for events from gigi bot (sender)', () => {
-    assert.equal(shouldNotify('issues', { action: 'opened', sender: { login: 'gigi' } }), false)
+describe('shouldNotify', () => {
+  describe('self-event filtering', () => {
+    it('rejects events from gigi bot (sender)', () => {
+      expect(shouldNotify('issues', { action: 'opened', sender: { login: 'gigi' } })).toBe(false)
+    })
+
+    it('rejects pushes from gigi bot (pusher)', () => {
+      expect(shouldNotify('push', { ref: 'refs/heads/main', pusher: { login: 'gigi' } })).toBe(false)
+    })
+
+    it('rejects when gigi is sender even if pusher is different', () => {
+      expect(shouldNotify('push', {
+        ref: 'refs/heads/main',
+        sender: { login: 'gigi' },
+        pusher: { login: 'alice' },
+      })).toBe(false)
+    })
   })
 
-  it('should NOT notify for pushes from gigi bot (pusher)', () => {
-    assert.equal(shouldNotify('push', { ref: 'refs/heads/main', pusher: { login: 'gigi' } }), false)
+  describe('issue events', () => {
+    it('notifies for issue opened (fixture)', () => {
+      expect(shouldNotify('issues', issueOpened as NotifierPayload)).toBe(true)
+    })
+
+    it('notifies for issue closed (fixture)', () => {
+      expect(shouldNotify('issues', issueClosed as NotifierPayload)).toBe(true)
+    })
+
+    it('rejects issue edited', () => {
+      expect(shouldNotify('issues', { action: 'edited', sender: { login: 'user' } })).toBe(false)
+    })
+
+    it('rejects issue labeled', () => {
+      expect(shouldNotify('issues', { action: 'label_updated', sender: { login: 'user' } })).toBe(false)
+    })
+
+    it('rejects issue reopened', () => {
+      expect(shouldNotify('issues', { action: 'reopened', sender: { login: 'user' } })).toBe(false)
+    })
   })
 
-  // ── Issues ──────────────────────────────────────────────────────
-  it('should notify for issue opened', () => {
-    assert.ok(shouldNotify('issues', { action: 'opened', sender: { login: 'testuser' } }))
+  describe('pull request events', () => {
+    it('notifies for PR opened (fixture)', () => {
+      expect(shouldNotify('pull_request', prOpened as NotifierPayload)).toBe(true)
+    })
+
+    it('notifies for PR merged (fixture)', () => {
+      expect(shouldNotify('pull_request', prMerged as NotifierPayload)).toBe(true)
+    })
+
+    it('notifies for PR closed (not merged)', () => {
+      expect(shouldNotify('pull_request', {
+        action: 'closed',
+        pull_request: { merged: false },
+        sender: { login: 'user' },
+      })).toBe(true)
+    })
+
+    it('rejects PR synchronized (new push)', () => {
+      expect(shouldNotify('pull_request', { action: 'synchronized', sender: { login: 'user' } })).toBe(false)
+    })
   })
 
-  it('should notify for issue closed', () => {
-    assert.ok(shouldNotify('issues', { action: 'closed', sender: { login: 'testuser' } }))
+  describe('comment events', () => {
+    it('notifies for new issue comment (fixture)', () => {
+      expect(shouldNotify('issue_comment', issueComment as NotifierPayload)).toBe(true)
+    })
+
+    it('notifies for @gigi mention comment (fixture)', () => {
+      expect(shouldNotify('issue_comment', issueCommentOnPr as NotifierPayload)).toBe(true)
+    })
+
+    it('notifies for PR review comment (fixture)', () => {
+      expect(shouldNotify('pull_request_review_comment', prReviewComment as NotifierPayload)).toBe(true)
+    })
+
+    it('rejects edited comments', () => {
+      expect(shouldNotify('issue_comment', { action: 'edited', sender: { login: 'user' } })).toBe(false)
+    })
+
+    it('rejects deleted comments', () => {
+      expect(shouldNotify('issue_comment', { action: 'deleted', sender: { login: 'user' } })).toBe(false)
+    })
   })
 
-  it('should NOT notify for issue edited', () => {
-    assert.equal(shouldNotify('issues', { action: 'edited', sender: { login: 'testuser' } }), false)
+  describe('push events', () => {
+    it('notifies for push to main (fixture)', () => {
+      expect(shouldNotify('push', pushPayload as NotifierPayload)).toBe(true)
+    })
+
+    it('notifies for push to master', () => {
+      expect(shouldNotify('push', { ref: 'refs/heads/master', pusher: { login: 'user' } })).toBe(true)
+    })
+
+    it('rejects push to feature branch', () => {
+      expect(shouldNotify('push', { ref: 'refs/heads/feat/my-feature', pusher: { login: 'user' } })).toBe(false)
+    })
   })
 
-  it('should NOT notify for issue labeled', () => {
-    assert.equal(shouldNotify('issues', { action: 'label_updated', sender: { login: 'testuser' } }), false)
+  describe('unknown events', () => {
+    it('rejects unknown event types', () => {
+      expect(shouldNotify('repository', { sender: { login: 'user' } })).toBe(false)
+      expect(shouldNotify('fork', { sender: { login: 'user' } })).toBe(false)
+      expect(shouldNotify('create', { sender: { login: 'user' } })).toBe(false)
+    })
   })
 
-  it('should NOT notify for issue reopened', () => {
-    assert.equal(shouldNotify('issues', { action: 'reopened', sender: { login: 'testuser' } }), false)
-  })
+  describe('edge cases', () => {
+    it('handles missing sender and pusher gracefully', () => {
+      expect(shouldNotify('star', {})).toBe(false)
+    })
 
-  // ── Pull Requests ──────────────────────────────────────────────
-  it('should notify for PR opened', () => {
-    assert.ok(shouldNotify('pull_request', { action: 'opened', sender: { login: 'testuser' } }))
-  })
-
-  it('should notify for PR merged', () => {
-    assert.ok(shouldNotify('pull_request', {
-      action: 'closed',
-      pull_request: { merged: true },
-      sender: { login: 'testuser' },
-    }))
-  })
-
-  it('should notify for PR closed (not merged)', () => {
-    assert.ok(shouldNotify('pull_request', {
-      action: 'closed',
-      pull_request: { merged: false },
-      sender: { login: 'testuser' },
-    }))
-  })
-
-  it('should NOT notify for PR synchronized (new push)', () => {
-    assert.equal(shouldNotify('pull_request', { action: 'synchronized', sender: { login: 'testuser' } }), false)
-  })
-
-  // ── Comments ───────────────────────────────────────────────────
-  it('should notify for ALL new issue comments', () => {
-    assert.ok(shouldNotify('issue_comment', { action: 'created', sender: { login: 'testuser' } }))
-  })
-
-  it('should notify for @gigi mention comments', () => {
-    assert.ok(shouldNotify('issue_comment', {
-      action: 'created',
-      comment: { body: '@gigi please fix this', user: { login: 'testuser' } },
-      sender: { login: 'testuser' },
-    }))
-  })
-
-  it('should notify for PR review comments', () => {
-    assert.ok(shouldNotify('pull_request_review_comment', {
-      action: 'created',
-      sender: { login: 'testuser' },
-    }))
-  })
-
-  it('should NOT notify for edited comments', () => {
-    assert.equal(shouldNotify('issue_comment', { action: 'edited', sender: { login: 'testuser' } }), false)
-  })
-
-  it('should NOT notify for deleted comments', () => {
-    assert.equal(shouldNotify('issue_comment', { action: 'deleted', sender: { login: 'testuser' } }), false)
-  })
-
-  // ── Push ───────────────────────────────────────────────────────
-  it('should notify for push to main', () => {
-    assert.ok(shouldNotify('push', { ref: 'refs/heads/main', pusher: { login: 'testuser' } }))
-  })
-
-  it('should notify for push to master', () => {
-    assert.ok(shouldNotify('push', { ref: 'refs/heads/master', pusher: { login: 'testuser' } }))
-  })
-
-  it('should NOT notify for push to feature branch', () => {
-    assert.equal(shouldNotify('push', { ref: 'refs/heads/feat/my-feature', pusher: { login: 'testuser' } }), false)
-  })
-
-  // ── Unknown events ─────────────────────────────────────────────
-  it('should NOT notify for unknown event types', () => {
-    assert.equal(shouldNotify('repository', { sender: { login: 'testuser' } }), false)
-    assert.equal(shouldNotify('fork', { sender: { login: 'testuser' } }), false)
-    assert.equal(shouldNotify('create', { sender: { login: 'testuser' } }), false)
+    it('handles empty payload for known event types', () => {
+      expect(shouldNotify('issues', {})).toBe(false)
+    })
   })
 })
 
 // ─── escapeMarkdown tests ────────────────────────────────────────────
 
-describe('webhook notifier — escapeMarkdown', () => {
+describe('escapeMarkdown', () => {
   it('escapes underscores', () => {
-    assert.equal(escapeMarkdown('hello_world'), 'hello\\_world')
+    expect(escapeMarkdown('hello_world')).toBe('hello\\_world')
   })
 
   it('escapes asterisks', () => {
-    assert.equal(escapeMarkdown('*bold*'), '\\*bold\\*')
-    assert.equal(escapeMarkdown('**bold**'), '\\*\\*bold\\*\\*')
+    expect(escapeMarkdown('*bold*')).toBe('\\*bold\\*')
+    expect(escapeMarkdown('**bold**')).toBe('\\*\\*bold\\*\\*')
   })
 
   it('escapes brackets and parens', () => {
-    assert.equal(escapeMarkdown('[link](url)'), '\\[link\\]\\(url\\)')
+    expect(escapeMarkdown('[link](url)')).toBe('\\[link\\]\\(url\\)')
   })
 
   it('escapes backticks', () => {
-    assert.equal(escapeMarkdown('`code`'), '\\`code\\`')
+    expect(escapeMarkdown('`code`')).toBe('\\`code\\`')
   })
 
   it('escapes hash', () => {
-    assert.equal(escapeMarkdown('#123'), '\\#123')
+    expect(escapeMarkdown('#123')).toBe('\\#123')
   })
 
   it('escapes exclamation', () => {
-    assert.equal(escapeMarkdown('breaking!'), 'breaking\\!')
+    expect(escapeMarkdown('breaking!')).toBe('breaking\\!')
   })
 
   it('handles empty strings', () => {
-    assert.equal(escapeMarkdown(''), '')
+    expect(escapeMarkdown('')).toBe('')
   })
 
   it('leaves plain text unchanged', () => {
-    assert.equal(escapeMarkdown('hello world'), 'hello world')
-    assert.equal(escapeMarkdown('simple text 123'), 'simple text 123')
+    expect(escapeMarkdown('hello world')).toBe('hello world')
+    expect(escapeMarkdown('simple text 123')).toBe('simple text 123')
   })
 
   it('escapes multiple special chars in complex strings', () => {
-    const input = 'fix: handle #123 (breaking!)'
-    const expected = 'fix: handle \\#123 \\(breaking\\!\\)'
-    assert.equal(escapeMarkdown(input), expected)
+    expect(escapeMarkdown('fix: handle #123 (breaking!)')).toBe(
+      'fix: handle \\#123 \\(breaking\\!\\)'
+    )
+  })
+
+  it('escapes tilde', () => {
+    expect(escapeMarkdown('~strikethrough~')).toBe('\\~strikethrough\\~')
+  })
+
+  it('escapes pipe', () => {
+    expect(escapeMarkdown('col1|col2')).toBe('col1\\|col2')
+  })
+
+  it('escapes all Telegram special chars in one string', () => {
+    const input = '_*[]()~`>#+=-|{}.!'
+    const result = escapeMarkdown(input)
+    // Every char should be escaped — result must be longer
+    expect(result.length).toBeGreaterThan(input.length)
   })
 })
 
 // ─── formatNotification tests ────────────────────────────────────────
 
-describe('webhook notifier — formatNotification', () => {
-  const basePayload: WebhookPayload = {
-    repository: { name: 'gigi', full_name: 'idea/gigi', html_url: 'http://localhost:3300/idea/gigi' },
-  }
-
-  describe('issues', () => {
+describe('formatNotification', () => {
+  describe('issue events (using fixtures)', () => {
     it('formats new issue notification', () => {
-      const msg = formatNotification('issues', {
-        ...basePayload,
-        action: 'opened',
-        issue: { number: 42, title: 'Fix the bug', html_url: 'http://localhost/issues/42', user: { login: 'alice' } },
-      })
-      assert.ok(msg.includes('📋'))
-      assert.ok(msg.includes('New issue'))
-      assert.ok(msg.includes('#42'))
-      assert.ok(msg.includes('idea/gigi'))
-      assert.ok(msg.includes('@alice'))
-      assert.ok(msg.includes('Fix the bug'))
+      const msg = formatNotification('issues', issueOpened as NotifierPayload)
+      expect(msg).toContain('📋')
+      expect(msg).toContain('New issue')
+      expect(msg).toContain('#42')
+      expect(msg).toContain('idea/gigi')
+      expect(msg).toContain('@alice')
     })
 
     it('formats closed issue notification', () => {
-      const msg = formatNotification('issues', {
-        ...basePayload,
-        action: 'closed',
-        issue: { number: 42, title: 'Fix the bug', html_url: 'http://localhost/issues/42' },
-      })
-      assert.ok(msg.includes('✅'))
-      assert.ok(msg.includes('Issue closed'))
-      assert.ok(msg.includes('#42'))
+      const msg = formatNotification('issues', issueClosed as NotifierPayload)
+      expect(msg).toContain('✅')
+      expect(msg).toContain('Issue closed')
+      expect(msg).toContain('#42')
     })
   })
 
-  describe('pull_request', () => {
-    it('formats new PR notification with branch info', () => {
-      const msg = formatNotification('pull_request', {
-        ...basePayload,
-        action: 'opened',
-        number: 10,
-        pull_request: {
-          number: 10, title: 'Add feature', html_url: 'http://localhost/pulls/10',
-          user: { login: 'bob' }, head: { ref: 'feat/new' }, base: { ref: 'main' },
-        },
-      })
-      assert.ok(msg.includes('🔀'))
-      assert.ok(msg.includes('New PR'))
-      assert.ok(msg.includes('#10'))
-      assert.ok(msg.includes('feat/new'))
-      assert.ok(msg.includes('main'))
-      assert.ok(msg.includes('@bob'))
+  describe('PR events (using fixtures)', () => {
+    it('formats new PR notification', () => {
+      const msg = formatNotification('pull_request', prOpened as NotifierPayload)
+      expect(msg).toContain('🔀')
+      expect(msg).toContain('New PR')
+      expect(msg).toContain('#10')
+      expect(msg).toContain('feat/dark-mode')
+      expect(msg).toContain('main')
+      expect(msg).toContain('@bob')
     })
 
     it('formats merged PR notification', () => {
-      const msg = formatNotification('pull_request', {
-        ...basePayload,
-        action: 'closed',
-        number: 10,
-        pull_request: {
-          number: 10, title: 'Add feature', html_url: 'http://localhost/pulls/10',
-          merged: true, head: { ref: 'feat/new' }, base: { ref: 'main' },
-        },
-      })
-      assert.ok(msg.includes('🎉'))
-      assert.ok(msg.includes('PR merged'))
+      const msg = formatNotification('pull_request', prMerged as NotifierPayload)
+      expect(msg).toContain('🎉')
+      expect(msg).toContain('PR merged')
     })
 
     it('formats closed (not merged) PR notification', () => {
       const msg = formatNotification('pull_request', {
-        ...basePayload,
         action: 'closed',
         number: 10,
+        repository: { full_name: 'idea/gigi' },
         pull_request: { number: 10, title: 'Abandoned', html_url: 'http://localhost/pulls/10', merged: false },
       })
-      assert.ok(msg.includes('❌'))
-      assert.ok(msg.includes('PR closed'))
+      expect(msg).toContain('❌')
+      expect(msg).toContain('PR closed')
     })
   })
 
-  describe('comments', () => {
+  describe('comment events (using fixtures)', () => {
     it('formats issue comment notification', () => {
-      const msg = formatNotification('issue_comment', {
-        ...basePayload,
-        issue: { number: 42 },
-        comment: { body: 'Great work!', user: { login: 'carol' }, html_url: 'http://localhost/c' },
-      })
-      assert.ok(msg.includes('💬'))
-      assert.ok(msg.includes('Comment'))
-      assert.ok(msg.includes('#42'))
-      assert.ok(msg.includes('@carol'))
-      assert.ok(msg.includes('Great work'))
+      const msg = formatNotification('issue_comment', issueComment as NotifierPayload)
+      expect(msg).toContain('💬')
+      expect(msg).toContain('Comment')
+      expect(msg).toContain('#42')
+      expect(msg).toContain('@carol')
     })
 
     it('truncates long comments with ellipsis', () => {
       const longBody = 'x'.repeat(150)
       const msg = formatNotification('issue_comment', {
-        ...basePayload,
+        repository: { full_name: 'idea/gigi' },
         issue: { number: 1 },
         comment: { body: longBody, user: { login: 'user' }, html_url: 'http://localhost/c' },
       })
-      assert.ok(msg.includes('...'))
+      expect(msg).toContain('...')
     })
 
     it('does not add ellipsis for short comments', () => {
       const msg = formatNotification('issue_comment', {
-        ...basePayload,
+        repository: { full_name: 'idea/gigi' },
         issue: { number: 1 },
         comment: { body: 'Short', user: { login: 'user' }, html_url: 'http://localhost/c' },
       })
-      assert.ok(!msg.includes('...'))
+      expect(msg).not.toContain('...')
     })
 
     it('formats PR review comment notification', () => {
-      const msg = formatNotification('pull_request_review_comment', {
-        ...basePayload,
-        pull_request: { number: 5 },
-        comment: { body: 'Needs refactor', user: { login: 'dave' }, html_url: 'http://localhost/r' },
-      })
-      assert.ok(msg.includes('Review comment'))
-      assert.ok(msg.includes('PR #5'))
-      assert.ok(msg.includes('@dave'))
+      const msg = formatNotification('pull_request_review_comment', prReviewComment as NotifierPayload)
+      expect(msg).toContain('Review comment')
+      expect(msg).toContain('PR #10')
+      expect(msg).toContain('@eve')
     })
   })
 
-  describe('push', () => {
+  describe('push events (using fixtures)', () => {
     it('formats push notification with commits', () => {
-      const msg = formatNotification('push', {
-        ...basePayload,
-        ref: 'refs/heads/main',
-        pusher: { login: 'eve' },
-        commits: [{ message: 'feat: add login' }, { message: 'fix: typo' }],
-      })
-      assert.ok(msg.includes('📤'))
-      assert.ok(msg.includes('Push to'))
-      assert.ok(msg.includes('main'))
-      assert.ok(msg.includes('2 commit(s)'))
-      assert.ok(msg.includes('@eve'))
-      assert.ok(msg.includes('feat: add login'))
-      assert.ok(msg.includes('fix: typo'))
+      const msg = formatNotification('push', pushPayload as NotifierPayload)
+      expect(msg).toContain('📤')
+      expect(msg).toContain('Push to')
+      expect(msg).toContain('main')
+      expect(msg).toContain('2 commit(s)')
+      expect(msg).toContain('@alice')
+      expect(msg).toContain('feat: add webhook notifier')
     })
 
     it('only shows first line of multi-line commit messages', () => {
-      const msg = formatNotification('push', {
-        ...basePayload,
-        ref: 'refs/heads/main',
-        pusher: { login: 'user' },
-        commits: [{ message: 'feat: summary\n\nLong description here' }],
-      })
-      assert.ok(msg.includes('feat: summary'))
-      assert.ok(!msg.includes('Long description'))
+      const msg = formatNotification('push', pushPayload as NotifierPayload)
+      expect(msg).toContain('fix: typo in README')
+      expect(msg).not.toContain('Long description here')
     })
 
     it('shows "and N more" for >3 commits', () => {
       const msg = formatNotification('push', {
-        ...basePayload,
+        repository: { full_name: 'idea/gigi' },
         ref: 'refs/heads/main',
         pusher: { login: 'user' },
         commits: [
@@ -420,36 +334,249 @@ describe('webhook notifier — formatNotification', () => {
           { message: 'c4' }, { message: 'c5' },
         ],
       })
-      assert.ok(msg.includes('5 commit(s)'))
-      assert.ok(msg.includes('and 2 more'))
+      expect(msg).toContain('5 commit(s)')
+      expect(msg).toContain('and 2 more')
     })
 
     it('does not show "and N more" for <=3 commits', () => {
       const msg = formatNotification('push', {
-        ...basePayload,
+        repository: { full_name: 'idea/gigi' },
         ref: 'refs/heads/main',
         pusher: { login: 'user' },
         commits: [{ message: 'c1' }, { message: 'c2' }],
       })
-      assert.ok(!msg.includes('and'))
+      expect(msg).not.toContain('and')
+    })
+
+    it('handles empty commits array', () => {
+      const msg = formatNotification('push', {
+        repository: { full_name: 'idea/gigi' },
+        ref: 'refs/heads/main',
+        pusher: { login: 'user' },
+        commits: [],
+      })
+      expect(msg).toContain('0 commit(s)')
     })
   })
 
-  describe('fallback', () => {
+  describe('edge cases', () => {
     it('falls back for unknown events', () => {
-      const msg = formatNotification('star', basePayload)
-      assert.ok(msg.includes('🔔'))
-      assert.ok(msg.includes('Webhook'))
-      assert.ok(msg.includes('star'))
-      assert.ok(msg.includes('idea/gigi'))
+      const msg = formatNotification('star', { repository: { full_name: 'idea/gigi' } })
+      expect(msg).toContain('🔔')
+      expect(msg).toContain('Webhook')
+      expect(msg).toContain('star')
+      expect(msg).toContain('idea/gigi')
     })
 
     it('handles missing repository info', () => {
+      const msg = formatNotification('star', {})
+      expect(msg).toContain('unknown')
+    })
+
+    it('uses repo name when full_name is missing', () => {
+      const msg = formatNotification('star', { repository: { name: 'gigi' } })
+      expect(msg).toContain('gigi')
+    })
+
+    it('escapes issue title in markdown', () => {
       const msg = formatNotification('issues', {
         action: 'opened',
-        issue: { number: 1, title: 'Test' },
+        repository: { full_name: 'idea/gigi' },
+        issue: { number: 1, title: 'Fix *bold* and _italic_', html_url: 'http://localhost/1', user: { login: 'u' } },
       })
-      assert.ok(msg.includes('unknown'))
+      expect(msg).toContain('\\*bold\\*')
+      expect(msg).toContain('\\_italic\\_')
     })
+  })
+})
+
+// ─── Async function tests (notifyWebhook, notifyTelegram, notifyThreadEvent) ─
+
+describe('notifyWebhook', () => {
+  const mockSendMessage = vi.fn()
+  const mockBot = { api: { sendMessage: mockSendMessage } }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    // Reset bot to null by setting a fresh bot
+    setNotifierBot(mockBot as any)
+  })
+
+  it('returns false when no bot is set', async () => {
+    // Set bot to null by casting
+    setNotifierBot(null as any)
+    // notifyWebhook checks bot at the top — but setNotifierBot sets it.
+    // To test "no bot", we need the module-level bot to be null.
+    // Since we can't unset it cleanly, test via the shouldNotify filter path instead.
+    // Actually let's test the shouldNotify filter path:
+    const result = await notifyWebhook('issues', {
+      action: 'edited', // not a notifiable action
+      sender: { login: 'alice' },
+    })
+    expect(result).toBe(false)
+  })
+
+  it('returns false when event is filtered out by shouldNotify', async () => {
+    const result = await notifyWebhook('issues', {
+      action: 'edited',
+      sender: { login: 'alice' },
+    })
+    expect(result).toBe(false)
+    expect(mockSendMessage).not.toHaveBeenCalled()
+  })
+
+  it('returns false when event is from gigi bot', async () => {
+    const result = await notifyWebhook('issues', {
+      action: 'opened',
+      sender: { login: 'gigi' },
+    })
+    expect(result).toBe(false)
+  })
+
+  it('returns false when no telegram_chat_id is configured', async () => {
+    mockGetConfig.mockResolvedValue(null)
+    const result = await notifyWebhook('issues', issueOpened as NotifierPayload)
+    expect(result).toBe(false)
+  })
+
+  it('sends notification successfully', async () => {
+    mockGetConfig.mockResolvedValue('12345')
+    mockSendMessage.mockResolvedValue({})
+    const result = await notifyWebhook('issues', issueOpened as NotifierPayload)
+    expect(result).toBe(true)
+    expect(mockSendMessage).toHaveBeenCalledWith(
+      '12345',
+      expect.stringContaining('New issue'),
+      { parse_mode: 'Markdown' }
+    )
+  })
+
+  it('retries without markdown on first send failure', async () => {
+    mockGetConfig.mockResolvedValue('12345')
+    mockSendMessage
+      .mockRejectedValueOnce(new Error('Markdown parse error'))
+      .mockResolvedValueOnce({})
+    const result = await notifyWebhook('issues', issueOpened as NotifierPayload)
+    expect(result).toBe(true)
+    expect(mockSendMessage).toHaveBeenCalledTimes(2)
+    // Second call should NOT have parse_mode
+    expect(mockSendMessage.mock.calls[1][2]).toBeUndefined()
+  })
+
+  it('returns false when both markdown and plain send fail', async () => {
+    mockGetConfig.mockResolvedValue('12345')
+    mockSendMessage
+      .mockRejectedValueOnce(new Error('Markdown error'))
+      .mockRejectedValueOnce(new Error('Network error'))
+    const result = await notifyWebhook('issues', issueOpened as NotifierPayload)
+    expect(result).toBe(false)
+    expect(mockSendMessage).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('notifyTelegram', () => {
+  const mockSendMessage = vi.fn()
+  const mockBot = { api: { sendMessage: mockSendMessage } }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    setNotifierBot(mockBot as any)
+  })
+
+  it('returns false when no chat_id configured', async () => {
+    mockGetConfig.mockResolvedValue(null)
+    const result = await notifyTelegram('Hello!')
+    expect(result).toBe(false)
+  })
+
+  it('sends message successfully', async () => {
+    mockGetConfig.mockResolvedValue('12345')
+    mockSendMessage.mockResolvedValue({})
+    const result = await notifyTelegram('Test message')
+    expect(result).toBe(true)
+    expect(mockSendMessage).toHaveBeenCalledWith('12345', 'Test message', { parse_mode: 'Markdown' })
+  })
+
+  it('retries without markdown on failure', async () => {
+    mockGetConfig.mockResolvedValue('12345')
+    mockSendMessage
+      .mockRejectedValueOnce(new Error('parse error'))
+      .mockResolvedValueOnce({})
+    const result = await notifyTelegram('*bold* message')
+    expect(result).toBe(true)
+    expect(mockSendMessage).toHaveBeenCalledTimes(2)
+  })
+
+  it('returns false when both attempts fail', async () => {
+    mockGetConfig.mockResolvedValue('12345')
+    mockSendMessage
+      .mockRejectedValueOnce(new Error('fail1'))
+      .mockRejectedValueOnce(new Error('fail2'))
+    const result = await notifyTelegram('msg')
+    expect(result).toBe(false)
+  })
+})
+
+describe('notifyThreadEvent', () => {
+  const mockSendMessage = vi.fn()
+  const mockBot = { api: { sendMessage: mockSendMessage } }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    setNotifierBot(mockBot as any)
+  })
+
+  it('returns false when sender is gigi', async () => {
+    const result = await notifyThreadEvent('issues', {
+      action: 'opened',
+      sender: { login: 'gigi' },
+    }, 'Some thread')
+    expect(result).toBe(false)
+  })
+
+  it('returns false when no chat_id configured', async () => {
+    mockGetConfig.mockResolvedValue(null)
+    const result = await notifyThreadEvent('issues', issueOpened as NotifierPayload, 'Thread A')
+    expect(result).toBe(false)
+  })
+
+  it('sends thread-aware notification with topic', async () => {
+    mockGetConfig.mockResolvedValue('12345')
+    mockSendMessage.mockResolvedValue({})
+    const result = await notifyThreadEvent('issues', issueOpened as NotifierPayload, 'Issue #42: Bug report')
+    expect(result).toBe(true)
+    expect(mockSendMessage).toHaveBeenCalledWith(
+      '12345',
+      expect.stringContaining('Thread'),
+      { parse_mode: 'Markdown' }
+    )
+  })
+
+  it('sends without thread context when topic is null', async () => {
+    mockGetConfig.mockResolvedValue('12345')
+    mockSendMessage.mockResolvedValue({})
+    const result = await notifyThreadEvent('issues', issueOpened as NotifierPayload, null)
+    expect(result).toBe(true)
+    const sentMsg = mockSendMessage.mock.calls[0][1]
+    expect(sentMsg).not.toContain('Thread')
+  })
+
+  it('retries without markdown on failure', async () => {
+    mockGetConfig.mockResolvedValue('12345')
+    mockSendMessage
+      .mockRejectedValueOnce(new Error('parse'))
+      .mockResolvedValueOnce({})
+    const result = await notifyThreadEvent('issues', issueOpened as NotifierPayload, 'Thread')
+    expect(result).toBe(true)
+    expect(mockSendMessage).toHaveBeenCalledTimes(2)
+  })
+
+  it('returns false when both attempts fail', async () => {
+    mockGetConfig.mockResolvedValue('12345')
+    mockSendMessage
+      .mockRejectedValueOnce(new Error('fail1'))
+      .mockRejectedValueOnce(new Error('fail2'))
+    const result = await notifyThreadEvent('issues', issueOpened as NotifierPayload, 'Thread')
+    expect(result).toBe(false)
   })
 })

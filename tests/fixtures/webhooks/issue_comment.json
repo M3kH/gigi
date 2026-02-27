@@ -1,0 +1,20 @@
+{
+  "action": "created",
+  "repository": {
+    "name": "gigi",
+    "full_name": "idea/gigi",
+    "html_url": "http://localhost:3300/idea/gigi"
+  },
+  "issue": {
+    "number": 42,
+    "title": "Bug: webhook fails on empty payload",
+    "html_url": "http://localhost:3300/idea/gigi/issues/42",
+    "user": { "login": "alice" }
+  },
+  "comment": {
+    "body": "I can reproduce this. The error is in webhookNotifier.ts line 63.",
+    "user": { "login": "carol" },
+    "html_url": "http://localhost:3300/idea/gigi/issues/42#issuecomment-1"
+  },
+  "sender": { "login": "carol" }
+}

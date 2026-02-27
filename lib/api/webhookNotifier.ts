@@ -16,7 +16,7 @@ export const setNotifierBot = (b: Bot): void => {
   bot = b
 }
 
-interface WebhookPayload {
+export interface NotifierPayload {
   action?: string
   repository?: { name?: string; full_name?: string; html_url?: string }
   issue?: { number?: number; title?: string; html_url?: string; user?: { login?: string }; state?: string }
@@ -30,11 +30,14 @@ interface WebhookPayload {
   sender?: { login?: string }
 }
 
+/** @deprecated Use NotifierPayload instead */
+type WebhookPayload = NotifierPayload
+
 /**
  * Determine if this webhook event should trigger a Telegram notification.
  * We only notify for significant, actionable events.
  */
-const shouldNotify = (event: string, payload: WebhookPayload): boolean => {
+export const shouldNotify = (event: string, payload: NotifierPayload): boolean => {
   // Skip our own actions (gigi bot user)
   const sender = payload.sender?.login || payload.pusher?.login || ''
   if (sender === 'gigi') return false
@@ -60,7 +63,7 @@ const shouldNotify = (event: string, payload: WebhookPayload): boolean => {
 /**
  * Format a webhook event into a concise Telegram message.
  */
-const formatNotification = (event: string, payload: WebhookPayload): string => {
+export const formatNotification = (event: string, payload: NotifierPayload): string => {
   const repo = payload.repository?.full_name || payload.repository?.name || 'unknown'
 
   switch (event) {
@@ -119,7 +122,7 @@ const formatNotification = (event: string, payload: WebhookPayload): string => {
 /**
  * Escape special Markdown characters for Telegram.
  */
-const escapeMarkdown = (text: string): string => {
+export const escapeMarkdown = (text: string): string => {
   return text.replace(/([_*[\]()~`>#+\-=|{}.!])/g, '\\$1')
 }
 

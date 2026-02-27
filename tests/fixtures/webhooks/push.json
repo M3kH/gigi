@@ -1,0 +1,14 @@
+{
+  "ref": "refs/heads/main",
+  "repository": {
+    "name": "gigi",
+    "full_name": "idea/gigi",
+    "html_url": "http://localhost:3300/idea/gigi"
+  },
+  "pusher": { "login": "alice" },
+  "sender": { "login": "alice" },
+  "commits": [
+    { "id": "abc1234", "message": "feat: add webhook notifier" },
+    { "id": "def5678", "message": "fix: typo in README\n\nLong description here" }
+  ]
+}

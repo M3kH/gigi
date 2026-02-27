@@ -1,0 +1,19 @@
+{
+  "action": "closed",
+  "number": 10,
+  "repository": {
+    "name": "gigi",
+    "full_name": "idea/gigi",
+    "html_url": "http://localhost:3300/idea/gigi"
+  },
+  "pull_request": {
+    "number": 10,
+    "title": "feat: add dark mode",
+    "html_url": "http://localhost:3300/idea/gigi/pulls/10",
+    "user": { "login": "bob" },
+    "merged": true,
+    "head": { "ref": "feat/dark-mode" },
+    "base": { "ref": "main" }
+  },
+  "sender": { "login": "bob" }
+}

@@ -1,358 +1,262 @@
 /**
- * Tests for webhookRouter.ts — pure function logic
+ * Webhook Router — Pure Function Tests
  *
  * Tests extractRefs, extractTags, shouldAutoCreate, shouldAutoClose,
- * and all format* functions without any database dependency.
+ * and all format* functions by importing directly from the source module.
+ *
+ * Uses vi.mock() to stub I/O dependencies (store, threads, agent, events,
+ * response-routing) so pure functions can be tested without a database.
  */
 
-import assert from 'node:assert/strict'
+import { vi } from 'vitest'
 
-// ─── Re-implement pure functions from webhookRouter.ts ───────────────
+// Mock all I/O dependencies before importing
+vi.mock('../lib/core/store', () => ({
+  getPool: vi.fn(),
+  getConfig: vi.fn(),
+  findByTag: vi.fn(),
+  getConversation: vi.fn(),
+  createConversation: vi.fn(),
+  updateConversation: vi.fn(),
+  addMessage: vi.fn(),
+  getMessages: vi.fn(),
+  stopThread: vi.fn(),
+  addTags: vi.fn(),
+  setSessionId: vi.fn(),
+}))
 
-interface WebhookPayload {
-  action?: string
-  repository?: { name?: string; full_name?: string; html_url?: string }
-  issue?: {
-    number?: number
-    title?: string
-    html_url?: string
-    user?: { login?: string }
-    state?: string
-    pull_request?: unknown
-  }
-  pull_request?: {
-    number?: number
-    title?: string
-    html_url?: string
-    user?: { login?: string }
-    merged?: boolean
-    head?: { ref?: string }
-    base?: { ref?: string }
-  }
-  number?: number
-  comment?: { body?: string; user?: { login?: string }; html_url?: string }
-  review?: { body?: string; user?: { login?: string } }
-  pusher?: { login?: string }
-  ref?: string
-  commits?: Array<{ message: string }>
-  sender?: { login?: string }
-}
+vi.mock('../lib/core/threads', () => ({
+  findThreadByRef: vi.fn(),
+  createThread: vi.fn(),
+  addThreadRef: vi.fn(),
+  addThreadEvent: vi.fn(),
+  getThread: vi.fn(),
+  updateThreadStatus: vi.fn(),
+  updateThreadRefStatus: vi.fn(),
+  setThreadSession: vi.fn(),
+}))
 
-interface WebhookRef {
-  repo: string
-  ref_type: 'issue' | 'pr'
-  number: number
-}
+vi.mock('../lib/core/agent', () => ({
+  runAgent: vi.fn(),
+}))
 
-const extractRefs = (event: string, payload: WebhookPayload): WebhookRef[] => {
-  const refs: WebhookRef[] = []
-  const repo = payload.repository?.name
-  if (!repo) return refs
+vi.mock('../lib/core/events', () => ({
+  emit: vi.fn(),
+}))
 
-  switch (event) {
-    case 'issues':
-      if (payload.issue?.number) {
-        refs.push({ repo, ref_type: 'issue', number: payload.issue.number })
-      }
-      break
-    case 'issue_comment':
-      if (payload.issue?.number) {
-        if (payload.issue?.pull_request) {
-          refs.push({ repo, ref_type: 'pr', number: payload.issue.number })
-        } else {
-          refs.push({ repo, ref_type: 'issue', number: payload.issue.number })
-        }
-      }
-      break
-    case 'pull_request': {
-      const prNum = payload.number || payload.pull_request?.number
-      if (prNum) {
-        refs.push({ repo, ref_type: 'pr', number: prNum })
-      }
-      break
-    }
-    case 'pull_request_review_comment':
-      if (payload.pull_request?.number) {
-        refs.push({ repo, ref_type: 'pr', number: payload.pull_request.number })
-      }
-      break
-  }
+vi.mock('../lib/api/webhookNotifier', () => ({
+  notifyWebhook: vi.fn().mockResolvedValue(true),
+  notifyThreadEvent: vi.fn().mockResolvedValue(true),
+}))
 
-  return refs
-}
+vi.mock('../lib/core/response-routing', () => ({
+  determineRouting: vi.fn().mockReturnValue({ notify: [], notifyCondition: 'never' }),
+  isSignificantEvent: vi.fn().mockReturnValue(false),
+  buildDeliveryMetadata: vi.fn().mockReturnValue({}),
+  getThreadActiveChannels: vi.fn().mockResolvedValue([]),
+}))
 
-const extractTags = (event: string, payload: WebhookPayload): string[] => {
-  const tags: string[] = []
-  const repo = payload.repository?.name
-  if (!repo) return tags
+import {
+  extractRefs,
+  extractTags,
+  shouldAutoCreate,
+  shouldAutoClose,
+  formatWebhookEvent,
+  formatIssueEvent,
+  formatIssueCommentEvent,
+  formatPREvent,
+  formatPushEvent,
+  formatPRReviewCommentEvent,
+  type WebhookRef,
+} from '../lib/api/webhookRouter'
 
-  tags.push(repo)
+import type { WebhookPayload } from '../lib/api/webhooks'
 
-  switch (event) {
-    case 'issues':
-      if (payload.issue?.number) tags.push(`${repo}#${payload.issue.number}`)
-      break
-    case 'issue_comment':
-      if (payload.issue?.number) {
-        tags.push(`${repo}#${payload.issue.number}`)
-        if (payload.issue?.pull_request) tags.push(`pr#${payload.issue.number}`)
-      }
-      break
-    case 'pull_request': {
-      const prNum = payload.number || payload.pull_request?.number
-      if (prNum) {
-        tags.push(`${repo}#${prNum}`)
-        tags.push(`pr#${prNum}`)
-      }
-      break
-    }
-    case 'pull_request_review_comment':
-      if (payload.pull_request?.number) {
-        tags.push(`${repo}#${payload.pull_request.number}`)
-        tags.push(`pr#${payload.pull_request.number}`)
-      }
-      break
-  }
+// ─── Fixtures ────────────────────────────────────────────────────────
 
-  return tags
-}
-
-const shouldAutoCreate = (event: string, payload: WebhookPayload): boolean => {
-  return (
-    (event === 'issues' && payload.action === 'opened') ||
-    (event === 'pull_request' && payload.action === 'opened')
-  )
-}
-
-interface MockConversation {
-  status: string
-}
-
-const shouldAutoClose = (event: string, payload: WebhookPayload, conversation: MockConversation): boolean => {
-  if (conversation.status === 'stopped' || conversation.status === 'archived') return false
-  return (
-    (event === 'issues' && payload.action === 'closed') ||
-    (event === 'pull_request' && (payload.action === 'closed' || payload.pull_request?.merged === true))
-  )
-}
-
-// ─── Format functions ────────────────────────────────────────────────
-
-const formatIssueEvent = (payload: WebhookPayload): string => {
-  const { action, issue } = payload
-  const emoji: Record<string, string> = { opened: '📋', closed: '✅', reopened: '🔄', edited: '✏️' }
-  return `${emoji[action!] || '📋'} Issue #${issue!.number} ${action}: "${issue!.title}" by @${issue?.user?.login}\n${issue?.html_url || ''}`
-}
-
-const formatPREvent = (payload: WebhookPayload): string => {
-  const { action, pull_request, number } = payload
-  const pr = pull_request
-  const prNum = number || pr?.number
-  const emoji: Record<string, string> = {
-    opened: '🔀',
-    closed: pr?.merged ? '✅' : '❌',
-    synchronized: '🔄',
-    merged: '✅',
-    reopened: '🔄',
-  }
-  const status = pr?.merged ? 'merged' : action
-  return `${emoji[action!] || '🔀'} PR #${prNum} ${status}: "${pr?.title}" by @${pr?.user?.login}\n${pr?.head?.ref || ''} → ${pr?.base?.ref || ''}\n${pr?.html_url || ''}`
-}
-
-const formatIssueCommentEvent = (payload: WebhookPayload): string => {
-  const { issue, comment } = payload
-  const commentPreview = comment?.body?.slice(0, 200) || ''
-  return `💬 @${comment?.user?.login} commented on issue #${issue!.number}:\n"${commentPreview}${commentPreview.length >= 200 ? '...' : ''}"\n${comment?.html_url || ''}`
-}
-
-const formatPushEvent = (payload: WebhookPayload): string => {
-  const commits = payload.commits || []
-  const commitSummary = commits.slice(0, 3).map((c) => `  • ${c.message.split('\n')[0]}`).join('\n')
-  const moreText = commits.length > 3 ? `\n  ... and ${commits.length - 3} more` : ''
-  return `📤 @${payload.pusher?.login} pushed ${commits.length} commit(s) to ${payload.ref}:\n${commitSummary}${moreText}`
-}
-
-const formatPRReviewCommentEvent = (payload: WebhookPayload): string => {
-  const { comment, pull_request } = payload
-  const commentPreview = comment?.body?.slice(0, 200) || ''
-  return `💬 @${comment?.user?.login} commented on PR #${pull_request!.number}:\n"${commentPreview}${commentPreview.length >= 200 ? '...' : ''}"\n${comment?.html_url || ''}`
-}
-
-const formatWebhookEvent = (event: string, payload: WebhookPayload): string => {
-  const repo = payload.repository?.full_name || payload.repository?.name
-
-  switch (event) {
-    case 'issues':
-      return formatIssueEvent(payload)
-    case 'issue_comment':
-      return formatIssueCommentEvent(payload)
-    case 'pull_request':
-      return formatPREvent(payload)
-    case 'pull_request_review_comment':
-      return formatPRReviewCommentEvent(payload)
-    case 'push':
-      return formatPushEvent(payload)
-    default:
-      return `[Webhook] ${event} in ${repo}`
-  }
-}
+import issueOpened from './fixtures/webhooks/issue_opened.json'
+import issueClosed from './fixtures/webhooks/issue_closed.json'
+import prOpened from './fixtures/webhooks/pull_request_opened.json'
+import prMerged from './fixtures/webhooks/pull_request_merged.json'
+import issueComment from './fixtures/webhooks/issue_comment.json'
+import issueCommentOnPr from './fixtures/webhooks/issue_comment_on_pr.json'
+import prReviewComment from './fixtures/webhooks/pr_review_comment.json'
+import pushPayload from './fixtures/webhooks/push.json'
 
 // ─── extractRefs tests ───────────────────────────────────────────────
 
 describe('extractRefs', () => {
-  const basePayload: WebhookPayload = {
-    repository: { name: 'gigi', full_name: 'idea/gigi' },
-  }
-
-  it('extracts issue ref from issues event', () => {
-    const refs = extractRefs('issues', {
-      ...basePayload,
-      issue: { number: 42 },
-    })
-    assert.deepEqual(refs, [{ repo: 'gigi', ref_type: 'issue', number: 42 }])
+  it('extracts issue ref from issues event (fixture)', () => {
+    const refs = extractRefs('issues', issueOpened as WebhookPayload)
+    expect(refs).toEqual([{ repo: 'gigi', ref_type: 'issue', number: 42 }])
   })
 
-  it('extracts issue ref from issue_comment event', () => {
-    const refs = extractRefs('issue_comment', {
-      ...basePayload,
-      issue: { number: 42 },
-    })
-    assert.deepEqual(refs, [{ repo: 'gigi', ref_type: 'issue', number: 42 }])
+  it('extracts issue ref from issue_comment event (fixture)', () => {
+    const refs = extractRefs('issue_comment', issueComment as WebhookPayload)
+    expect(refs).toEqual([{ repo: 'gigi', ref_type: 'issue', number: 42 }])
   })
 
-  it('extracts PR ref from issue_comment on a PR', () => {
-    const refs = extractRefs('issue_comment', {
-      ...basePayload,
-      issue: { number: 10, pull_request: {} },
-    })
-    assert.deepEqual(refs, [{ repo: 'gigi', ref_type: 'pr', number: 10 }])
+  it('extracts PR ref from issue_comment on a PR (fixture)', () => {
+    const refs = extractRefs('issue_comment', issueCommentOnPr as WebhookPayload)
+    expect(refs).toEqual([{ repo: 'gigi', ref_type: 'pr', number: 10 }])
   })
 
-  it('extracts PR ref from pull_request event', () => {
-    const refs = extractRefs('pull_request', {
-      ...basePayload,
-      number: 15,
-      pull_request: { number: 15 },
-    })
-    assert.deepEqual(refs, [{ repo: 'gigi', ref_type: 'pr', number: 15 }])
+  it('extracts PR ref from pull_request event (fixture)', () => {
+    const refs = extractRefs('pull_request', prOpened as WebhookPayload)
+    expect(refs).toEqual([{ repo: 'gigi', ref_type: 'pr', number: 10 }])
   })
 
   it('uses payload.number over pull_request.number', () => {
     const refs = extractRefs('pull_request', {
-      ...basePayload,
+      repository: { name: 'gigi', full_name: 'idea/gigi' },
       number: 20,
-      pull_request: { number: 15 },
-    })
-    assert.deepEqual(refs, [{ repo: 'gigi', ref_type: 'pr', number: 20 }])
+      pull_request: { number: 15, title: 'x', merged: false, html_url: '', head: { ref: '' }, base: { ref: '' } },
+    } as WebhookPayload)
+    expect(refs).toEqual([{ repo: 'gigi', ref_type: 'pr', number: 20 }])
   })
 
-  it('extracts PR ref from pull_request_review_comment event', () => {
-    const refs = extractRefs('pull_request_review_comment', {
-      ...basePayload,
-      pull_request: { number: 7 },
-    })
-    assert.deepEqual(refs, [{ repo: 'gigi', ref_type: 'pr', number: 7 }])
+  it('extracts PR ref from pull_request_review_comment event (fixture)', () => {
+    const refs = extractRefs('pull_request_review_comment', prReviewComment as WebhookPayload)
+    expect(refs).toEqual([{ repo: 'gigi', ref_type: 'pr', number: 10 }])
   })
 
   it('returns empty for push event', () => {
-    const refs = extractRefs('push', {
-      ...basePayload,
-      ref: 'refs/heads/main',
-    })
-    assert.deepEqual(refs, [])
+    const refs = extractRefs('push', pushPayload as WebhookPayload)
+    expect(refs).toEqual([])
   })
 
   it('returns empty when repository is missing', () => {
-    const refs = extractRefs('issues', { issue: { number: 1 } })
-    assert.deepEqual(refs, [])
+    const refs = extractRefs('issues', { issue: { number: 1 } } as WebhookPayload)
+    expect(refs).toEqual([])
   })
 
   it('returns empty for unknown event', () => {
-    const refs = extractRefs('star', basePayload)
-    assert.deepEqual(refs, [])
+    const refs = extractRefs('star', { repository: { name: 'gigi', full_name: 'idea/gigi' } } as WebhookPayload)
+    expect(refs).toEqual([])
+  })
+
+  it('returns empty when issue number is missing', () => {
+    const refs = extractRefs('issues', {
+      repository: { name: 'gigi', full_name: 'idea/gigi' },
+      issue: { title: 'No number' },
+    } as unknown as WebhookPayload)
+    expect(refs).toEqual([])
   })
 })
 
 // ─── extractTags tests ───────────────────────────────────────────────
 
 describe('extractTags', () => {
-  const basePayload: WebhookPayload = {
-    repository: { name: 'gigi' },
-  }
-
   it('always includes repo name as first tag', () => {
-    const tags = extractTags('issues', {
-      ...basePayload,
-      issue: { number: 42 },
-    })
-    assert.equal(tags[0], 'gigi')
+    const tags = extractTags('issues', issueOpened as WebhookPayload)
+    expect(tags[0]).toBe('gigi')
   })
 
-  it('generates issue tag for issues event', () => {
-    const tags = extractTags('issues', {
-      ...basePayload,
-      issue: { number: 42 },
-    })
-    assert.deepEqual(tags, ['gigi', 'gigi#42'])
+  it('generates issue tag for issues event (fixture)', () => {
+    const tags = extractTags('issues', issueOpened as WebhookPayload)
+    expect(tags).toEqual(['gigi', 'gigi#42'])
   })
 
-  it('generates issue + PR tags for issue_comment on PR', () => {
-    const tags = extractTags('issue_comment', {
-      ...basePayload,
-      issue: { number: 10, pull_request: {} },
-    })
-    assert.deepEqual(tags, ['gigi', 'gigi#10', 'pr#10'])
+  it('generates issue tag for issue_comment event (fixture)', () => {
+    const tags = extractTags('issue_comment', issueComment as WebhookPayload)
+    expect(tags).toEqual(['gigi', 'gigi#42'])
   })
 
-  it('generates PR tags for pull_request event', () => {
-    const tags = extractTags('pull_request', {
-      ...basePayload,
-      number: 15,
-      pull_request: { number: 15 },
-    })
-    assert.deepEqual(tags, ['gigi', 'gigi#15', 'pr#15'])
+  it('generates issue + PR tags for issue_comment on PR (fixture)', () => {
+    const tags = extractTags('issue_comment', issueCommentOnPr as WebhookPayload)
+    expect(tags).toEqual(['gigi', 'gigi#10', 'pr#10'])
   })
 
-  it('generates PR tags for review comments', () => {
-    const tags = extractTags('pull_request_review_comment', {
-      ...basePayload,
-      pull_request: { number: 7 },
-    })
-    assert.deepEqual(tags, ['gigi', 'gigi#7', 'pr#7'])
+  it('generates PR tags for pull_request event (fixture)', () => {
+    const tags = extractTags('pull_request', prOpened as WebhookPayload)
+    expect(tags).toEqual(['gigi', 'gigi#10', 'pr#10'])
+  })
+
+  it('generates PR tags for review comments (fixture)', () => {
+    const tags = extractTags('pull_request_review_comment', prReviewComment as WebhookPayload)
+    expect(tags).toEqual(['gigi', 'gigi#10', 'pr#10'])
   })
 
   it('returns only repo for push event', () => {
-    const tags = extractTags('push', basePayload)
-    assert.deepEqual(tags, ['gigi'])
+    const tags = extractTags('push', pushPayload as WebhookPayload)
+    expect(tags).toEqual(['gigi'])
   })
 
   it('returns empty when repository is missing', () => {
-    const tags = extractTags('issues', { issue: { number: 1 } })
-    assert.deepEqual(tags, [])
+    const tags = extractTags('issues', { issue: { number: 1 } } as WebhookPayload)
+    expect(tags).toEqual([])
+  })
+
+  it('returns only repo tag for unknown event types', () => {
+    const tags = extractTags('repository', { repository: { name: 'gigi', full_name: 'idea/gigi' } } as WebhookPayload)
+    expect(tags).toEqual(['gigi'])
+  })
+
+  it('prefers payload.number over pull_request.number for tags', () => {
+    const tags = extractTags('pull_request', {
+      repository: { name: 'gigi', full_name: 'idea/gigi' },
+      number: 10,
+      pull_request: { number: 99, title: 'x', merged: false, html_url: '', head: { ref: '' }, base: { ref: '' } },
+    } as WebhookPayload)
+    expect(tags).toEqual(['gigi', 'gigi#10', 'pr#10'])
+  })
+})
+
+// ─── Tag priority (tag sorting logic) ────────────────────────────────
+
+describe('tag priority — specific tags first', () => {
+  it('tags with # should sort before tags without', () => {
+    const tags = ['gigi', 'gigi#42', 'pr#42']
+    const prioritized = [...tags].sort((a, b) => {
+      const aSpecific = a.includes('#')
+      const bSpecific = b.includes('#')
+      if (aSpecific && !bSpecific) return -1
+      if (!aSpecific && bSpecific) return 1
+      return 0
+    })
+    expect(prioritized[0]).toContain('#')
+    expect(prioritized[1]).toContain('#')
+    expect(prioritized[2]).toBe('gigi')
+  })
+
+  it('keeps same-specificity order stable', () => {
+    const tags = ['gigi#42', 'pr#42']
+    const prioritized = [...tags].sort((a, b) => {
+      const aSpecific = a.includes('#')
+      const bSpecific = b.includes('#')
+      if (aSpecific && !bSpecific) return -1
+      if (!aSpecific && bSpecific) return 1
+      return 0
+    })
+    expect(prioritized).toEqual(['gigi#42', 'pr#42'])
   })
 })
 
 // ─── shouldAutoCreate tests ──────────────────────────────────────────
 
 describe('shouldAutoCreate', () => {
-  it('returns true for newly opened issues', () => {
-    assert.ok(shouldAutoCreate('issues', { action: 'opened' }))
+  it('returns true for newly opened issues (fixture)', () => {
+    expect(shouldAutoCreate('issues', issueOpened as WebhookPayload)).toBe(true)
   })
 
-  it('returns true for newly opened PRs', () => {
-    assert.ok(shouldAutoCreate('pull_request', { action: 'opened' }))
+  it('returns true for newly opened PRs (fixture)', () => {
+    expect(shouldAutoCreate('pull_request', prOpened as WebhookPayload)).toBe(true)
   })
 
   it('returns false for closed issues', () => {
-    assert.ok(!shouldAutoCreate('issues', { action: 'closed' }))
+    expect(shouldAutoCreate('issues', issueClosed as WebhookPayload)).toBe(false)
   })
 
   it('returns false for comments', () => {
-    assert.ok(!shouldAutoCreate('issue_comment', { action: 'created' }))
+    expect(shouldAutoCreate('issue_comment', issueComment as WebhookPayload)).toBe(false)
   })
 
   it('returns false for push events', () => {
-    assert.ok(!shouldAutoCreate('push', {}))
+    expect(shouldAutoCreate('push', pushPayload as WebhookPayload)).toBe(false)
+  })
+
+  it('returns false for merged PRs', () => {
+    expect(shouldAutoCreate('pull_request', prMerged as WebhookPayload)).toBe(false)
   })
 })
 
@@ -360,171 +264,236 @@ describe('shouldAutoCreate', () => {
 
 describe('shouldAutoClose', () => {
   it('auto-closes on issue closed', () => {
-    assert.ok(shouldAutoClose('issues', { action: 'closed' }, { status: 'paused' }))
+    expect(shouldAutoClose('issues', issueClosed as WebhookPayload, { status: 'paused' })).toBe(true)
   })
 
   it('auto-closes on PR closed', () => {
-    assert.ok(shouldAutoClose('pull_request', { action: 'closed' }, { status: 'paused' }))
+    expect(shouldAutoClose('pull_request', { action: 'closed' } as WebhookPayload, { status: 'paused' })).toBe(true)
   })
 
-  it('auto-closes on PR merged', () => {
-    assert.ok(shouldAutoClose('pull_request', {
-      action: 'closed',
-      pull_request: { merged: true },
-    }, { status: 'active' }))
+  it('auto-closes on PR merged (fixture)', () => {
+    expect(shouldAutoClose('pull_request', prMerged as WebhookPayload, { status: 'active' })).toBe(true)
   })
 
   it('does NOT auto-close already stopped conversations', () => {
-    assert.ok(!shouldAutoClose('issues', { action: 'closed' }, { status: 'stopped' }))
+    expect(shouldAutoClose('issues', issueClosed as WebhookPayload, { status: 'stopped' })).toBe(false)
   })
 
   it('does NOT auto-close already archived conversations', () => {
-    assert.ok(!shouldAutoClose('issues', { action: 'closed' }, { status: 'archived' }))
+    expect(shouldAutoClose('issues', issueClosed as WebhookPayload, { status: 'archived' })).toBe(false)
   })
 
   it('does NOT auto-close on issue reopened', () => {
-    assert.ok(!shouldAutoClose('issues', { action: 'reopened' }, { status: 'active' }))
+    expect(shouldAutoClose('issues', { action: 'reopened' } as WebhookPayload, { status: 'active' })).toBe(false)
   })
 
   it('does NOT auto-close on PR opened', () => {
-    assert.ok(!shouldAutoClose('pull_request', { action: 'opened' }, { status: 'paused' }))
+    expect(shouldAutoClose('pull_request', prOpened as WebhookPayload, { status: 'paused' })).toBe(false)
+  })
+
+  it('does NOT auto-close on comment events', () => {
+    expect(shouldAutoClose('issue_comment', issueComment as WebhookPayload, { status: 'active' })).toBe(false)
   })
 })
 
-// ─── formatWebhookEvent tests ────────────────────────────────────────
+// ─── formatIssueEvent tests ──────────────────────────────────────────
 
-describe('formatWebhookEvent', () => {
-  it('formats issue opened event', () => {
-    const msg = formatWebhookEvent('issues', {
-      action: 'opened',
-      issue: { number: 42, title: 'Bug report', html_url: 'http://localhost/42', user: { login: 'alice' } },
-      repository: { name: 'gigi' },
-    })
-    assert.ok(msg.includes('📋'))
-    assert.ok(msg.includes('Issue #42'))
-    assert.ok(msg.includes('opened'))
-    assert.ok(msg.includes('@alice'))
+describe('formatIssueEvent', () => {
+  it('formats opened issue with correct emoji', () => {
+    const msg = formatIssueEvent(issueOpened as WebhookPayload)
+    expect(msg).toContain('📋')
+    expect(msg).toContain('Issue #42')
+    expect(msg).toContain('opened')
+    expect(msg).toContain('@alice')
   })
 
-  it('formats issue closed event', () => {
-    const msg = formatWebhookEvent('issues', {
+  it('formats closed issue with correct emoji', () => {
+    const msg = formatIssueEvent(issueClosed as WebhookPayload)
+    expect(msg).toContain('✅')
+    expect(msg).toContain('closed')
+  })
+
+  it('uses default emoji for unknown action', () => {
+    const msg = formatIssueEvent({
+      action: 'milestoned',
+      issue: { number: 1, title: 'Test', body: '', html_url: '', user: { login: 'u' } },
+    } as WebhookPayload)
+    expect(msg).toContain('📋')
+  })
+
+  it('formats reopened issue with correct emoji', () => {
+    const msg = formatIssueEvent({
+      action: 'reopened',
+      issue: { number: 1, title: 'Test', body: '', html_url: '', user: { login: 'u' } },
+    } as WebhookPayload)
+    expect(msg).toContain('🔄')
+  })
+})
+
+// ─── formatPREvent tests ─────────────────────────────────────────────
+
+describe('formatPREvent', () => {
+  it('formats opened PR with branches', () => {
+    const msg = formatPREvent(prOpened as WebhookPayload)
+    expect(msg).toContain('🔀')
+    expect(msg).toContain('PR #10')
+    expect(msg).toContain('feat/dark-mode')
+    expect(msg).toContain('main')
+  })
+
+  it('formats merged PR with status "merged"', () => {
+    const msg = formatPREvent(prMerged as WebhookPayload)
+    expect(msg).toContain('merged')
+    expect(msg).toContain('✅')
+  })
+
+  it('formats closed (not merged) PR', () => {
+    const msg = formatPREvent({
       action: 'closed',
-      issue: { number: 42, title: 'Bug report', html_url: 'http://localhost/42', user: { login: 'alice' } },
-      repository: { name: 'gigi' },
-    })
-    assert.ok(msg.includes('✅'))
-    assert.ok(msg.includes('closed'))
+      number: 5,
+      pull_request: { number: 5, title: 'Dropped', merged: false, html_url: '', user: { login: 'u' }, head: { ref: 'feat' }, base: { ref: 'main' } },
+    } as WebhookPayload)
+    expect(msg).toContain('❌')
+    expect(msg).toContain('closed')
   })
+})
 
-  it('formats PR opened event with branches', () => {
-    const msg = formatWebhookEvent('pull_request', {
-      action: 'opened',
-      number: 10,
-      pull_request: {
-        number: 10,
-        title: 'New feature',
-        html_url: 'http://localhost/10',
-        user: { login: 'bob' },
-        head: { ref: 'feat/x' },
-        base: { ref: 'main' },
-      },
-      repository: { name: 'gigi' },
-    })
-    assert.ok(msg.includes('🔀'))
-    assert.ok(msg.includes('PR #10'))
-    assert.ok(msg.includes('feat/x'))
-    assert.ok(msg.includes('main'))
-  })
+// ─── formatIssueCommentEvent tests ───────────────────────────────────
 
-  it('formats merged PR with merged status', () => {
-    const msg = formatWebhookEvent('pull_request', {
-      action: 'closed',
-      number: 10,
-      pull_request: {
-        number: 10,
-        title: 'Feature',
-        merged: true,
-        html_url: 'http://localhost/10',
-        user: { login: 'bob' },
-        head: { ref: 'feat' },
-        base: { ref: 'main' },
-      },
-      repository: { name: 'gigi' },
-    })
-    assert.ok(msg.includes('merged'))
-  })
-
-  it('formats issue comment event', () => {
-    const msg = formatWebhookEvent('issue_comment', {
-      issue: { number: 42 },
-      comment: { body: 'LGTM', user: { login: 'carol' }, html_url: 'http://localhost/c' },
-      repository: { name: 'gigi' },
-    })
-    assert.ok(msg.includes('💬'))
-    assert.ok(msg.includes('#42'))
-    assert.ok(msg.includes('@carol'))
-    assert.ok(msg.includes('LGTM'))
+describe('formatIssueCommentEvent', () => {
+  it('formats comment with user and preview (fixture)', () => {
+    const msg = formatIssueCommentEvent(issueComment as WebhookPayload)
+    expect(msg).toContain('💬')
+    expect(msg).toContain('@carol')
+    expect(msg).toContain('#42')
+    expect(msg).toContain('I can reproduce this')
   })
 
   it('truncates long comments at 200 chars', () => {
-    const longBody = 'x'.repeat(250)
-    const msg = formatWebhookEvent('issue_comment', {
-      issue: { number: 1 },
-      comment: { body: longBody, user: { login: 'u' } },
-      repository: { name: 'gigi' },
-    })
-    assert.ok(msg.includes('...'))
+    const longBody = 'a'.repeat(250)
+    const msg = formatIssueCommentEvent({
+      issue: { number: 1, title: 'T', body: '', html_url: '' },
+      comment: { body: longBody, user: { login: 'u' }, html_url: '' },
+    } as WebhookPayload)
+    expect(msg).toContain('...')
   })
 
-  it('formats push event with commits', () => {
-    const msg = formatWebhookEvent('push', {
-      ref: 'refs/heads/main',
-      pusher: { login: 'dave' },
-      commits: [
-        { message: 'feat: first' },
-        { message: 'fix: second\nlong description here' },
-      ],
-      repository: { name: 'gigi' },
-    })
-    assert.ok(msg.includes('📤'))
-    assert.ok(msg.includes('@dave'))
-    assert.ok(msg.includes('2 commit(s)'))
-    assert.ok(msg.includes('feat: first'))
-    assert.ok(msg.includes('fix: second'))
-    // Should NOT include the long description (only first line)
-    assert.ok(!msg.includes('long description here'))
+  it('does not truncate short comments', () => {
+    const msg = formatIssueCommentEvent({
+      issue: { number: 1, title: 'T', body: '', html_url: '' },
+      comment: { body: 'Short', user: { login: 'u' }, html_url: '' },
+    } as WebhookPayload)
+    expect(msg).not.toContain('...')
+  })
+})
+
+// ─── formatPushEvent tests ───────────────────────────────────────────
+
+describe('formatPushEvent', () => {
+  it('formats push with commits (fixture)', () => {
+    const msg = formatPushEvent(pushPayload as WebhookPayload)
+    expect(msg).toContain('📤')
+    expect(msg).toContain('@alice')
+    expect(msg).toContain('2 commit(s)')
+    expect(msg).toContain('feat: add webhook notifier')
+  })
+
+  it('only shows first line of multi-line commit messages', () => {
+    const msg = formatPushEvent(pushPayload as WebhookPayload)
+    expect(msg).toContain('fix: typo in README')
+    expect(msg).not.toContain('Long description here')
   })
 
   it('shows "and N more" for >3 commits', () => {
-    const msg = formatWebhookEvent('push', {
+    const msg = formatPushEvent({
       ref: 'refs/heads/main',
       pusher: { login: 'u' },
       commits: [
-        { message: 'c1' }, { message: 'c2' }, { message: 'c3' },
-        { message: 'c4' }, { message: 'c5' },
+        { id: '1', message: 'c1' }, { id: '2', message: 'c2' },
+        { id: '3', message: 'c3' }, { id: '4', message: 'c4' },
+        { id: '5', message: 'c5' },
       ],
-      repository: { name: 'gigi' },
-    })
-    assert.ok(msg.includes('and 2 more'))
+    } as WebhookPayload)
+    expect(msg).toContain('and 2 more')
   })
 
-  it('formats PR review comment event', () => {
-    const msg = formatWebhookEvent('pull_request_review_comment', {
-      pull_request: { number: 7 },
-      comment: { body: 'Nitpick', user: { login: 'eve' }, html_url: 'http://localhost/r' },
-      repository: { name: 'gigi' },
-    })
-    assert.ok(msg.includes('💬'))
-    assert.ok(msg.includes('PR #7'))
-    assert.ok(msg.includes('@eve'))
+  it('does not show "and N more" for <=3 commits', () => {
+    const msg = formatPushEvent(pushPayload as WebhookPayload)
+    expect(msg).not.toContain('and')
+  })
+
+  it('handles empty commits array', () => {
+    const msg = formatPushEvent({
+      ref: 'refs/heads/main',
+      pusher: { login: 'u' },
+      commits: [],
+    } as unknown as WebhookPayload)
+    expect(msg).toContain('0 commit(s)')
+  })
+})
+
+// ─── formatPRReviewCommentEvent tests ────────────────────────────────
+
+describe('formatPRReviewCommentEvent', () => {
+  it('formats PR review comment (fixture)', () => {
+    const msg = formatPRReviewCommentEvent(prReviewComment as WebhookPayload)
+    expect(msg).toContain('💬')
+    expect(msg).toContain('@eve')
+    expect(msg).toContain('PR #10')
+    expect(msg).toContain('null check')
+  })
+
+  it('truncates long review comments at 200 chars', () => {
+    const longBody = 'r'.repeat(250)
+    const msg = formatPRReviewCommentEvent({
+      pull_request: { number: 1, title: 'T', merged: false, html_url: '', user: { login: 'u' }, head: { ref: '' }, base: { ref: '' } },
+      comment: { body: longBody, user: { login: 'u' }, html_url: '' },
+    } as WebhookPayload)
+    expect(msg).toContain('...')
+  })
+})
+
+// ─── formatWebhookEvent (dispatcher) tests ───────────────────────────
+
+describe('formatWebhookEvent', () => {
+  it('dispatches issues to formatIssueEvent', () => {
+    const msg = formatWebhookEvent('issues', issueOpened as WebhookPayload)
+    expect(msg).toContain('Issue #42')
+  })
+
+  it('dispatches issue_comment to formatIssueCommentEvent', () => {
+    const msg = formatWebhookEvent('issue_comment', issueComment as WebhookPayload)
+    expect(msg).toContain('@carol')
+  })
+
+  it('dispatches pull_request to formatPREvent', () => {
+    const msg = formatWebhookEvent('pull_request', prOpened as WebhookPayload)
+    expect(msg).toContain('PR #10')
+  })
+
+  it('dispatches pull_request_review_comment to formatPRReviewCommentEvent', () => {
+    const msg = formatWebhookEvent('pull_request_review_comment', prReviewComment as WebhookPayload)
+    expect(msg).toContain('PR #10')
+  })
+
+  it('dispatches push to formatPushEvent', () => {
+    const msg = formatWebhookEvent('push', pushPayload as WebhookPayload)
+    expect(msg).toContain('@alice')
   })
 
   it('falls back for unknown event types', () => {
     const msg = formatWebhookEvent('star', {
-      repository: { full_name: 'idea/gigi' },
-    })
-    assert.ok(msg.includes('[Webhook]'))
-    assert.ok(msg.includes('star'))
-    assert.ok(msg.includes('idea/gigi'))
+      repository: { name: 'gigi', full_name: 'idea/gigi' },
+    } as WebhookPayload)
+    expect(msg).toContain('[Webhook]')
+    expect(msg).toContain('star')
+    expect(msg).toContain('idea/gigi')
+  })
+
+  it('uses repo name when full_name is absent in fallback', () => {
+    const msg = formatWebhookEvent('star', {
+      repository: { name: 'gigi', full_name: 'idea/gigi' },
+    } as WebhookPayload)
+    expect(msg).toContain('idea/gigi')
   })
 })

@@ -63,7 +63,7 @@ export interface WebhookResult {
 
 // ─── Signature Verification ─────────────────────────────────────────
 
-const verifySignature = (payload: string, signature: string, secret: string): boolean => {
+export const verifySignature = (payload: string, signature: string, secret: string): boolean => {
   if (!signature || !secret) return false
   const expected = createHmac('sha256', secret).update(payload).digest('hex')
   try {
@@ -257,7 +257,7 @@ const isSelfEvent = async (event: string, payload: WebhookPayload): Promise<bool
 
 // ─── Event Summary ──────────────────────────────────────────────────
 
-const summarizeEvent = (event: string, payload: WebhookPayload): string | null => {
+export const summarizeEvent = (event: string, payload: WebhookPayload): string | null => {
   switch (event) {
     case 'push':
       return `[Gitea Push] ${payload.pusher?.login} pushed ${payload.commits?.length || 0} commits to ${payload.repository?.full_name}:${payload.ref}\n` +
