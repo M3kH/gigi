@@ -402,7 +402,17 @@ export const handleMessage = async (
     if ((err as Error).name === 'AbortError') {
       console.log(`[router] Agent stopped by user for conversation ${convId}`)
       wrappedOnEvent({ type: 'agent_stopped', conversationId: convId })
-      await store.addMessage(convId, 'assistant', [{ type: 'text', text: '⏹️ Stopped by user' }])
+      const stopContent = [{ type: 'text' as const, text: '⏹️ Stopped by user' }]
+      await store.addMessage(convId, 'assistant', stopContent)
+      try {
+        await threads.addThreadEvent(threadId, {
+          channel: channel as threads.ThreadEventChannel,
+          direction: 'outbound',
+          actor: 'gigi',
+          content: stopContent,
+          message_type: 'text',
+        })
+      } catch { /* ignore */ }
       try {
         await store.pauseThread(convId)
         await threads.updateThreadStatus(threadId, 'paused')
@@ -413,8 +423,18 @@ export const handleMessage = async (
     // Emit agent_done with error so the frontend unblocks (clears Stop button, loading state)
     console.error('[router] Agent crashed:', (err as Error).stack || (err as Error).message)
     wrappedOnEvent({ type: 'agent_done', conversationId: convId, isError: true })
+    const errorContent = [{ type: 'text' as const, text: `Error: ${(err as Error).message}` }]
     try {
-      await store.addMessage(convId, 'assistant', [{ type: 'text', text: `Error: ${(err as Error).message}` }])
+      await store.addMessage(convId, 'assistant', errorContent)
+    } catch { /* ignore */ }
+    try {
+      await threads.addThreadEvent(threadId, {
+        channel: channel as threads.ThreadEventChannel,
+        direction: 'outbound',
+        actor: 'gigi',
+        content: errorContent,
+        message_type: 'text',
+      })
     } catch { /* ignore */ }
     try {
       await store.pauseThread(convId)

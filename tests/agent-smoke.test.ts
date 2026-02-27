@@ -230,6 +230,39 @@ describe('Agent options compatibility', () => {
   })
 })
 
+// ─── Error Propagation — thread_events regression ───────────────────
+
+describe('Error propagation to thread_events', () => {
+  // Regression: error messages were stored in legacy `messages` table but NOT in
+  // `thread_events`. The frontend renders from thread_events when they exist,
+  // so errors were invisible in the chat panel.
+
+  it('error catch block must store to thread_events (not just messages)', async () => {
+    const routerSrc = await import('node:fs').then(fs =>
+      fs.readFileSync(require.resolve('../lib/core/router.ts'), 'utf-8'),
+    )
+
+    // The error path (agent crash) must call threads.addThreadEvent with error content
+    // Look for the pattern: errorContent followed by addThreadEvent
+    assert.ok(
+      routerSrc.includes('errorContent') && routerSrc.includes('threads.addThreadEvent(threadId'),
+      'Error catch block must persist error to thread_events via addThreadEvent',
+    )
+  })
+
+  it('abort catch block must store to thread_events (not just messages)', async () => {
+    const routerSrc = await import('node:fs').then(fs =>
+      fs.readFileSync(require.resolve('../lib/core/router.ts'), 'utf-8'),
+    )
+
+    // The abort path (user stop) must call threads.addThreadEvent with stop content
+    assert.ok(
+      routerSrc.includes('stopContent') && routerSrc.includes('threads.addThreadEvent(threadId'),
+      'Abort catch block must persist stop message to thread_events via addThreadEvent',
+    )
+  })
+})
+
 // ─── Tool Failure Handler ───────────────────────────────────────────
 
 describe('Tool failure handler — agent context', () => {
