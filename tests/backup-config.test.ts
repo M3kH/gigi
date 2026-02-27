@@ -111,6 +111,24 @@ other: 'single quoted'
     assert.equal(result.other, 'single quoted')
   })
 
+  it('returns empty string for empty values without nested content', () => {
+    const yaml = `
+agent:
+  name: Gigi
+  extra_prompt_file:
+
+backup:
+  schedule:
+    interval: 6h
+`
+    const result = parseSimpleYaml(yaml) as any
+    assert.equal(result.agent.name, 'Gigi')
+    // Empty value with no nested content should be empty string, not {}
+    assert.equal(result.agent.extra_prompt_file, '')
+    assert.equal(typeof result.agent.extra_prompt_file, 'string')
+    assert.equal(result.backup.schedule.interval, '6h')
+  })
+
   it('parses booleans and numbers', () => {
     const yaml = `
 enabled: true

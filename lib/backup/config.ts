@@ -150,8 +150,8 @@ export const parseSimpleYaml = (text: string): Record<string, unknown> => {
             result[key] = parseMapping(lines[pos].indent)
           }
         } else {
-          // Empty value
-          result[key] = {}
+          // Empty value — return empty string, not empty object
+          result[key] = ''
         }
       } else {
         result[key] = parseYamlValue(val)

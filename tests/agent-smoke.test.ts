@@ -147,6 +147,32 @@ describe('Token type detection', () => {
   })
 })
 
+// ─── loadExtraPromptFile — paths[0] crash regression ─────────────────
+
+describe('loadExtraPromptFile — paths[0] crash regression', () => {
+  it('should return empty string for undefined input', async () => {
+    const { loadExtraPromptFile } = await import('../lib/core/prompt')
+    assert.equal(loadExtraPromptFile(undefined), '')
+  })
+
+  it('should return empty string for empty string input', async () => {
+    const { loadExtraPromptFile } = await import('../lib/core/prompt')
+    assert.equal(loadExtraPromptFile(''), '')
+  })
+
+  it('should not crash when given an object (regression: YAML parser returned {} for empty values)', async () => {
+    const { loadExtraPromptFile } = await import('../lib/core/prompt')
+    // The YAML parser used to return {} for `key:` with no value and no nested content.
+    // This caused path.resolve({}) to throw ERR_INVALID_ARG_TYPE.
+    assert.equal(loadExtraPromptFile({} as unknown as string), '')
+  })
+
+  it('should return empty string for non-existent file path', async () => {
+    const { loadExtraPromptFile } = await import('../lib/core/prompt')
+    assert.equal(loadExtraPromptFile('/tmp/nonexistent-gigi-test-file-12345.txt'), '')
+  })
+})
+
 // ─── System Prompt — Testing Requirements ───────────────────────────
 
 describe('System prompt testing requirements', () => {

@@ -410,11 +410,21 @@ export const handleMessage = async (
       } catch { /* ignore */ }
       throw new Error('Agent stopped by user')
     }
+    // Emit agent_done with error so the frontend unblocks (clears Stop button, loading state)
+    console.error('[router] Agent crashed:', (err as Error).stack || (err as Error).message)
+    wrappedOnEvent({ type: 'agent_done', conversationId: convId, isError: true })
+    try {
+      await store.addMessage(convId, 'assistant', [{ type: 'text', text: `Error: ${(err as Error).message}` }])
+    } catch { /* ignore */ }
+    try {
+      await store.pauseThread(convId)
+      await threads.updateThreadStatus(threadId, 'paused')
+    } catch { /* ignore */ }
+    // Flush AFTER error persistence so frontend finds data when it re-fetches
+    flushDeferredDone()
     throw err
   } finally {
     runningAgents.delete(convId)
-    // Flush any deferred agent_done that wasn't emitted (e.g. agent threw before router stored)
-    flushDeferredDone()
   }
 
   // Pause thread (agent done with this turn)
@@ -468,10 +478,6 @@ export const handleMessage = async (
     usage: response.usage || undefined,
   })
 
-  // Flush deferred agent_done now that the message is persisted — the frontend's
-  // loadMessages() will find the response in the database.
-  flushDeferredDone()
-
   // ── Response Routing: determine delivery channels ──────────────
   const threadChannels = await getThreadActiveChannels(threadId, store.getPool)
   const responseRouting = determineRouting(
@@ -500,6 +506,10 @@ export const handleMessage = async (
   } catch (err) {
     console.warn('[router] Thread event (assistant) failed:', (err as Error).message)
   }
+
+  // Flush deferred agent_done AFTER both message and thread event are persisted —
+  // the frontend's loadMessages() and getThreadEvents() will find data in the database.
+  flushDeferredDone()
 
   // Auto-link any PRs/issues created by the agent
   if (response.toolCalls.length > 0) {

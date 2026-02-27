@@ -130,8 +130,8 @@ export const loadAgentConfig = (configPath?: string): AgentConfig => {
   if (agentSection.extra_sections) {
     config.extraSections = agentSection.extra_sections as string
   }
-  if (agentSection.extra_prompt_file) {
-    config.extraPromptFile = agentSection.extra_prompt_file as string
+  if (agentSection.extra_prompt_file && typeof agentSection.extra_prompt_file === 'string') {
+    config.extraPromptFile = agentSection.extra_prompt_file
   }
 
   console.log(`[prompt] Loaded agent config: name=${config.name}, org=${config.org}`)
@@ -265,7 +265,7 @@ export const resetProviderCache = (): void => {
  * Returns empty string if the file doesn't exist or path is empty.
  */
 export const loadExtraPromptFile = (filePath?: string): string => {
-  if (!filePath) return ''
+  if (!filePath || typeof filePath !== 'string') return ''
 
   const resolved = resolve(filePath)
   if (!existsSync(resolved)) {
