@@ -438,6 +438,55 @@ interface DispatchableWorkflow {
   default_branch: string
 }
 
+describe('Workflow discovery via Actions API', () => {
+  /** Simulate the workflow filtering logic from the updated endpoint */
+  interface ApiWorkflow {
+    id: string
+    name: string
+    path: string
+    state: string
+  }
+
+  function filterActiveWorkflows(workflows: ApiWorkflow[]): ApiWorkflow[] {
+    return workflows.filter(wf => wf.state === 'active')
+  }
+
+  function extractFileName(wf: ApiWorkflow): string {
+    return wf.path.split('/').pop() ?? wf.id
+  }
+
+  it('filters out inactive/deleted workflows', () => {
+    const workflows: ApiWorkflow[] = [
+      { id: 'test.yml', name: 'test.yml', path: '.gitea/workflows/test.yml', state: 'active' },
+      { id: 'old.yml', name: 'old.yml', path: '.gitea/workflows/old.yml', state: 'deleted' },
+      { id: 'ci.yml', name: 'ci.yml', path: '.github/workflows/ci.yml', state: 'active' },
+    ]
+    const active = filterActiveWorkflows(workflows)
+    assert.equal(active.length, 2)
+    assert.ok(active.every(wf => wf.state === 'active'))
+  })
+
+  it('extracts filename from workflow path', () => {
+    const wf: ApiWorkflow = { id: 'deploy.yml', name: 'deploy.yml', path: '.gitea/workflows/deploy.yml', state: 'active' }
+    assert.equal(extractFileName(wf), 'deploy.yml')
+  })
+
+  it('extracts filename from .github/workflows path', () => {
+    const wf: ApiWorkflow = { id: 'ci.yml', name: 'ci.yml', path: '.github/workflows/ci.yml', state: 'active' }
+    assert.equal(extractFileName(wf), 'ci.yml')
+  })
+
+  it('falls back to id when path has no slash', () => {
+    const wf: ApiWorkflow = { id: 'test.yml', name: 'test.yml', path: 'test.yml', state: 'active' }
+    assert.equal(extractFileName(wf), 'test.yml')
+  })
+
+  it('handles empty workflows list', () => {
+    const active = filterActiveWorkflows([])
+    assert.equal(active.length, 0)
+  })
+})
+
 describe('Workflow Trigger Widget — workflow detection', () => {
   it('detects workflow_dispatch in YAML content', () => {
     const content = `

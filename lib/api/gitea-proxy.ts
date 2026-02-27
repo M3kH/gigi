@@ -366,6 +366,8 @@ export const createGiteaProxy = (): Hono => {
    * GET /api/gitea/overview/workflows
    *
    * List workflows across all repos that support manual dispatch (workflow_dispatch).
+   * Uses the official Gitea Actions workflows API for discovery, then reads YAML
+   * content to detect workflow_dispatch triggers (not yet exposed by the API).
    */
   api.get('/overview/workflows', async (c) => {
     try {
@@ -378,26 +380,33 @@ export const createGiteaProxy = (): Hono => {
 
       await Promise.all(
         activeRepos.map(async (repo) => {
-          // Check both .gitea/workflows and .github/workflows directories
-          for (const dir of ['.gitea/workflows', '.github/workflows']) {
-            try {
-              const contents = await gitea.request<Array<{ name: string; path: string; type: string }>>({
-                method: 'GET',
-                path: `/repos/${org}/${repo.name}/contents/${dir}`,
-              })
+          try {
+            // Use official Gitea Actions workflows API
+            const data = await gitea.request<{
+              workflows?: Array<{
+                id: string
+                name: string
+                path: string
+                state: string
+              }>
+              total_count?: number
+            }>({
+              method: 'GET',
+              path: `/repos/${org}/${repo.name}/actions/workflows`,
+            })
 
-              if (!Array.isArray(contents)) continue
+            const workflows = data.workflows ?? []
+            if (workflows.length === 0) return
 
-              const yamlFiles = contents.filter(f =>
-                f.type === 'file' && (f.name.endsWith('.yml') || f.name.endsWith('.yaml'))
-              )
-
-              await Promise.all(
-                yamlFiles.map(async (file) => {
+            // Filter for active workflows and read YAML to check for workflow_dispatch
+            await Promise.all(
+              workflows
+                .filter(wf => wf.state === 'active')
+                .map(async (wf) => {
                   try {
                     const fileData = await gitea.request<{ content?: string; encoding?: string }>({
                       method: 'GET',
-                      path: `/repos/${org}/${repo.name}/contents/${file.path}`,
+                      path: `/repos/${org}/${repo.name}/contents/${wf.path}`,
                     })
 
                     let content = ''
@@ -407,23 +416,23 @@ export const createGiteaProxy = (): Hono => {
 
                     // Check if workflow has workflow_dispatch trigger
                     if (content.includes('workflow_dispatch')) {
-                      // Extract workflow name from the file content
+                      // Extract workflow name from YAML (more accurate than API name which is the filename)
                       const nameMatch = content.match(/^name:\s*['"]?(.+?)['"]?\s*$/m)
-                      const workflowName = nameMatch?.[1] ?? file.name.replace(/\.(yml|yaml)$/, '')
+                      const fileName = wf.path.split('/').pop() ?? wf.id
+                      const workflowName = nameMatch?.[1] ?? fileName.replace(/\.(yml|yaml)$/, '')
 
                       allWorkflows.push({
                         repo: repo.name,
-                        file: file.name,
-                        path: file.path,
+                        file: fileName,
+                        path: wf.path,
                         name: workflowName,
                         default_branch: repo.default_branch ?? 'main',
                       })
                     }
                   } catch { /* skip unreadable files */ }
                 })
-              )
-            } catch { /* skip repos without workflow dirs */ }
-          }
+            )
+          } catch { /* skip repos without Actions enabled */ }
         })
       )
 
