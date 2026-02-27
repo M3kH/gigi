@@ -743,3 +743,97 @@ export const stopAgent = (convId: string): boolean => {
 }
 
 export const getRunningAgents = (): string[] => [...runningAgents.keys()]
+
+// ── Thread-Aware Channel Binding ─────────────────────────────────────
+
+/**
+ * Get the current conversation ID bound to a channel key.
+ */
+export const getActiveConversation = (channel: string, channelId: string): string | undefined => {
+  return active.get(`${channel}:${channelId}`)
+}
+
+/**
+ * Switch a channel to a specific thread. Creates a new conversation for the
+ * thread if one doesn't exist, then binds the channel to it.
+ *
+ * Returns the conversation ID now bound to this channel.
+ */
+export const switchToThread = async (
+  channel: string,
+  channelId: string,
+  threadId: string,
+): Promise<{ conversationId: string; thread: import('./threads').ThreadWithRefs }> => {
+  const thread = await threads.getThread(threadId)
+  if (!thread) throw new Error(`Thread ${threadId} not found`)
+
+  // If the thread already has a linked conversation, use it
+  let convId = thread.conversation_id
+  if (!convId) {
+    // Create a new conversation and link it to this thread
+    const conv = await store.createConversation(channel, null)
+    convId = conv.id
+    // Link the conversation to the thread
+    const pool = store.getPool()
+    await pool.query(
+      'UPDATE threads SET conversation_id = $2, updated_at = now() WHERE id = $1',
+      [threadId, convId]
+    )
+  }
+
+  // Bind channel to this conversation
+  const key = `${channel}:${channelId}`
+  active.set(key, convId)
+
+  console.log(`[router] Switched ${key} → thread ${threadId} (conv ${convId})`)
+  return { conversationId: convId, thread }
+}
+
+/**
+ * Get the current thread for a channel key.
+ * Returns null if no conversation is active or no thread is linked.
+ */
+export const getCurrentThread = async (
+  channel: string,
+  channelId: string,
+): Promise<import('./threads').ThreadWithRefs | null> => {
+  const key = `${channel}:${channelId}`
+  const convId = active.get(key)
+  if (!convId) return null
+
+  const resolvedId = await threads.resolveThreadId(convId)
+  if (!resolvedId) return null
+
+  return threads.getThread(resolvedId)
+}
+
+/**
+ * Auto-return: when a sub-thread completes, switch the channel back to
+ * the parent thread. Called from thread lifecycle hooks.
+ */
+export const autoReturnToParent = async (
+  threadId: string,
+): Promise<{ channel: string; channelId: string; parentThread: import('./threads').ThreadWithRefs } | null> => {
+  const thread = await threads.getThread(threadId)
+  if (!thread?.parent_thread_id) return null
+
+  const parentThread = await threads.getThread(thread.parent_thread_id)
+  if (!parentThread) return null
+
+  // Find any channel currently bound to this thread's conversation
+  if (!thread.conversation_id) return null
+
+  for (const [key, convId] of active.entries()) {
+    if (convId === thread.conversation_id) {
+      const [channel, channelId] = key.split(':', 2)
+      // Switch to parent
+      if (parentThread.conversation_id) {
+        active.set(key, parentThread.conversation_id)
+        console.log(`[router] Auto-return: ${key} → parent thread ${parentThread.id}`)
+        return { channel, channelId, parentThread }
+      }
+    }
+  }
+
+  return null
+}

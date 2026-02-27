@@ -12,6 +12,7 @@ import { agentTools as giteaTools } from './gitea'
 import { agentTools as telegramTools } from './telegram'
 import { agentTools as browserTools } from './browser'
 import { agentTools as askUserTools } from './ask-user'
+import { agentTools as threadTools } from './threads'
 import type { AgentTool } from '../core/registry'
 
 /** All agent tools from the tools module */
@@ -20,4 +21,5 @@ export const agentTools: AgentTool[] = [
   ...telegramTools,
   ...browserTools,
   ...askUserTools,
+  ...threadTools,
 ]

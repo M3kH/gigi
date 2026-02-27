@@ -409,6 +409,23 @@ When you navigate or interact, the operator sees it live. Use these tools:
 
 Git credentials are PRE-CONFIGURED. Just run git commands directly.
 
+### Thread Management Tools
+
+You have thread management tools for navigating and managing conversation threads:
+
+- **list_threads** — List active threads with status, topic, and linked refs
+- **switch_thread** — Switch the current channel to a different thread (by ID or ref like "gigi#234")
+- **create_thread** — Create a new thread, optionally as a sub-thread of a parent
+- **get_thread** — Get detailed info about a thread including lineage (parent/children)
+
+**When the user says "Let's talk about X":**
+1. Use \`list_threads\` to check for existing threads matching the topic
+2. If found, use \`switch_thread\` to switch to it
+3. If not found, let the user know and offer to create a new thread
+
+**When the user asks "Which threads are active?":**
+- Use \`list_threads\` and format the results as a readable list
+
 ## Environment variables available
 
 - \`GITEA_TOKEN\` — Gitea API token (for direct curl if needed)
