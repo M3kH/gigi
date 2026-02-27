@@ -324,7 +324,10 @@ export const handleMessage = async (
       const channelNote = contextInfo.channels.length > 1
         ? ` across channels: ${contextInfo.channels.join(', ')}`
         : ''
-      console.log(`[router] Thread context: ${contextInfo.eventCount} events, ~${contextInfo.estimatedTokens} tokens${channelNote}`)
+      const stackNote = contextInfo.contextStack
+        ? `, context stack: ${contextInfo.contextStack.layers.length} layers (~${contextInfo.contextStack.totalTokens} tokens)`
+        : ''
+      console.log(`[router] Thread context: ${contextInfo.eventCount} events, ~${contextInfo.estimatedTokens} tokens${channelNote}${stackNote}`)
 
       // Check if thread needs compaction (non-blocking)
       if (contextInfo.eventCount > 15) {

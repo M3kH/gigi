@@ -24,6 +24,7 @@ import {
   type ThreadRef,
 } from './threads.js'
 import { queryLLM } from './agent.js'
+import { buildContextStack, type ContextStackOptions, type ThreadContextStack } from './thread-context.js'
 
 // ─── Types ──────────────────────────────────────────────────────────
 
@@ -378,6 +379,10 @@ export interface BuildContextOptions {
   channelAttribution?: boolean
   /** Include linked refs as context preamble (default: true) */
   includeRefs?: boolean
+  /** Include thread context stack (layers 2-5: repo, tickets, lineage, execution) (default: true) */
+  includeContextStack?: boolean
+  /** Options for the context stack builder */
+  contextStackOptions?: ContextStackOptions
 }
 
 export interface BuildContextResult {
@@ -388,6 +393,8 @@ export interface BuildContextResult {
   eventCount: number
   /** Channels represented in the context */
   channels: string[]
+  /** Thread context stack (layers 2-5) if available */
+  contextStack?: ThreadContextStack | null
 }
 
 /**
@@ -410,12 +417,13 @@ export const estimateTokens = (content: unknown): number => {
 /**
  * Build agent context messages from a thread, using summaries when available.
  *
- * Full unified context pipeline (issue #43):
+ * Full unified context pipeline (issues #43, #299):
+ * 0. Build Thread Context Stack (layers 2-5) — repo CLAUDE.md, ticket chain, lineage, exec state
  * 1. Prepend linked refs context (issues, PRs linked to this thread)
  * 2. If thread has a summary event → use it as context preamble
  * 3. Load non-compacted events from all channels
  * 4. Add channel attribution to each message so agent knows the source
- * 5. Convert to agent message format: [refs?, summary?, ...events]
+ * 5. Convert to agent message format: [contextStack?, refs?, summary?, ...events]
  * 6. Estimate token count for budget awareness
  *
  * This replaces the sliding window approach in router.ts for threads.
@@ -426,10 +434,28 @@ export const buildThreadContext = async (
 ): Promise<BuildContextResult> => {
   const enableAttribution = opts.channelAttribution ?? true
   const includeRefs = opts.includeRefs ?? true
+  const includeContextStack = opts.includeContextStack ?? true
 
   const messages: Array<{ role: 'user' | 'assistant'; content: unknown }> = []
   const channelsSet = new Set<string>()
   let totalTokens = 0
+  let contextStack: ThreadContextStack | null = null
+
+  // 0. Build Thread Context Stack (layers 2-5)
+  // Injected as a user message preamble so the agent has domain context
+  if (includeContextStack) {
+    try {
+      contextStack = await buildContextStack(threadId, opts.contextStackOptions)
+      if (contextStack && contextStack.formatted) {
+        const stackContent = [{ type: 'text', text: `[THREAD CONTEXT STACK]\n${contextStack.formatted}` }]
+        messages.push({ role: 'user', content: stackContent })
+        totalTokens += estimateTokens(stackContent)
+        console.log(`[compact] Context stack: ${contextStack.layers.length} layers, ~${contextStack.totalTokens} tokens`)
+      }
+    } catch (err) {
+      console.warn('[compact] Context stack build failed (non-fatal):', (err as Error).message)
+    }
+  }
 
   // 1. Load and prepend linked refs
   if (includeRefs) {
@@ -449,7 +475,7 @@ export const buildThreadContext = async (
   })
 
   if (events.length === 0 && messages.length === 0) {
-    return { messages: [], estimatedTokens: 0, eventCount: 0, channels: [] }
+    return { messages: [], estimatedTokens: 0, eventCount: 0, channels: [], contextStack: null }
   }
 
   // 3. Convert each event to agent message format
@@ -487,6 +513,7 @@ export const buildThreadContext = async (
     estimatedTokens: totalTokens,
     eventCount: events.length,
     channels: [...channelsSet],
+    contextStack,
   }
 }
 
