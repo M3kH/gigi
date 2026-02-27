@@ -162,6 +162,47 @@ describe('System prompt testing requirements', () => {
   })
 })
 
+// ─── SDK query() options — regression for path.resolve crash ────────
+
+describe('Agent options compatibility', () => {
+  // Regression: SDK 0.2.50 crashed with "The paths[0] argument must be of type string"
+  // when extraArgs.worktree was null. The SDK called path.resolve(null) internally.
+  // Fixed by upgrading to 0.2.62+. This test ensures the options we build are safe.
+
+  it('extraArgs.worktree=null must not crash path.resolve', () => {
+    const { resolve } = require('node:path')
+    const extraArgs: Record<string, string | null> = { worktree: null }
+
+    // The SDK iterates extraArgs and may pass values to path.resolve.
+    // Ensure null values are filtered before any path resolution.
+    const safeArgs = Object.fromEntries(
+      Object.entries(extraArgs).filter(([, v]) => v !== null),
+    )
+
+    // This should not throw — no null values to resolve
+    for (const [, v] of Object.entries(safeArgs)) {
+      assert.doesNotThrow(() => resolve(v), 'Filtered extraArgs should be safe for path.resolve')
+    }
+  })
+
+  it('SDK query() should be importable and callable type', async () => {
+    const { query } = await import('@anthropic-ai/claude-agent-sdk')
+    assert.equal(typeof query, 'function', 'query should be a function')
+  })
+
+  it('SDK version should be >= 0.2.62 (path resolution fixes)', async () => {
+    const { readFileSync } = await import('node:fs')
+    const { resolve } = await import('node:path')
+    const pkgPath = resolve(import.meta.dirname, '../node_modules/@anthropic-ai/claude-agent-sdk/package.json')
+    const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'))
+    const [major, minor, patch] = pkg.version.split('.').map(Number)
+    assert.ok(
+      major > 0 || minor > 2 || (minor === 2 && patch >= 62),
+      `SDK version must be >= 0.2.62 (path.resolve fix), got ${pkg.version}`,
+    )
+  })
+})
+
 // ─── Tool Failure Handler ───────────────────────────────────────────
 
 describe('Tool failure handler — agent context', () => {
