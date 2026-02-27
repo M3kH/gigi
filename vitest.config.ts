@@ -29,6 +29,14 @@ export default defineConfig({
             provider: 'v8',
             include: ['lib/**/*.ts', 'web/app/**/*.ts', 'web/app/**/*.svelte'],
             exclude: ['lib/**/*.d.ts', '**/node_modules/**'],
+            thresholds: {
+              // Minimum coverage gates — prevents regression
+              // These are set ~3% above current baseline to enforce improvement
+              lines: 40,
+              branches: 31,
+              functions: 35,
+              statements: 40,
+            },
           },
         },
       },
