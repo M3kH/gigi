@@ -139,8 +139,37 @@
 
   // ── Handlers ───────────────────────────────────────────────────────
 
+  /** Get the org name from overview data */
+  function getOrgName(): string {
+    return overview?.org?.name ?? 'idea'
+  }
+
   function handleRepoClick(repo: RepoSummary): void {
-    navigateToRepo(overview?.org.name ?? 'gigi', repo.name)
+    navigateToRepo(getOrgName(), repo.name)
+  }
+
+  function handleStatReposClick(): void {
+    navigateToGitea(`/${getOrgName()}`)
+  }
+
+  function handleStatIssuesClick(): void {
+    navigateToGitea(`/issues?type=your_repositories&state=open&q=`)
+  }
+
+  function handleStatPRsClick(): void {
+    navigateToGitea(`/pulls?type=your_repositories&state=open&q=`)
+  }
+
+  /** Navigate to a specific repo's pull requests (with stopPropagation for nested buttons) */
+  function handleRepoPRsClick(e: MouseEvent, repo: RepoSummary): void {
+    e.stopPropagation()
+    navigateToGitea(`/${getOrgName()}/${repo.name}/pulls`)
+  }
+
+  /** Navigate to a specific repo's issues (with stopPropagation for nested buttons) */
+  function handleRepoIssuesClick(e: MouseEvent, repo: RepoSummary): void {
+    e.stopPropagation()
+    navigateToGitea(`/${getOrgName()}/${repo.name}/issues`)
   }
 
   /** Get a color for a programming language (GitHub-style) */
@@ -230,7 +259,7 @@
         </button>
       </div>
 
-      <div class="stat-card stat-repos">
+      <button class="stat-card stat-card-clickable stat-repos" onclick={handleStatReposClick} title="View all repositories in Gitea">
         <div class="stat-icon stat-icon-blue">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
             <path d="M8 5h2v2H8V5zM6 7h2v2H6V7zM4 9h2v2H4V9zm-2 2h2v2H2v-2zm2 2h2v2H4v-2zm2 2h2v2H6v-2zm2 2h2v2H8v-2zm8-12h-2v2h2V5zm2 2h-2v2h2V7zm2 2h-2v2h2V9zm2 2h-2v2h2v-2zm-2 2h-2v2h2v-2zm-2 2h-2v2h2v-2zm-2 2h-2v2h2v-2z"/>
@@ -240,9 +269,9 @@
           <span class="stat-value">{userRepos.length}</span>
           <span class="stat-label">Repositories</span>
         </div>
-      </div>
+      </button>
 
-      <div class="stat-card stat-issues" class:stat-urgent={totalOpenIssues > 5}>
+      <button class="stat-card stat-card-clickable stat-issues" class:stat-urgent={totalOpenIssues > 5} onclick={handleStatIssuesClick} title="View open issues in Gitea">
         <div class="stat-icon" class:stat-icon-orange={totalOpenIssues <= 5} class:stat-icon-red={totalOpenIssues > 5}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
             <path d="M18 2H6v2H4v2H2v12h2v2h2v2h12v-2h2v-2h2V6h-2V4h-2V2zm0 2v2h2v12h-2v2H6v-2H4V6h2V4h12zm-8 6h4v4h-4v-4zM8 6h8v2H8V6zm0 10H6V8h2v8zm8 0v2H8v-2h8zm0 0h2V8h-2v8z"/>
@@ -252,9 +281,9 @@
           <span class="stat-value">{overview?.totalOpenIssues ?? '—'}</span>
           <span class="stat-label">Open Issues</span>
         </div>
-      </div>
+      </button>
 
-      <div class="stat-card stat-prs">
+      <button class="stat-card stat-card-clickable stat-prs" onclick={handleStatPRsClick} title="View open pull requests in Gitea">
         <div class="stat-icon stat-icon-purple">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
             <path d="M2 2h8v8H7v12H5V10H2V2zm2 2v4h4V4H4zm8 1h7.09v9H22v8h-8v-8h3.09V7H12V5zm4 11v4h4v-4h-4z"/>
@@ -264,7 +293,7 @@
           <span class="stat-value">{overview?.totalOpenPRs ?? '—'}</span>
           <span class="stat-label">Open PRs</span>
         </div>
-      </div>
+      </button>
 
       <div class="stat-card stat-conversations">
         <div class="stat-icon stat-icon-green">
@@ -332,20 +361,20 @@
                   {/if}
                   <div class="repo-stats">
                     {#if repo.open_issues_count > 0}
-                      <span class="badge badge-issues" title="Open issues">
+                      <button class="badge badge-issues badge-clickable" title="View open issues" onclick={(e) => handleRepoIssuesClick(e, repo)}>
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
                           <path d="M18 2H6v2H4v2H2v12h2v2h2v2h12v-2h2v-2h2V6h-2V4h-2V2zm0 2v2h2v12h-2v2H6v-2H4V6h2V4h12zm-8 6h4v4h-4v-4zM8 6h8v2H8V6zm0 10H6V8h2v8zm8 0v2H8v-2h8zm0 0h2V8h-2v8z"/>
                         </svg>
                         {repo.open_issues_count}
-                      </span>
+                      </button>
                     {/if}
                     {#if repo.open_pr_count > 0}
-                      <span class="badge badge-prs" title="Open PRs">
+                      <button class="badge badge-prs badge-clickable" title="View open PRs" onclick={(e) => handleRepoPRsClick(e, repo)}>
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
                           <path d="M2 2h8v8H7v12H5V10H2V2zm2 2v4h4V4H4zm8 1h7.09v9H22v8h-8v-8h3.09V7H12V5zm4 11v4h4v-4h-4z"/>
                         </svg>
                         {repo.open_pr_count}
-                      </span>
+                      </button>
                     {/if}
                     {#if repo.open_issues_count === 0 && repo.open_pr_count === 0}
                       <span class="badge badge-clean">
@@ -441,6 +470,21 @@
   .stat-card:hover {
     border-color: var(--gigi-border-default);
   }
+
+  .stat-card-clickable {
+    cursor: pointer;
+    font-family: var(--gigi-font-sans);
+    color: inherit;
+    text-align: left;
+  }
+
+  .stat-card-clickable:hover {
+    background: var(--gigi-bg-hover);
+  }
+
+  .stat-card-clickable.stat-repos:hover { border-color: var(--gigi-accent-blue); }
+  .stat-card-clickable.stat-issues:hover { border-color: var(--gigi-accent-orange); }
+  .stat-card-clickable.stat-prs:hover { border-color: var(--gigi-accent-purple); }
 
   /* Color-coded stat cards */
   .stat-repos   { border-top-color: var(--gigi-accent-blue); }
@@ -710,6 +754,18 @@
   .badge-prs {
     background: rgba(88, 166, 255, 0.15);
     color: var(--gigi-accent-blue);
+  }
+
+  .badge-clickable {
+    cursor: pointer;
+    border: none;
+    font-family: var(--gigi-font-sans);
+    transition: all var(--gigi-transition-fast);
+  }
+
+  .badge-clickable:hover {
+    filter: brightness(1.3);
+    transform: scale(1.05);
   }
 
   .badge-clean {

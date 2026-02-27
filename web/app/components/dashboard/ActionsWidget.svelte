@@ -119,7 +119,7 @@
       {#each runs as run}
         <button
           class="run-item"
-          onclick={() => navigateToGitea(`/${owner}/${run.repo}/actions/runs/${run.id}`)}
+          onclick={() => navigateToGitea(`/${owner}/${run.repo}/actions/runs/${run.run_number}`)}
           title="{run.display_title} ({run.status})"
         >
           <span class="run-status run-status-{getStatusIcon(run.status)}" class:pulse={run.status === 'running' || run.status === 'waiting'}>

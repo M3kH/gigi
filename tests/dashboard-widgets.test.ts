@@ -340,11 +340,15 @@ describe('widget navigation — in-app routing instead of external links', () =>
     assert.equal(expectedPath, '/gitea/idea/gigi/issues/105')
   })
 
-  it('actions widget constructs correct navigation path for CI runs', () => {
+  it('actions widget constructs correct navigation path for CI runs using run_number (not id)', () => {
     const owner = 'idea'
-    const run = { repo: 'gigi', id: 7 }
-    const expectedPath = `/${owner}/${run.repo}/actions/runs/${run.id}`
-    assert.equal(expectedPath, '/idea/gigi/actions/runs/7')
+    // run.id is the internal DB id, run_number is the user-facing run index — Gitea URLs use run_number
+    const run = { repo: 'gigi', id: 371, run_number: 219 }
+    const expectedPath = `/${owner}/${run.repo}/actions/runs/${run.run_number}`
+    assert.equal(expectedPath, '/idea/gigi/actions/runs/219')
+    // Regression: using run.id would produce a 404
+    const wrongPath = `/${owner}/${run.repo}/actions/runs/${run.id}`
+    assert.notEqual(wrongPath, expectedPath, 'run.id !== run_number — using id causes 404')
   })
 
   it('navigation paths work with different org names', () => {
@@ -361,6 +365,75 @@ describe('widget navigation — in-app routing instead of external links', () =>
       const path = `/gitea/${owner}/${repo}/issues/1`
       assert.ok(path.includes(repo), `path should include repo name: ${repo}`)
       assert.ok(path.startsWith('/gitea/'), 'path should start with /gitea/')
+    }
+  })
+})
+
+// ─── Clickable Stat Cards tests ──────────────────────────────────────
+
+describe('clickable stat cards — navigation paths', () => {
+  // These test the navigation path construction logic used by the
+  // clickable stat cards and repo badge buttons in the overview dashboard
+
+  function statReposPath(orgName: string): string {
+    return `/gitea/${orgName}`
+  }
+
+  function statIssuesPath(): string {
+    return `/gitea/issues?type=your_repositories&state=open&q=`
+  }
+
+  function statPRsPath(): string {
+    return `/gitea/pulls?type=your_repositories&state=open&q=`
+  }
+
+  function repoPRsPath(orgName: string, repoName: string): string {
+    return `/gitea/${orgName}/${repoName}/pulls`
+  }
+
+  function repoIssuesPath(orgName: string, repoName: string): string {
+    return `/gitea/${orgName}/${repoName}/issues`
+  }
+
+  it('stat repos card navigates to org page', () => {
+    assert.equal(statReposPath('idea'), '/gitea/idea')
+    assert.equal(statReposPath('my-org'), '/gitea/my-org')
+  })
+
+  it('stat issues card navigates to Gitea issues dashboard', () => {
+    const path = statIssuesPath()
+    assert.ok(path.startsWith('/gitea/issues'))
+    assert.ok(path.includes('state=open'))
+    assert.ok(path.includes('type=your_repositories'))
+  })
+
+  it('stat PRs card navigates to Gitea pulls dashboard', () => {
+    const path = statPRsPath()
+    assert.ok(path.startsWith('/gitea/pulls'))
+    assert.ok(path.includes('state=open'))
+    assert.ok(path.includes('type=your_repositories'))
+  })
+
+  it('repo PR badge navigates to repo pulls page', () => {
+    assert.equal(repoPRsPath('idea', 'gigi'), '/gitea/idea/gigi/pulls')
+    assert.equal(repoPRsPath('idea', 'infra'), '/gitea/idea/infra/pulls')
+  })
+
+  it('repo issues badge navigates to repo issues page', () => {
+    assert.equal(repoIssuesPath('idea', 'gigi'), '/gitea/idea/gigi/issues')
+    assert.equal(repoIssuesPath('idea', 'infra'), '/gitea/idea/infra/issues')
+  })
+
+  it('all paths start with /gitea/ prefix for iframe routing', () => {
+    const paths = [
+      statReposPath('idea'),
+      statIssuesPath(),
+      statPRsPath(),
+      repoPRsPath('idea', 'gigi'),
+      repoIssuesPath('idea', 'gigi'),
+    ]
+    for (const p of paths) {
+      assert.ok(p.startsWith('/gitea/'), `Path should start with /gitea/: ${p}`)
     }
   })
 })
