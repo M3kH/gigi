@@ -14,10 +14,16 @@ import { getPool } from './store.js'
 
 export type ThreadStatus = 'active' | 'paused' | 'stopped' | 'archived'
 
+/** Thread kind for display/routing classification */
+export type ThreadKind = 'chat' | 'system_log' | 'task'
+
 export interface Thread {
   id: string
   topic: string | null
   status: ThreadStatus
+  kind: ThreadKind
+  display_name: string | null
+  sort_order: number
   session_id: string | null
   summary: string | null
   parent_thread_id: string | null
@@ -50,6 +56,9 @@ export interface ThreadRef {
 export type ThreadEventChannel = 'web' | 'telegram' | 'gitea_comment' | 'gitea_review' | 'webhook' | 'system'
 export type ThreadEventDirection = 'inbound' | 'outbound'
 
+/** Event card type for UI rendering */
+export type ThreadEventKind = 'message' | 'link' | 'note' | 'event'
+
 export interface ThreadEvent {
   id: string
   thread_id: string
@@ -58,6 +67,7 @@ export interface ThreadEvent {
   actor: string
   content: unknown
   message_type: string
+  event_kind: ThreadEventKind
   usage: unknown | null
   metadata: Record<string, unknown>
   is_compacted: boolean
@@ -67,6 +77,9 @@ export interface ThreadEvent {
 export interface CreateThreadOpts {
   topic?: string
   status?: ThreadStatus
+  kind?: ThreadKind
+  display_name?: string
+  sort_order?: number
   session_id?: string
   parent_thread_id?: string
   fork_point_event_id?: string
@@ -79,6 +92,7 @@ export interface AddThreadEventOpts {
   actor: string
   content: unknown
   message_type?: string
+  event_kind?: ThreadEventKind
   usage?: unknown
   metadata?: Record<string, unknown>
 }
@@ -97,6 +111,7 @@ export interface ThreadEventFilters {
   direction?: ThreadEventDirection
   actor?: string
   message_type?: string
+  event_kind?: ThreadEventKind
   include_compacted?: boolean
   limit?: number
   offset?: number
@@ -104,6 +119,7 @@ export interface ThreadEventFilters {
 
 export interface ThreadListFilters {
   status?: ThreadStatus
+  kind?: ThreadKind
   archived?: boolean  // true = only archived, false = only non-archived
   limit?: number
 }
@@ -128,12 +144,15 @@ export interface ThreadLineage {
 export const createThread = async (opts: CreateThreadOpts = {}): Promise<Thread> => {
   const pool = getPool()
   const { rows } = await pool.query(
-    `INSERT INTO threads (topic, status, session_id, parent_thread_id, fork_point_event_id, conversation_id)
-     VALUES ($1, $2, $3, $4, $5, $6)
+    `INSERT INTO threads (topic, status, kind, display_name, sort_order, session_id, parent_thread_id, fork_point_event_id, conversation_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
      RETURNING *`,
     [
       opts.topic ?? null,
       opts.status ?? 'paused',
+      opts.kind ?? 'chat',
+      opts.display_name ?? null,
+      opts.sort_order ?? 0,
       opts.session_id ?? null,
       opts.parent_thread_id ?? null,
       opts.fork_point_event_id ?? null,
@@ -193,6 +212,11 @@ export const listThreads = async (filters: ThreadListFilters = {}): Promise<Thre
   if (filters.status) {
     conditions.push(`status = $${i}`)
     params.push(filters.status)
+    i++
+  }
+  if (filters.kind) {
+    conditions.push(`kind = $${i}`)
+    params.push(filters.kind)
     i++
   }
   if (filters.archived === true) {
@@ -258,6 +282,39 @@ export const updateThreadTopic = async (id: string, topic: string): Promise<void
 }
 
 /**
+ * Update thread kind (chat, system_log, task).
+ */
+export const updateThreadKind = async (id: string, kind: ThreadKind): Promise<void> => {
+  const pool = getPool()
+  await pool.query(
+    `UPDATE threads SET kind = $2, updated_at = now() WHERE id = $1`,
+    [id, kind]
+  )
+}
+
+/**
+ * Update thread display name.
+ */
+export const updateThreadDisplayName = async (id: string, displayName: string | null): Promise<void> => {
+  const pool = getPool()
+  await pool.query(
+    `UPDATE threads SET display_name = $2, updated_at = now() WHERE id = $1`,
+    [id, displayName]
+  )
+}
+
+/**
+ * Update thread sort order.
+ */
+export const updateThreadSortOrder = async (id: string, sortOrder: number): Promise<void> => {
+  const pool = getPool()
+  await pool.query(
+    `UPDATE threads SET sort_order = $2, updated_at = now() WHERE id = $1`,
+    [id, sortOrder]
+  )
+}
+
+/**
  * Update thread summary (for compaction).
  */
 export const updateThreadSummary = async (id: string, summary: string): Promise<void> => {
@@ -287,8 +344,8 @@ export const addThreadEvent = async (threadId: string, opts: AddThreadEventOpts)
   await pool.query('UPDATE threads SET updated_at = now() WHERE id = $1', [threadId])
 
   const { rows } = await pool.query(
-    `INSERT INTO thread_events (thread_id, channel, direction, actor, content, message_type, usage, metadata)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    `INSERT INTO thread_events (thread_id, channel, direction, actor, content, message_type, event_kind, usage, metadata)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
      RETURNING *`,
     [
       threadId,
@@ -297,6 +354,7 @@ export const addThreadEvent = async (threadId: string, opts: AddThreadEventOpts)
       opts.actor,
       JSON.stringify(opts.content),
       opts.message_type ?? 'text',
+      opts.event_kind ?? 'message',
       opts.usage ? JSON.stringify(opts.usage) : null,
       JSON.stringify(opts.metadata ?? {}),
     ]
@@ -334,6 +392,11 @@ export const getThreadEvents = async (
   if (filters.message_type) {
     conditions.push(`message_type = $${i}`)
     params.push(filters.message_type)
+    i++
+  }
+  if (filters.event_kind) {
+    conditions.push(`event_kind = $${i}`)
+    params.push(filters.event_kind)
     i++
   }
   if (!filters.include_compacted) {

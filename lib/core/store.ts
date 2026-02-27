@@ -223,6 +223,22 @@ const migrate = async (): Promise<void> => {
     -- Add conversation_id to threads for migration backward-compat
     ALTER TABLE threads ADD COLUMN IF NOT EXISTS conversation_id UUID REFERENCES conversations(id);
     CREATE INDEX IF NOT EXISTS idx_threads_conversation ON threads(conversation_id) WHERE conversation_id IS NOT NULL;
+
+    -- ─── Phase 1: Thread tree metadata (issue #298) ──────────────────
+
+    -- Thread kind: classifies the thread type for display/routing
+    ALTER TABLE threads ADD COLUMN IF NOT EXISTS kind TEXT DEFAULT 'chat';
+    -- Values: 'chat' (conversation), 'system_log' (event feed), 'task' (automated work)
+
+    -- Human-readable label for the tree (falls back to topic if null)
+    ALTER TABLE threads ADD COLUMN IF NOT EXISTS display_name TEXT;
+
+    -- Manual reordering of siblings in the tree
+    ALTER TABLE threads ADD COLUMN IF NOT EXISTS sort_order INT DEFAULT 0;
+
+    -- Event card type classification
+    ALTER TABLE thread_events ADD COLUMN IF NOT EXISTS event_kind TEXT DEFAULT 'message';
+    -- Values: 'message' (chat), 'link' (artifact), 'note' (annotation), 'event' (system event)
   `)
 }
 
