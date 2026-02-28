@@ -17,6 +17,7 @@ import {
   buildDeliveryMetadata,
   getThreadActiveChannels,
 } from '../core/response-routing'
+import { acquireLock } from '../core/conversation-lock'
 
 import type { AgentMessage } from '../core/agent'
 import type { WebhookPayload, WebhookResult } from './webhooks'
@@ -541,6 +542,9 @@ const checkAndInvokeAgent = async (
 
   console.log(`[webhookRouter] @gigi mentioned by @${author} in conversation ${conversationId}`)
 
+  // Acquire conversation lock to prevent concurrent agents (#371)
+  const releaseLock = await acquireLock(conversationId, `webhook:@gigi-mention:${author}`)
+
   try {
     const userMessage = comment.replace(/@gigi\b/gi, '').trim()
     const isTestFailure = userMessage.includes('Tests failed') && userMessage.includes('Test output')
@@ -631,5 +635,7 @@ const checkAndInvokeAgent = async (
     })
 
     return false
+  } finally {
+    releaseLock()
   }
 }

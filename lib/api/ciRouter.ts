@@ -32,6 +32,7 @@ import {
   MAX_FIX_ATTEMPTS,
   type CIRunInfo,
 } from '../core/ci-monitor'
+import { acquireLock } from '../core/conversation-lock'
 
 import type { AgentMessage } from '../core/agent'
 import type { WebhookPayload } from './webhooks'
@@ -256,57 +257,64 @@ async function invokeAgentForCIFix(
 
   emit({ type: 'conversation_updated', conversationId: conversation.id, reason: 'ci_failure' })
 
-  // Invoke the agent
-  const history = await store.getMessages(conversation.id)
-  const messages: AgentMessage[] = history.map(m => ({
-    role: (m.role === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
-    content: m.content as AgentMessage['content'],
-  }))
+  // Acquire conversation lock to prevent concurrent agents (#371)
+  const releaseLock = await acquireLock(conversation.id, `ci:auto-fix:PR#${prNumber}`)
 
-  const onEvent = (agentEvent: Record<string, unknown>): void => {
-    emit({ ...agentEvent, conversationId: conversation!.id } as import('../core/events').AgentEvent)
-  }
+  try {
+    // Invoke the agent
+    const history = await store.getMessages(conversation.id)
+    const messages: AgentMessage[] = history.map(m => ({
+      role: (m.role === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
+      content: m.content as AgentMessage['content'],
+    }))
 
-  onEvent({ type: 'agent_start', conversationId: conversation.id })
-
-  const response = await runAgent(messages, onEvent)
-
-  // Store the agent's response
-  await store.addMessage(conversation.id, 'assistant', [{ type: 'text', text: response.text }], {
-    tool_calls: response.toolCalls.length ? response.toolCalls : undefined,
-    tool_outputs: Object.keys(response.toolResults).length ? response.toolResults : undefined,
-    triggered_by: 'ci_failure',
-  } as store.MessageExtras)
-
-  // Store agent response as thread event
-  if (threadId) {
-    try {
-      await threads.addThreadEvent(threadId, {
-        channel: 'webhook',
-        direction: 'outbound',
-        actor: 'gigi',
-        content: [{ type: 'text', text: response.text }],
-        message_type: 'text',
-        usage: response.usage || undefined,
-        metadata: { triggered_by: 'ci_failure' },
-      })
-    } catch { /* ignore */ }
-  }
-
-  // Save session ID for continuation
-  if (response.sessionId) {
-    try {
-      await store.setSessionId(conversation.id, response.sessionId)
-      if (threadId) {
-        await threads.setThreadSession(threadId, response.sessionId)
-      }
-    } catch (err) {
-      console.warn('[ciRouter] Failed to store session ID:', (err as Error).message)
+    const onEvent = (agentEvent: Record<string, unknown>): void => {
+      emit({ ...agentEvent, conversationId: conversation!.id } as import('../core/events').AgentEvent)
     }
-  }
 
-  console.log(`[ciRouter] Agent completed CI fix attempt for PR #${prNumber} in conversation ${conversation.id}`)
-  return { conversationId: conversation.id }
+    onEvent({ type: 'agent_start', conversationId: conversation.id })
+
+    const response = await runAgent(messages, onEvent)
+
+    // Store the agent's response
+    await store.addMessage(conversation.id, 'assistant', [{ type: 'text', text: response.text }], {
+      tool_calls: response.toolCalls.length ? response.toolCalls : undefined,
+      tool_outputs: Object.keys(response.toolResults).length ? response.toolResults : undefined,
+      triggered_by: 'ci_failure',
+    } as store.MessageExtras)
+
+    // Store agent response as thread event
+    if (threadId) {
+      try {
+        await threads.addThreadEvent(threadId, {
+          channel: 'webhook',
+          direction: 'outbound',
+          actor: 'gigi',
+          content: [{ type: 'text', text: response.text }],
+          message_type: 'text',
+          usage: response.usage || undefined,
+          metadata: { triggered_by: 'ci_failure' },
+        })
+      } catch { /* ignore */ }
+    }
+
+    // Save session ID for continuation
+    if (response.sessionId) {
+      try {
+        await store.setSessionId(conversation.id, response.sessionId)
+        if (threadId) {
+          await threads.setThreadSession(threadId, response.sessionId)
+        }
+      } catch (err) {
+        console.warn('[ciRouter] Failed to store session ID:', (err as Error).message)
+      }
+    }
+
+    console.log(`[ciRouter] Agent completed CI fix attempt for PR #${prNumber} in conversation ${conversation.id}`)
+    return { conversationId: conversation.id }
+  } finally {
+    releaseLock()
+  }
 }
 
 // ─── Operator Notifications ─────────────────────────────────────────

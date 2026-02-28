@@ -26,6 +26,13 @@ import {
   buildDeliveryMetadata,
   getThreadActiveChannels,
 } from './response-routing'
+import {
+  acquireLock,
+  isLocked,
+  enqueueMessage,
+  drainQueue,
+  getLockInfo,
+} from './conversation-lock'
 
 // Active conversations per channel key (e.g. "telegram:12345", "web:uuid")
 const active = new Map<string, string>()
@@ -380,331 +387,383 @@ export const handleMessage = async (
     console.warn('[router] Budget check failed:', (err as Error).message)
   }
 
-  // Emit agent_start + activate thread (both conversation and thread tables)
-  wrappedOnEvent({ type: 'agent_start', conversationId: convId })
-  try {
-    await store.activateThread(convId)
-    await threads.updateThreadStatus(threadId, 'active')
-    wrappedOnEvent({ type: 'thread_status', conversationId: convId, status: 'active' })
-  } catch (err) {
-    console.warn('[router] activateThread failed:', (err as Error).message)
+  // ── Conversation Lock: prevent concurrent agents on same conversation ──
+  // If another agent is already running on this conversation, queue the message
+  // and return early with a notification. The queued message will be processed
+  // after the current agent finishes.
+  if (isLocked(convId)) {
+    const lockInfo = getLockInfo(convId)
+    console.log(
+      `[router] Conversation ${convId} is locked by ${lockInfo?.holder} — queueing message`,
+    )
+    enqueueMessage(convId, enrichedText, channel)
+
+    // Emit a notification so the frontend knows the message was queued
+    wrappedOnEvent({
+      type: 'message_queued',
+      conversationId: convId,
+      reason: `Agent is already running (started by ${lockInfo?.holder})`,
+    })
+
+    // Return a synthetic response indicating the message was queued
+    const queuedText = '💬 Message received and queued — an agent is already working on this conversation. Your message will be processed when it finishes.'
+    await store.addMessage(convId, 'assistant', [{ type: 'text', text: queuedText }])
+    return {
+      content: [{ type: 'text', text: queuedText }],
+      text: queuedText,
+      toolCalls: [],
+      toolResults: {},
+      sessionId: null,
+      usage: null,
+    }
   }
 
-  // Create abort controller for this agent
-  const abortController = new AbortController()
-  runningAgents.set(convId, abortController)
+  // Acquire the conversation lock — holds through ALL agent runs including continuations
+  const releaseLock = await acquireLock(convId, `handleMessage:${channel}`)
 
   let response
+  let storedText = ''
   try {
-    response = await runAgent(messages, wrappedOnEvent, { sessionId, signal: abortController.signal, routing })
-  } catch (err) {
-    runningAgents.delete(convId)
-    if ((err as Error).name === 'AbortError') {
-      console.log(`[router] Agent stopped by user for conversation ${convId}`)
-      wrappedOnEvent({ type: 'agent_stopped', conversationId: convId })
-      const stopContent = [{ type: 'text' as const, text: '⏹️ Stopped by user' }]
-      await store.addMessage(convId, 'assistant', stopContent)
+    // Emit agent_start + activate thread (both conversation and thread tables)
+    wrappedOnEvent({ type: 'agent_start', conversationId: convId })
+    try {
+      await store.activateThread(convId)
+      await threads.updateThreadStatus(threadId, 'active')
+      wrappedOnEvent({ type: 'thread_status', conversationId: convId, status: 'active' })
+    } catch (err) {
+      console.warn('[router] activateThread failed:', (err as Error).message)
+    }
+
+    // Create abort controller for this agent
+    const abortController = new AbortController()
+    runningAgents.set(convId, abortController)
+
+    try {
+      response = await runAgent(messages, wrappedOnEvent, { sessionId, signal: abortController.signal, routing })
+    } catch (err) {
+      runningAgents.delete(convId)
+      if ((err as Error).name === 'AbortError') {
+        console.log(`[router] Agent stopped by user for conversation ${convId}`)
+        wrappedOnEvent({ type: 'agent_stopped', conversationId: convId })
+        const stopContent = [{ type: 'text' as const, text: '⏹️ Stopped by user' }]
+        await store.addMessage(convId, 'assistant', stopContent)
+        try {
+          await threads.addThreadEvent(threadId, {
+            channel: channel as threads.ThreadEventChannel,
+            direction: 'outbound',
+            actor: 'gigi',
+            content: stopContent,
+            message_type: 'text',
+          })
+        } catch { /* ignore */ }
+        try {
+          await store.pauseThread(convId)
+          await threads.updateThreadStatus(threadId, 'paused')
+          wrappedOnEvent({ type: 'thread_status', conversationId: convId, status: 'paused' })
+        } catch { /* ignore */ }
+        throw new Error('Agent stopped by user')
+      }
+      // Emit agent_done with error so the frontend unblocks (clears Stop button, loading state)
+      console.error('[router] Agent crashed:', (err as Error).stack || (err as Error).message)
+      wrappedOnEvent({ type: 'agent_done', conversationId: convId, isError: true })
+      const errorContent = [{ type: 'text' as const, text: `Error: ${(err as Error).message}` }]
+      try {
+        await store.addMessage(convId, 'assistant', errorContent)
+      } catch { /* ignore */ }
       try {
         await threads.addThreadEvent(threadId, {
           channel: channel as threads.ThreadEventChannel,
           direction: 'outbound',
           actor: 'gigi',
-          content: stopContent,
+          content: errorContent,
           message_type: 'text',
         })
       } catch { /* ignore */ }
       try {
         await store.pauseThread(convId)
         await threads.updateThreadStatus(threadId, 'paused')
-        wrappedOnEvent({ type: 'thread_status', conversationId: convId, status: 'paused' })
       } catch { /* ignore */ }
-      throw new Error('Agent stopped by user')
+      // Flush AFTER error persistence so frontend finds data when it re-fetches
+      flushDeferredDone()
+      throw err
+    } finally {
+      runningAgents.delete(convId)
     }
-    // Emit agent_done with error so the frontend unblocks (clears Stop button, loading state)
-    console.error('[router] Agent crashed:', (err as Error).stack || (err as Error).message)
-    wrappedOnEvent({ type: 'agent_done', conversationId: convId, isError: true })
-    const errorContent = [{ type: 'text' as const, text: `Error: ${(err as Error).message}` }]
+
+    // Pause thread (agent done with this turn)
     try {
-      await store.addMessage(convId, 'assistant', errorContent)
-    } catch { /* ignore */ }
+      await store.pauseThread(convId)
+      await threads.updateThreadStatus(threadId, 'paused')
+      wrappedOnEvent({ type: 'thread_status', conversationId: convId, status: 'paused' })
+    } catch (err) {
+      console.warn('[router] pauseThread failed:', (err as Error).message)
+    }
+
+    // Store session ID from response (both conversation and thread)
+    if (response.sessionId) {
+      try {
+        await store.setSessionId(convId, response.sessionId)
+        await threads.setThreadSession(threadId, response.sessionId)
+      } catch (err) {
+        console.warn('[router] setSessionId failed:', (err as Error).message)
+      }
+    }
+
+    // Extract title from first response
+    storedText = response.text
+    const titleMatch = response.text.match(/^\[title:\s*(.+?)\]\s*/m)
+    if (titleMatch) {
+      const title = titleMatch[1].trim()
+      storedText = response.text.replace(titleMatch[0], '')
+      try {
+        await store.updateConversation(convId, { topic: title })
+        await threads.updateThreadTopic(threadId, title)
+        wrappedOnEvent({ type: 'title_update', conversationId: convId, title })
+      } catch (err) {
+        console.warn('[router] title update failed:', (err as Error).message)
+      }
+    }
+
+    // Store assistant response with interleaved content (text + tool_use blocks in order)
+    // This preserves the text/tool interleaving so reload matches live rendering.
+    // Strip the [title:] tag from the first text block if present.
+    const storedContent = response.interleavedContent.length > 0
+      ? response.interleavedContent.map((block, i) => {
+          if (i === 0 && block.type === 'text' && titleMatch) {
+            return { ...block, text: block.text.replace(titleMatch[0], '') }
+          }
+          return block
+        })
+      : [{ type: 'text', text: storedText }]
+    await store.addMessage(convId, 'assistant', storedContent, {
+      tool_calls: response.toolCalls.length ? response.toolCalls : undefined,
+      tool_outputs: Object.keys(response.toolResults).length ? response.toolResults : undefined,
+      usage: response.usage || undefined,
+    })
+
+    // ── Response Routing: determine delivery channels ──────────────
+    const threadChannels = await getThreadActiveChannels(threadId, store.getPool)
+    const responseRouting = determineRouting(
+      channel as threads.ThreadEventChannel,
+      threadChannels,
+    )
+
+    // Build delivery metadata — start with primary channel
+    const deliveredTo: threads.ThreadEventChannel[] = [responseRouting.primary]
+    const deliveryMeta = buildDeliveryMetadata(
+      channel as threads.ThreadEventChannel,
+      deliveredTo,
+    )
+
+    // Store assistant response as thread event with delivery metadata
     try {
       await threads.addThreadEvent(threadId, {
         channel: channel as threads.ThreadEventChannel,
         direction: 'outbound',
         actor: 'gigi',
-        content: errorContent,
+        content: storedContent,
         message_type: 'text',
+        usage: response.usage || undefined,
+        metadata: { delivery: deliveryMeta },
       })
-    } catch { /* ignore */ }
-    try {
-      await store.pauseThread(convId)
-      await threads.updateThreadStatus(threadId, 'paused')
-    } catch { /* ignore */ }
-    // Flush AFTER error persistence so frontend finds data when it re-fetches
+    } catch (err) {
+      console.warn('[router] Thread event (assistant) failed:', (err as Error).message)
+    }
+
+    // Flush deferred agent_done AFTER both message and thread event are persisted —
+    // the frontend's loadMessages() and getThreadEvents() will find data in the database.
     flushDeferredDone()
-    throw err
-  } finally {
-    runningAgents.delete(convId)
-  }
 
-  // Pause thread (agent done with this turn)
-  try {
-    await store.pauseThread(convId)
-    await threads.updateThreadStatus(threadId, 'paused')
-    wrappedOnEvent({ type: 'thread_status', conversationId: convId, status: 'paused' })
-  } catch (err) {
-    console.warn('[router] pauseThread failed:', (err as Error).message)
-  }
-
-  // Store session ID from response (both conversation and thread)
-  if (response.sessionId) {
-    try {
-      await store.setSessionId(convId, response.sessionId)
-      await threads.setThreadSession(threadId, response.sessionId)
-    } catch (err) {
-      console.warn('[router] setSessionId failed:', (err as Error).message)
-    }
-  }
-
-  // Extract title from first response
-  let storedText = response.text
-  const titleMatch = response.text.match(/^\[title:\s*(.+?)\]\s*/m)
-  if (titleMatch) {
-    const title = titleMatch[1].trim()
-    storedText = response.text.replace(titleMatch[0], '')
-    try {
-      await store.updateConversation(convId, { topic: title })
-      await threads.updateThreadTopic(threadId, title)
-      wrappedOnEvent({ type: 'title_update', conversationId: convId, title })
-    } catch (err) {
-      console.warn('[router] title update failed:', (err as Error).message)
-    }
-  }
-
-  // Store assistant response with interleaved content (text + tool_use blocks in order)
-  // This preserves the text/tool interleaving so reload matches live rendering.
-  // Strip the [title:] tag from the first text block if present.
-  const storedContent = response.interleavedContent.length > 0
-    ? response.interleavedContent.map((block, i) => {
-        if (i === 0 && block.type === 'text' && titleMatch) {
-          return { ...block, text: block.text.replace(titleMatch[0], '') }
-        }
-        return block
-      })
-    : [{ type: 'text', text: storedText }]
-  await store.addMessage(convId, 'assistant', storedContent, {
-    tool_calls: response.toolCalls.length ? response.toolCalls : undefined,
-    tool_outputs: Object.keys(response.toolResults).length ? response.toolResults : undefined,
-    usage: response.usage || undefined,
-  })
-
-  // ── Response Routing: determine delivery channels ──────────────
-  const threadChannels = await getThreadActiveChannels(threadId, store.getPool)
-  const responseRouting = determineRouting(
-    channel as threads.ThreadEventChannel,
-    threadChannels,
-  )
-
-  // Build delivery metadata — start with primary channel
-  const deliveredTo: threads.ThreadEventChannel[] = [responseRouting.primary]
-  const deliveryMeta = buildDeliveryMetadata(
-    channel as threads.ThreadEventChannel,
-    deliveredTo,
-  )
-
-  // Store assistant response as thread event with delivery metadata
-  try {
-    await threads.addThreadEvent(threadId, {
-      channel: channel as threads.ThreadEventChannel,
-      direction: 'outbound',
-      actor: 'gigi',
-      content: storedContent,
-      message_type: 'text',
-      usage: response.usage || undefined,
-      metadata: { delivery: deliveryMeta },
-    })
-  } catch (err) {
-    console.warn('[router] Thread event (assistant) failed:', (err as Error).message)
-  }
-
-  // Flush deferred agent_done AFTER both message and thread event are persisted —
-  // the frontend's loadMessages() and getThreadEvents() will find data in the database.
-  flushDeferredDone()
-
-  // Auto-link any PRs/issues created by the agent
-  if (response.toolCalls.length > 0) {
-    await autoLinkRefs(threadId, response.toolCalls, response.toolResults)
-  }
-
-  // MAXTURNS CONTINUATION: If the agent hit the turn limit, resume to let it finish
-  if (response.stopReason === 'max_turns' && response.sessionId) {
-    console.log(`[router] Agent hit maxTurns — continuing conversation to completion`)
-    const continuationSessionId = response.sessionId
-    try {
-      await store.setSessionId(convId, continuationSessionId)
-      await threads.setThreadSession(threadId, continuationSessionId)
-    } catch { /* ignore */ }
-
-    const continueMsg = '[SYSTEM] You hit the turn limit before completing your task. Please wrap up: summarize what you accomplished, what remains, and provide any final answers or PR links.'
-    await store.addMessage(convId, 'user', [{ type: 'text', text: continueMsg }])
-
-    const contMessages: AgentMessage[] = [{ role: 'user', content: [{ type: 'text', text: continueMsg }] }]
-    try {
-      const contResponse = await runAgent(contMessages, wrappedOnEvent, { sessionId: continuationSessionId, signal: abortController.signal })
-      if (contResponse.sessionId) {
-        try {
-          await store.setSessionId(convId, contResponse.sessionId)
-          await threads.setThreadSession(threadId, contResponse.sessionId)
-        } catch { /* ignore */ }
-      }
-      const contText = contResponse.text
-      await store.addMessage(convId, 'assistant', [{ type: 'text', text: contText }], {
-        tool_calls: contResponse.toolCalls.length ? contResponse.toolCalls : undefined,
-        tool_outputs: Object.keys(contResponse.toolResults).length ? contResponse.toolResults : undefined,
-        usage: contResponse.usage || undefined,
-      })
-      flushDeferredDone()
-      // Auto-link from continuation too
-      if (contResponse.toolCalls.length > 0) {
-        await autoLinkRefs(threadId, contResponse.toolCalls, contResponse.toolResults)
-      }
-      // Update the main response text with the continuation
-      storedText = storedText + '\n\n' + contText
-    } catch (err) {
-      console.warn('[router] maxTurns continuation failed:', (err as Error).message)
-    }
-  }
-
-  // ENFORCE TASK COMPLETION
-  const enforcement = await enforceCompletion(convId)
-
-  if (enforcement) {
-    console.log(`[router] Enforcement triggered:`, enforcement.action)
-
-    let enforcementSessionId = response.sessionId
-    try {
-      enforcementSessionId = await store.getSessionId(convId) || enforcementSessionId
-    } catch { /* ignore */ }
-
-    if (enforcement.action === 'code_changed') {
-      const followUp = `You made code changes for ${enforcement.repo}#${enforcement.issueNumber}. Complete the task by:\n1. Committing and pushing to a feature branch\n2. Creating a PR via gitea tool\n3. Notifying via telegram_send`
-
-      await store.addMessage(convId, 'user', [{ type: 'text', text: '[ENFORCER] ' + followUp }])
-
-      let messages2: AgentMessage[]
-      if (enforcementSessionId) {
-        messages2 = [{ role: 'user', content: [{ type: 'text', text: '[ENFORCER] ' + followUp }] }]
-      } else {
-        messages2 = (await store.getMessages(convId)).map((m) => ({
-          role: (m.role === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
-          content: m.content as AgentMessage['content'],
-        }))
-      }
-
-      const response2 = await runAgent(messages2, wrappedOnEvent, { sessionId: enforcementSessionId })
-      if (response2.sessionId) {
-        try {
-          await store.setSessionId(convId, response2.sessionId)
-          await threads.setThreadSession(threadId, response2.sessionId)
-        } catch { /* ignore */ }
-        enforcementSessionId = response2.sessionId
-      }
-      await store.addMessage(convId, 'assistant', response2.content, {
-        tool_calls: response2.toolCalls.length ? response2.toolCalls : undefined,
-        tool_outputs: Object.keys(response2.toolResults).length ? response2.toolResults : undefined,
-        usage: response2.usage || undefined,
-      })
-      flushDeferredDone()
-      // Auto-link from enforcement response
-      if (response2.toolCalls.length > 0) {
-        await autoLinkRefs(threadId, response2.toolCalls, response2.toolResults)
-      }
-
-      const enforcement2 = await enforceCompletion(convId)
-      if (enforcement2?.action === 'needs_notification') {
-        await markNotified(convId, enforcement2.repo, enforcement2.issueNumber)
-      }
+    // Auto-link any PRs/issues created by the agent
+    if (response.toolCalls.length > 0) {
+      await autoLinkRefs(threadId, response.toolCalls, response.toolResults)
     }
 
-    if (enforcement.action === 'needs_notification') {
-      const followUp = `You pushed branch ${enforcement.branch} for ${enforcement.repo}#${enforcement.issueNumber}. Complete the task by sending a Telegram notification with the PR link.`
-
-      await store.addMessage(convId, 'user', [{ type: 'text', text: '[ENFORCER] ' + followUp }])
-
-      let messages2: AgentMessage[]
-      if (enforcementSessionId) {
-        messages2 = [{ role: 'user', content: [{ type: 'text', text: '[ENFORCER] ' + followUp }] }]
-      } else {
-        messages2 = (await store.getMessages(convId)).map((m) => ({
-          role: (m.role === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
-          content: m.content as AgentMessage['content'],
-        }))
-      }
-
-      const response2 = await runAgent(messages2, wrappedOnEvent, { sessionId: enforcementSessionId })
-      if (response2.sessionId) {
-        try {
-          await store.setSessionId(convId, response2.sessionId)
-          await threads.setThreadSession(threadId, response2.sessionId)
-        } catch { /* ignore */ }
-      }
-      await store.addMessage(convId, 'assistant', response2.content, {
-        tool_calls: response2.toolCalls.length ? response2.toolCalls : undefined,
-        tool_outputs: Object.keys(response2.toolResults).length ? response2.toolResults : undefined,
-        usage: response2.usage || undefined,
-      })
-      flushDeferredDone()
-
-      await markNotified(convId, enforcement.repo, enforcement.issueNumber)
-    }
-  }
-
-  // HEURISTIC COMPLETION CHECK — catches unfinished work the enforcer misses
-  // (e.g. agent described intent but didn't follow through, or no /issue tracking was set up)
-  if (!enforcement) {
-    const detection = detectUnfinishedWork(storedText, response.toolCalls.length > 0)
-    if (detection.hasUnfinishedWork && detection.followUpPrompt) {
-      console.log(`[router] Unfinished work detected:`, detection.signals)
-
-      const followUp = `[SYSTEM — Completion Check] ${detection.followUpPrompt}`
-      await store.addMessage(convId, 'user', [{ type: 'text', text: followUp }])
-
-      let completionSessionId = response.sessionId
+    // MAXTURNS CONTINUATION: If the agent hit the turn limit, resume to let it finish
+    // NOTE: Lock is still held — continuations run under the same lock scope
+    if (response.stopReason === 'max_turns' && response.sessionId) {
+      console.log(`[router] Agent hit maxTurns — continuing conversation to completion`)
+      const continuationSessionId = response.sessionId
       try {
-        completionSessionId = await store.getSessionId(convId) || completionSessionId
+        await store.setSessionId(convId, continuationSessionId)
+        await threads.setThreadSession(threadId, continuationSessionId)
       } catch { /* ignore */ }
 
-      const completionMessages: AgentMessage[] = completionSessionId
-        ? [{ role: 'user', content: [{ type: 'text', text: followUp }] }]
-        : (await store.getMessages(convId)).map((m) => ({
+      const continueMsg = '[SYSTEM] You hit the turn limit before completing your task. Please wrap up: summarize what you accomplished, what remains, and provide any final answers or PR links.'
+      await store.addMessage(convId, 'user', [{ type: 'text', text: continueMsg }])
+
+      const contMessages: AgentMessage[] = [{ role: 'user', content: [{ type: 'text', text: continueMsg }] }]
+      try {
+        const contResponse = await runAgent(contMessages, wrappedOnEvent, { sessionId: continuationSessionId, signal: abortController.signal })
+        if (contResponse.sessionId) {
+          try {
+            await store.setSessionId(convId, contResponse.sessionId)
+            await threads.setThreadSession(threadId, contResponse.sessionId)
+          } catch { /* ignore */ }
+        }
+        const contText = contResponse.text
+        await store.addMessage(convId, 'assistant', [{ type: 'text', text: contText }], {
+          tool_calls: contResponse.toolCalls.length ? contResponse.toolCalls : undefined,
+          tool_outputs: Object.keys(contResponse.toolResults).length ? contResponse.toolResults : undefined,
+          usage: contResponse.usage || undefined,
+        })
+        flushDeferredDone()
+        // Auto-link from continuation too
+        if (contResponse.toolCalls.length > 0) {
+          await autoLinkRefs(threadId, contResponse.toolCalls, contResponse.toolResults)
+        }
+        // Update the main response text with the continuation
+        storedText = storedText + '\n\n' + contText
+      } catch (err) {
+        console.warn('[router] maxTurns continuation failed:', (err as Error).message)
+      }
+    }
+
+    // ENFORCE TASK COMPLETION
+    // NOTE: Lock is still held — enforcer runs under the same lock scope
+    const enforcement = await enforceCompletion(convId)
+
+    if (enforcement) {
+      console.log(`[router] Enforcement triggered:`, enforcement.action)
+
+      let enforcementSessionId = response.sessionId
+      try {
+        enforcementSessionId = await store.getSessionId(convId) || enforcementSessionId
+      } catch { /* ignore */ }
+
+      if (enforcement.action === 'code_changed') {
+        const followUp = `You made code changes for ${enforcement.repo}#${enforcement.issueNumber}. Complete the task by:\n1. Committing and pushing to a feature branch\n2. Creating a PR via gitea tool\n3. Notifying via telegram_send`
+
+        await store.addMessage(convId, 'user', [{ type: 'text', text: '[ENFORCER] ' + followUp }])
+
+        let messages2: AgentMessage[]
+        if (enforcementSessionId) {
+          messages2 = [{ role: 'user', content: [{ type: 'text', text: '[ENFORCER] ' + followUp }] }]
+        } else {
+          messages2 = (await store.getMessages(convId)).map((m) => ({
             role: (m.role === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
             content: m.content as AgentMessage['content'],
           }))
+        }
 
-      try {
-        const completionResponse = await runAgent(completionMessages, wrappedOnEvent, { sessionId: completionSessionId })
-        if (completionResponse.sessionId) {
+        const response2 = await runAgent(messages2, wrappedOnEvent, { sessionId: enforcementSessionId })
+        if (response2.sessionId) {
           try {
-            await store.setSessionId(convId, completionResponse.sessionId)
-            await threads.setThreadSession(threadId, completionResponse.sessionId)
+            await store.setSessionId(convId, response2.sessionId)
+            await threads.setThreadSession(threadId, response2.sessionId)
+          } catch { /* ignore */ }
+          enforcementSessionId = response2.sessionId
+        }
+        await store.addMessage(convId, 'assistant', response2.content, {
+          tool_calls: response2.toolCalls.length ? response2.toolCalls : undefined,
+          tool_outputs: Object.keys(response2.toolResults).length ? response2.toolResults : undefined,
+          usage: response2.usage || undefined,
+        })
+        flushDeferredDone()
+        // Auto-link from enforcement response
+        if (response2.toolCalls.length > 0) {
+          await autoLinkRefs(threadId, response2.toolCalls, response2.toolResults)
+        }
+
+        const enforcement2 = await enforceCompletion(convId)
+        if (enforcement2?.action === 'needs_notification') {
+          await markNotified(convId, enforcement2.repo, enforcement2.issueNumber)
+        }
+      }
+
+      if (enforcement.action === 'needs_notification') {
+        const followUp = `You pushed branch ${enforcement.branch} for ${enforcement.repo}#${enforcement.issueNumber}. Complete the task by sending a Telegram notification with the PR link.`
+
+        await store.addMessage(convId, 'user', [{ type: 'text', text: '[ENFORCER] ' + followUp }])
+
+        let messages2: AgentMessage[]
+        if (enforcementSessionId) {
+          messages2 = [{ role: 'user', content: [{ type: 'text', text: '[ENFORCER] ' + followUp }] }]
+        } else {
+          messages2 = (await store.getMessages(convId)).map((m) => ({
+            role: (m.role === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
+            content: m.content as AgentMessage['content'],
+          }))
+        }
+
+        const response2 = await runAgent(messages2, wrappedOnEvent, { sessionId: enforcementSessionId })
+        if (response2.sessionId) {
+          try {
+            await store.setSessionId(convId, response2.sessionId)
+            await threads.setThreadSession(threadId, response2.sessionId)
           } catch { /* ignore */ }
         }
-        const completionText = completionResponse.text
-        await store.addMessage(convId, 'assistant', [{ type: 'text', text: completionText }], {
-          tool_calls: completionResponse.toolCalls.length ? completionResponse.toolCalls : undefined,
-          tool_outputs: Object.keys(completionResponse.toolResults).length ? completionResponse.toolResults : undefined,
-          usage: completionResponse.usage || undefined,
+        await store.addMessage(convId, 'assistant', response2.content, {
+          tool_calls: response2.toolCalls.length ? response2.toolCalls : undefined,
+          tool_outputs: Object.keys(response2.toolResults).length ? response2.toolResults : undefined,
+          usage: response2.usage || undefined,
         })
-        // Auto-link from completion response
-        if (completionResponse.toolCalls.length > 0) {
-          await autoLinkRefs(threadId, completionResponse.toolCalls, completionResponse.toolResults)
-        }
-        storedText = storedText + '\n\n' + completionText
-        console.log(`[router] Completion follow-up finished`)
-      } catch (err) {
-        console.warn('[router] Completion follow-up failed:', (err as Error).message)
+        flushDeferredDone()
+
+        await markNotified(convId, enforcement.repo, enforcement.issueNumber)
       }
     }
+
+    // HEURISTIC COMPLETION CHECK — catches unfinished work the enforcer misses
+    // NOTE: Lock is still held — completion check runs under the same lock scope
+    if (!enforcement) {
+      const detection = detectUnfinishedWork(storedText, response.toolCalls.length > 0)
+      if (detection.hasUnfinishedWork && detection.followUpPrompt) {
+        console.log(`[router] Unfinished work detected:`, detection.signals)
+
+        const followUp = `[SYSTEM — Completion Check] ${detection.followUpPrompt}`
+        await store.addMessage(convId, 'user', [{ type: 'text', text: followUp }])
+
+        let completionSessionId = response.sessionId
+        try {
+          completionSessionId = await store.getSessionId(convId) || completionSessionId
+        } catch { /* ignore */ }
+
+        const completionMessages: AgentMessage[] = completionSessionId
+          ? [{ role: 'user', content: [{ type: 'text', text: followUp }] }]
+          : (await store.getMessages(convId)).map((m) => ({
+              role: (m.role === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
+              content: m.content as AgentMessage['content'],
+            }))
+
+        try {
+          const completionResponse = await runAgent(completionMessages, wrappedOnEvent, { sessionId: completionSessionId })
+          if (completionResponse.sessionId) {
+            try {
+              await store.setSessionId(convId, completionResponse.sessionId)
+              await threads.setThreadSession(threadId, completionResponse.sessionId)
+            } catch { /* ignore */ }
+          }
+          const completionText = completionResponse.text
+          await store.addMessage(convId, 'assistant', [{ type: 'text', text: completionText }], {
+            tool_calls: completionResponse.toolCalls.length ? completionResponse.toolCalls : undefined,
+            tool_outputs: Object.keys(completionResponse.toolResults).length ? completionResponse.toolResults : undefined,
+            usage: completionResponse.usage || undefined,
+          })
+          // Auto-link from completion response
+          if (completionResponse.toolCalls.length > 0) {
+            await autoLinkRefs(threadId, completionResponse.toolCalls, completionResponse.toolResults)
+          }
+          storedText = storedText + '\n\n' + completionText
+          console.log(`[router] Completion follow-up finished`)
+        } catch (err) {
+          console.warn('[router] Completion follow-up failed:', (err as Error).message)
+        }
+      }
+    }
+
+    // Drain any messages that were queued while this agent was running
+    const queuedMessages = drainQueue(convId)
+    if (queuedMessages.length > 0) {
+      console.log(`[router] ${queuedMessages.length} message(s) were queued during agent run for ${convId}`)
+      // Store queued messages so they appear in conversation history
+      for (const qm of queuedMessages) {
+        await store.addMessage(convId, 'user', [{ type: 'text', text: `[Queued while agent was running] ${qm.text}` }])
+      }
+    }
+  } finally {
+    // CRITICAL: Always release the lock, even on error
+    releaseLock()
   }
 
   return { ...response, text: storedText }
