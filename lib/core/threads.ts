@@ -712,3 +712,171 @@ export const getThreadLineage = async (threadId: string): Promise<ThreadLineage>
 
   return { parent, fork_point: forkPoint, children }
 }
+
+// ─── Thread Tree ─────────────────────────────────────────────────────
+
+export interface ThreadTreeNode {
+  id: string
+  topic: string | null
+  kind: ThreadKind
+  display_name: string | null
+  status: ThreadStatus
+  parent_thread_id: string | null
+  fork_point_event_id: string | null
+  conversation_id: string | null
+  created_at: string
+  updated_at: string
+  refs: ThreadRef[]
+  children: ThreadTreeNode[]
+  fork_source?: {
+    thread_id: string
+    display_name: string | null
+    topic: string | null
+  }
+}
+
+/**
+ * Build the full thread tree — all threads organized as a recursive tree.
+ *
+ * Fetches all non-archived threads (or all if includeArchived), joins refs,
+ * and assembles into a tree based on parent_thread_id relationships.
+ * Root nodes are threads with no parent (or whose parent isn't in the set).
+ */
+export const getThreadTree = async (opts: {
+  includeArchived?: boolean
+} = {}): Promise<{ roots: ThreadTreeNode[] }> => {
+  const pool = getPool()
+  const condition = opts.includeArchived ? '' : 'WHERE t.archived_at IS NULL'
+
+  const { rows } = await pool.query(`
+    SELECT t.*,
+           COALESCE(
+             json_agg(
+               json_build_object(
+                 'id', r.id,
+                 'thread_id', r.thread_id,
+                 'ref_type', r.ref_type,
+                 'repo', r.repo,
+                 'number', r.number,
+                 'ref', r.ref,
+                 'url', r.url,
+                 'status', r.status,
+                 'created_at', r.created_at
+               )
+             ) FILTER (WHERE r.id IS NOT NULL),
+             '[]'
+           ) AS refs
+    FROM threads t
+    LEFT JOIN thread_refs r ON r.thread_id = t.id
+    ${condition}
+    GROUP BY t.id
+    ORDER BY t.sort_order ASC, t.updated_at DESC
+  `)
+
+  // Build map of all nodes
+  const nodeMap = new Map<string, ThreadTreeNode>()
+  for (const row of rows) {
+    nodeMap.set(row.id, {
+      id: row.id,
+      topic: row.topic,
+      kind: row.kind,
+      display_name: row.display_name,
+      status: row.status,
+      parent_thread_id: row.parent_thread_id,
+      fork_point_event_id: row.fork_point_event_id,
+      conversation_id: row.conversation_id,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+      refs: row.refs,
+      children: [],
+    })
+  }
+
+  // Assign children to parents, collect roots
+  const roots: ThreadTreeNode[] = []
+  for (const node of nodeMap.values()) {
+    if (node.parent_thread_id && nodeMap.has(node.parent_thread_id)) {
+      const parent = nodeMap.get(node.parent_thread_id)!
+      parent.children.push(node)
+      node.fork_source = {
+        thread_id: parent.id,
+        display_name: parent.display_name,
+        topic: parent.topic,
+      }
+    } else {
+      roots.push(node)
+    }
+  }
+
+  // Sort children within each parent by updated_at DESC
+  const sortChildren = (nodes: ThreadTreeNode[]) => {
+    nodes.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+    for (const node of nodes) {
+      if (node.children.length > 0) sortChildren(node.children)
+    }
+  }
+  sortChildren(roots)
+
+  return { roots }
+}
+
+// ─── Spawn Sub-Thread ────────────────────────────────────────────────
+
+export interface SpawnSubThreadOpts {
+  display_name: string
+  kind?: ThreadKind
+  initial_context?: string
+  link_ref?: {
+    ref_type: ThreadRefType
+    repo: string
+    number?: number
+  }
+}
+
+/**
+ * Spawn a child thread under a parent.
+ *
+ * Creates a new thread with parent_thread_id pointing to the parent,
+ * optionally links a reference (issue/PR) and seeds initial context.
+ */
+export const spawnSubThread = async (
+  parentId: string,
+  opts: SpawnSubThreadOpts
+): Promise<{ thread: ThreadWithRefs; conversation_id: string | null }> => {
+  // Verify parent exists
+  const parent = await getThread(parentId)
+  if (!parent) throw new Error(`Parent thread ${parentId} not found`)
+
+  // Create child thread
+  const thread = await createThread({
+    topic: opts.display_name,
+    display_name: opts.display_name,
+    kind: opts.kind || 'task',
+    status: 'paused',
+    parent_thread_id: parentId,
+  })
+
+  // Link ref if provided
+  if (opts.link_ref) {
+    await addThreadRef(thread.id, {
+      ref_type: opts.link_ref.ref_type,
+      repo: opts.link_ref.repo,
+      number: opts.link_ref.number,
+    })
+  }
+
+  // Add initial context as system event if provided
+  if (opts.initial_context) {
+    await addThreadEvent(thread.id, {
+      channel: 'system',
+      direction: 'outbound',
+      actor: 'gigi',
+      content: opts.initial_context,
+      message_type: 'context',
+      event_kind: 'note',
+    })
+  }
+
+  const result = await getThread(thread.id)
+  return { thread: result!, conversation_id: thread.conversation_id }
+}

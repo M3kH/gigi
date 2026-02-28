@@ -413,6 +413,17 @@ export const createApp = (): Hono => {
     return threads.resolveThreadId(c.req.param('id'))
   }
 
+  // Thread tree (recursive hierarchy)
+  app.get('/api/threads/tree', async (c) => {
+    const includeArchived = c.req.query('include_archived') === 'true'
+    try {
+      const tree = await threads.getThreadTree({ includeArchived })
+      return c.json(tree)
+    } catch (err) {
+      return c.json({ error: (err as Error).message }, 500)
+    }
+  })
+
   // List threads
   app.get('/api/threads', async (c) => {
     const status = c.req.query('status') as threads.ThreadStatus | undefined
@@ -514,6 +525,40 @@ export const createApp = (): Hono => {
     try {
       const forked = await threads.forkThread(sourceId, { topic, at_event_id, compact })
       return c.json(forked, 201)
+    } catch (err) {
+      const msg = (err as Error).message
+      if (msg.includes('not found')) return c.json({ error: msg }, 404)
+      return c.json({ error: msg }, 500)
+    }
+  })
+
+  // Spawn a sub-thread under a parent
+  app.post('/api/threads/:id/spawn', async (c) => {
+    const parentId = await resolveId(c)
+    if (!parentId) return c.json({ error: 'parent thread not found' }, 404)
+    const body = await c.req.json<{
+      display_name: string
+      kind?: string
+      initial_context?: string
+      link_ref?: { ref_type: string; repo: string; number?: number }
+    }>()
+
+    if (!body.display_name) {
+      return c.json({ error: 'display_name is required' }, 400)
+    }
+
+    try {
+      const result = await threads.spawnSubThread(parentId, {
+        display_name: body.display_name,
+        kind: (body.kind as threads.ThreadKind) || 'task',
+        initial_context: body.initial_context,
+        link_ref: body.link_ref ? {
+          ref_type: body.link_ref.ref_type as threads.ThreadRefType,
+          repo: body.link_ref.repo,
+          number: body.link_ref.number,
+        } : undefined,
+      })
+      return c.json(result, 201)
     } catch (err) {
       const msg = (err as Error).message
       if (msg.includes('not found')) return c.json({ error: msg }, 404)

@@ -156,6 +156,30 @@ export interface SearchResult {
   messageRole?: string
 }
 
+// ── Thread tree ─────────────────────────────────────────────────────
+
+export type ThreadKind = 'chat' | 'system_log' | 'task'
+
+export interface ThreadTreeNode {
+  id: string
+  topic: string | null
+  kind: ThreadKind
+  display_name: string | null
+  status: ThreadStatus
+  parent_thread_id: string | null
+  fork_point_event_id: string | null
+  conversation_id: string | null
+  created_at: string
+  updated_at: string
+  refs: ThreadRef[]
+  children: ThreadTreeNode[]
+  fork_source?: {
+    thread_id: string
+    display_name: string | null
+    topic: string | null
+  }
+}
+
 // ── Chat dialog state ───────────────────────────────────────────────
 
 export type DialogState = 'idle' | 'thinking' | 'streaming' | 'tool_running' | 'waiting_for_user'

@@ -1,22 +1,32 @@
 <script lang="ts">
-  /** Section B: Chat list / conversation sidebar */
+  /** Section B: Thread tree / conversation sidebar */
   import { getPanelState, setPanelState, togglePanel, type PanelState } from '$lib/stores/panels.svelte'
-  import { newConversation, loadConversations, setSearchQuery, clearSearch, getSearchQuery } from '$lib/stores/chat.svelte'
+  import { newConversation, loadConversations, setSearchQuery, clearSearch, getSearchQuery, getSearchResults, getSearchLoading } from '$lib/stores/chat.svelte'
+  import { loadTree, setTreeFilter, getTreeFilter } from '$lib/stores/thread-tree.svelte'
+  import ThreadTree from '$components/ThreadTree.svelte'
   import ChatList from '$components/chat/ChatList.svelte'
   import { onMount } from 'svelte'
 
   const state: PanelState = $derived(getPanelState('sidebar'))
   const query = $derived(getSearchQuery())
+  const treeFilter = $derived(getTreeFilter())
+  const searchResults = $derived(getSearchResults())
+  const searchLoading = $derived(getSearchLoading())
+  const isSearchActive = $derived(query.trim().length >= 2)
 
   let searchInput: HTMLInputElement | undefined = $state()
 
   onMount(() => {
+    // Load thread tree (replaces flat conversation list)
+    loadTree()
+    // Also load flat conversations for search compatibility
     loadConversations()
   })
 
   function handleNewChat() {
     newConversation()
     clearSearch()
+    setTreeFilter('')
     // Ensure chat overlay is visible so the user sees the textarea
     const chatState = getPanelState('chatOverlay')
     if (chatState === 'hidden') {
@@ -30,18 +40,23 @@
 
   function handleSearchInput(e: Event) {
     const value = (e.target as HTMLInputElement).value
+    // For short queries, filter the tree locally
+    // For longer queries (2+ chars), also trigger server search
+    setTreeFilter(value)
     setSearchQuery(value)
   }
 
   function handleSearchKeydown(e: KeyboardEvent) {
     if (e.key === 'Escape') {
       clearSearch()
+      setTreeFilter('')
       searchInput?.blur()
     }
   }
 
   function handleClearSearch() {
     clearSearch()
+    setTreeFilter('')
     searchInput?.focus()
   }
 </script>
@@ -49,7 +64,7 @@
 <aside class="gigi-sidebar">
   <header class="section-header">
     <span class="section-icon">🤵🏻‍♂️</span>
-    <h2>Chats</h2>
+    <h2>Threads</h2>
     <div class="header-spacer"></div>
     <button class="collapse-btn" onclick={handleCollapse} title="Collapse sidebar (Ctrl+B)">
       <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
@@ -66,7 +81,7 @@
       bind:this={searchInput}
       type="text"
       class="search-input"
-      placeholder="Search chats..."
+      placeholder="Search threads..."
       value={query}
       oninput={handleSearchInput}
       onkeydown={handleSearchKeydown}
@@ -81,7 +96,13 @@
   </div>
 
   <div class="section-body">
-    <ChatList />
+    {#if isSearchActive}
+      <!-- Search active: show flat search results via ChatList -->
+      <ChatList />
+    {:else}
+      <!-- Normal mode: show thread tree -->
+      <ThreadTree />
+    {/if}
   </div>
 
   <footer class="section-footer">
