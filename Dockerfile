@@ -8,9 +8,8 @@ RUN apt-get update && apt-get install -y \
   libasound2 libatspi2.0-0 libgtk-3-0 \
   && rm -rf /var/lib/apt/lists/*
 
-# Install Claude Code CLI
-RUN curl -fsSL https://claude.ai/install.sh | bash \
-  || npm install -g @anthropic-ai/claude-code
+# Install Claude Code CLI (pinned version for reproducibility)
+RUN npm install -g @anthropic-ai/claude-code@2.1.63
 
 # Create non-root user (Claude Code refuses --dangerously-skip-permissions as root)
 RUN useradd -m -s /bin/bash gigi \
