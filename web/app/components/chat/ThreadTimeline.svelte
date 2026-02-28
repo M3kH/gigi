@@ -93,6 +93,14 @@
     threadEvents.filter(e => !e.is_compacted && e.message_type !== 'summary')
   )
 
+  // Pending optimistic user messages not yet reflected in thread events.
+  // When the user sends a message, it's immediately added to `messages` with a
+  // temp- ID. But this component renders `threadEvents` (from DB), so the temp
+  // message would be invisible until `agent_done` refetches. Show them here.
+  const pendingMessages = $derived(
+    messages.filter(m => m.id.startsWith('temp-'))
+  )
+
   let messagesEl: HTMLDivElement | undefined = $state()
 
   function segmentKey(seg: StreamSegment, i: number): string {
@@ -206,6 +214,11 @@
         </div>
       {/if}
       <ThreadEventComponent event={evt} />
+    {/each}
+
+    <!-- Optimistic user messages not yet in thread events -->
+    {#each pendingMessages as msg (msg.id)}
+      <ChatMessageComponent message={msg} />
     {/each}
 
   {:else}

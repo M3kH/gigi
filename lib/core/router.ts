@@ -408,12 +408,12 @@ export const handleMessage = async (
       reason: `Agent is already running (started by ${lockInfo?.holder})`,
     })
 
-    // Return a synthetic response indicating the message was queued
-    const queuedText = '💬 Message received and queued — an agent is already working on this conversation. Your message will be processed when it finishes.'
-    await store.addMessage(convId, 'assistant', [{ type: 'text', text: queuedText }])
+    // Don't store a synthetic assistant response — the queued message will be
+    // processed naturally after the current agent finishes. The frontend shows
+    // a system notification via the message_queued event.
     return {
-      content: [{ type: 'text', text: queuedText }],
-      text: queuedText,
+      content: [],
+      text: '',
       toolCalls: [],
       toolResults: {},
       sessionId: null,
@@ -426,6 +426,7 @@ export const handleMessage = async (
 
   let response
   let storedText = ''
+  let queuedToReprocess: import('./conversation-lock').QueuedMessage[] = []
   try {
     // Emit agent_start + activate thread (both conversation and thread tables)
     wrappedOnEvent({ type: 'agent_start', conversationId: convId })
@@ -755,18 +756,26 @@ export const handleMessage = async (
       }
     }
 
-    // Drain any messages that were queued while this agent was running
-    const queuedMessages = drainQueue(convId)
-    if (queuedMessages.length > 0) {
-      console.log(`[router] ${queuedMessages.length} message(s) were queued during agent run for ${convId}`)
-      // Store queued messages so they appear in conversation history
-      for (const qm of queuedMessages) {
-        await store.addMessage(convId, 'user', [{ type: 'text', text: `[Queued while agent was running] ${qm.text}` }])
-      }
+    // Drain any messages that were queued while this agent was running.
+    // We'll re-process them after releasing the lock.
+    queuedToReprocess = drainQueue(convId)
+    if (queuedToReprocess.length > 0) {
+      console.log(`[router] ${queuedToReprocess.length} message(s) were queued during agent run for ${convId} — will re-process`)
     }
   } finally {
     // CRITICAL: Always release the lock, even on error
     releaseLock()
+  }
+
+  // Re-process queued messages now that the lock is released.
+  // Each call will acquire its own lock and run an agent turn.
+  for (const qm of queuedToReprocess) {
+    try {
+      console.log(`[router] Re-processing queued message for ${convId} from ${qm.channel}`)
+      await handleMessage(qm.channel, channelId, qm.text, onEvent, context)
+    } catch (err) {
+      console.error(`[router] Failed to re-process queued message:`, (err as Error).message)
+    }
   }
 
   return { ...response, text: storedText }

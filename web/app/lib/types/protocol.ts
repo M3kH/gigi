@@ -144,6 +144,12 @@ export type ConversationUpdatedEvent = {
   reason?: 'webhook_message' | 'new_message'
 }
 
+export type MessageQueuedEvent = {
+  type: 'message_queued'
+  conversationId: string
+  reason?: string
+}
+
 export type ServerMessage =
   | AgentStartEvent
   | TextChunkEvent
@@ -157,3 +163,4 @@ export type ServerMessage =
   | AskUserEvent
   | ThreadStatusEvent
   | ConversationUpdatedEvent
+  | MessageQueuedEvent

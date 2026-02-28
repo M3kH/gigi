@@ -160,6 +160,12 @@ export const ConversationUpdatedEvent = z.object({
   reason: z.enum(['webhook_message', 'new_message']).optional(),
 })
 
+export const MessageQueuedEvent = z.object({
+  type: z.literal('message_queued'),
+  conversationId: z.string(),
+  reason: z.string().optional(),
+})
+
 export const ServerMessage = z.discriminatedUnion('type', [
   AgentStartEvent,
   TextChunkEvent,
@@ -173,6 +179,7 @@ export const ServerMessage = z.discriminatedUnion('type', [
   AskUserEvent,
   ThreadStatusEvent,
   ConversationUpdatedEvent,
+  MessageQueuedEvent,
 ])
 
 export type ServerMessage = z.infer<typeof ServerMessage>

@@ -577,6 +577,17 @@ export function handleServerEvent(event: ServerMessage): void {
       break
     }
 
+    case 'message_queued': {
+      // Agent is already running — show a system notification in the stream
+      if (isActive) {
+        streamSegments = [...streamSegments, {
+          type: 'system' as const,
+          text: '💬 Message queued — will be processed when the current task finishes.',
+        }]
+      }
+      break
+    }
+
     default:
       break
   }
