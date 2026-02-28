@@ -16,7 +16,8 @@
     "test:unit": "vitest run --project unit",
     "test:integration": "TEST_DATABASE_URL=${TEST_DATABASE_URL:-postgresql://gigi_test:gigi_test@postgres:5432/gigi_test} vitest run --project integration",
     "pretest:integration": "bash scripts/backup-db.sh",
-    "test:ci": "vitest run --project unit && npm run test:integration"
+    "test:components": "vitest run --project component",
+    "test:ci": "vitest run --project unit && vitest run --project component && npm run test:integration"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.62",
@@ -39,12 +40,16 @@
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^6.2.4",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/svelte": "^5.3.1",
+    "@testing-library/user-event": "^14.6.1",
     "@types/dompurify": "^3.0.5",
     "@types/node": "^20.0.0",
     "@types/pg": "^8.11.0",
     "@types/ws": "^8.5.0",
     "@vitest/coverage-v8": "^4.0.18",
     "happy-dom": "^20.7.0",
+    "jsdom": "^28.1.0",
     "msw": "^2.12.10",
     "svelte-check": "^4.4.0",
     "tsx": "^4.21.0",
