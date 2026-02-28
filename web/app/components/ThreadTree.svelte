@@ -11,6 +11,10 @@
    */
 
   import type { ThreadTreeNode, ThreadStatus, ThreadRef } from '$lib/types/chat'
+  import chevronRightIcon from 'pixelarticons/svg/chevron-right.svg?raw'
+  import stopIcon from 'pixelarticons/svg/checkbox-on.svg?raw'
+  import forkIcon from 'pixelarticons/svg/git-branch.svg?raw'
+  import archiveIcon from 'pixelarticons/svg/archive.svg?raw'
   import {
     getFilteredTree,
     getSelectedThreadId,
@@ -178,16 +182,7 @@
           onclick={(e) => handleToggle(e, node)}
           aria-label={expanded ? 'Collapse' : 'Expand'}
         >
-          <svg
-            class="chevron"
-            class:expanded
-            viewBox="0 0 24 24"
-            width="10"
-            height="10"
-            fill="currentColor"
-          >
-            <path d="M8 5v2h2V5H8zm4 4V7h-2v2h2zm2 2V9h-2v2h2zm0 2h2v-2h-2v2zm-2 2v-2h2v2h-2zm0 0h-2v2h2v-2zm-4 4v-2h2v2H8z"/>
-          </svg>
+          <span class="chevron-icon" class:expanded>{@html chevronRightIcon}</span>
         </button>
       {:else}
         <span class="expand-spacer"></span>
@@ -208,23 +203,17 @@
       <div class="action-btns">
         {#if node.status === 'paused' || node.status === 'active'}
           <button class="action-btn stop-btn" title="Stop (mark done)" onclick={(e) => handleStop(e, node)}>
-            <svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor">
-              <path d="M2 2h20v20H2V2zm2 2v16h16V4H4z"/>
-            </svg>
+            <span class="btn-icon">{@html stopIcon}</span>
           </button>
         {/if}
         {#if node.status === 'stopped'}
           <button class="action-btn reopen-btn" title="Reopen" onclick={(e) => handleReopen(e, node)}>↩</button>
         {/if}
         <button class="action-btn fork-btn" title="Fork" onclick={(e) => handleFork(e, node)}>
-          <svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor">
-            <path d="M5 2h2v12h3v3h7v-7h-3V2h8v8h-3v9h-9v3H2v-8h3V2zm15 6V4h-4v4h4zM8 19v-3H4v4h4v-1z"/>
-          </svg>
+          <span class="btn-icon">{@html forkIcon}</span>
         </button>
         <button class="action-btn archive-btn" title="Archive" onclick={(e) => handleArchive(e, node)}>
-          <svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor">
-            <path d="M4 4h8v2h10v14H2V4h2zm16 4H10V6H4v12h16V8z"/>
-          </svg>
+          <span class="btn-icon">{@html archiveIcon}</span>
         </button>
         <button class="action-btn delete-btn" title="Delete" onclick={(e) => handleDelete(e, node)}>&times;</button>
       </div>
@@ -356,12 +345,34 @@
     background: var(--gigi-bg-tertiary);
   }
 
-  .chevron {
+  .chevron-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
     transition: transform var(--gigi-transition-fast);
   }
 
-  .chevron.expanded {
+  .chevron-icon :global(svg) {
+    width: 10px;
+    height: 10px;
+    fill: currentColor;
+  }
+
+  .chevron-icon.expanded {
     transform: rotate(90deg);
+  }
+
+  /* Icon wrapper for action buttons using ?raw imports */
+  .btn-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .btn-icon :global(svg) {
+    width: 11px;
+    height: 11px;
+    fill: currentColor;
   }
 
   .expand-spacer {
