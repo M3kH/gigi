@@ -2,12 +2,16 @@
   /**
    * Chat text input with auto-resize, Enter-to-send, and per-conversation draft persistence
    *
-   * Fires `onsend` with the message string. Handles Shift+Enter for newlines.
+   * Fires `onsend` with the message string.
+   * - Desktop: Enter sends, Shift+Enter inserts a newline.
+   * - Mobile: Enter inserts a newline, the Send button submits.
+   *
    * Persists draft text per conversation to localStorage so it survives page
    * refreshes and conversation switches. Drafts expire after 30 minutes.
    */
   import { onMount } from 'svelte'
   import { saveDraft, loadDraft, clearDraft, cleanStaleDrafts } from '$lib/utils/draft'
+  import { getIsMobile } from '$lib/actions/responsive.svelte'
 
   interface Props {
     onsend: (message: string) => void
@@ -116,7 +120,7 @@
   }
 
   function handleKeydown(e: KeyboardEvent) {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === 'Enter' && !e.shiftKey && !getIsMobile()) {
       e.preventDefault()
       handleSend()
     }
