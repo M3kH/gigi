@@ -36,6 +36,8 @@ function makeNode(overrides: Partial<ThreadTreeNode> = {}): ThreadTreeNode {
     updated_at: overrides.updated_at ?? '2026-01-01T00:00:00Z',
     refs: overrides.refs ?? [],
     children: overrides.children ?? [],
+    last_event_preview: overrides.last_event_preview ?? null,
+    usage_cost: overrides.usage_cost ?? null,
     fork_source: overrides.fork_source,
   }
 }

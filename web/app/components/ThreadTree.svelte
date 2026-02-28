@@ -1,17 +1,16 @@
 <script lang="ts">
   /**
-   * ThreadTree — Recursive tree view of threads replacing flat sidebar list.
+   * ThreadTree — Recursive tree view of threads with rich 2-3 line items.
    *
-   * Renders threads as a collapsible tree with:
-   * - Status badges (active/paused/stopped/archived)
-   * - Kind icons (chat/task/system_log)
-   * - Ref badges (linked issues/PRs)
-   * - Fork trail links (↩ from parent)
-   * - Expand/collapse with indentation
-   * - Action buttons (fork, archive, stop, delete)
+   * Each node shows:
+   *   Row 1: [expand] [status] Title [spinner] [actions]
+   *   Row 2: Preview text (one line, truncated)
+   *   Row 3: Time · PR#123 · #45 · $0.42
+   *
+   * Subthreads are expandable/collapsible with indentation.
    */
 
-  import type { ThreadTreeNode, ThreadStatus } from '$lib/types/chat'
+  import type { ThreadTreeNode, ThreadStatus, ThreadRef } from '$lib/types/chat'
   import {
     getFilteredTree,
     getSelectedThreadId,
@@ -38,16 +37,6 @@
   const loading = $derived(isLoading())
   const error = $derived(getError())
 
-  function kindIcon(kind: string): string {
-    switch (kind) {
-      case 'system_log': return '📊'
-      case 'task': return '🔀'
-      case 'chat':
-      default:
-        return '💬'
-    }
-  }
-
   function statusClass(node: ThreadTreeNode): string {
     const convId = node.conversation_id || node.id
     if (isAgentRunning(convId)) return 'active'
@@ -67,7 +56,17 @@
   }
 
   function displayName(node: ThreadTreeNode): string {
-    return node.display_name || node.topic || 'Untitled'
+    const name = node.display_name || node.topic || ''
+    // If name is generic, try to derive from preview
+    if (!name || name === 'web' || name === 'telegram' || name === 'Untitled') {
+      if (node.last_event_preview) {
+        const stripped = node.last_event_preview.replace(/^\[Viewing [^\]]+\]\n?/, '').trim()
+        const trimmed = stripped.slice(0, 50)
+        return trimmed + (stripped.length > 50 ? '...' : '') || 'Untitled'
+      }
+      return 'Untitled'
+    }
+    return name
   }
 
   function handleSelect(node: ThreadTreeNode) {
@@ -119,7 +118,6 @@
     e.stopPropagation()
     if (node.fork_source) {
       selectThread(node.fork_source.thread_id)
-      // Find the parent's conversation_id from the tree
       const parentNode = findInTree(tree, node.fork_source.thread_id)
       if (parentNode) {
         const parentConvId = parentNode.conversation_id || parentNode.id
@@ -137,9 +135,18 @@
     return null
   }
 
-  function refBadgeText(ref: { ref_type: string; number: number | null; repo: string }): string {
-    const prefix = ref.ref_type === 'pr' ? 'PR' : ref.ref_type === 'issue' ? '#' : ref.ref_type
-    return ref.number ? `${prefix}${ref.number}` : ref.ref_type
+  function refLabel(ref: ThreadRef): string {
+    if (ref.ref_type === 'pr') return `PR#${ref.number}`
+    if (ref.ref_type === 'issue') return `#${ref.number}`
+    if (ref.ref_type === 'branch') return ref.ref || 'branch'
+    return ref.ref_type
+  }
+
+  function handleRefClick(e: MouseEvent, ref: ThreadRef) {
+    e.stopPropagation()
+    if (ref.url) {
+      window.open(ref.url, '_blank')
+    }
   }
 </script>
 
@@ -149,90 +156,106 @@
   {@const isSelected = selectedId === node.id}
   {@const convId = node.conversation_id || node.id}
   {@const running = isAgentRunning(convId)}
+  {@const costStr = formatCost(node.usage_cost)}
 
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
     class="tree-node"
     class:selected={isSelected}
-    class:has-children={hasChildren}
-    style:padding-left="{12 + depth * 16}px"
+    class:stopped={node.status === 'stopped'}
+    style:padding-left="{8 + depth * 14}px"
     onclick={() => handleSelect(node)}
     onkeydown={(e) => e.key === 'Enter' && handleSelect(node)}
     tabindex="0"
     role="treeitem"
     aria-expanded={hasChildren ? expanded : undefined}
   >
-    <!-- Expand/collapse toggle -->
-    {#if hasChildren}
-      <button
-        class="expand-toggle"
-        onclick={(e) => handleToggle(e, node)}
-        aria-label={expanded ? 'Collapse' : 'Expand'}
-      >
-        <svg
-          class="chevron"
-          class:expanded
-          viewBox="0 0 24 24"
-          width="10"
-          height="10"
-          fill="currentColor"
+    <!-- Row 1: status + title + spinner + actions -->
+    <div class="node-row-1">
+      {#if hasChildren}
+        <button
+          class="expand-toggle"
+          onclick={(e) => handleToggle(e, node)}
+          aria-label={expanded ? 'Collapse' : 'Expand'}
         >
-          <path d="M8 5v2h2V5H8zm4 4V7h-2v2h2zm2 2V9h-2v2h2zm0 2h2v-2h-2v2zm-2 2v-2h2v2h-2zm0 0h-2v2h2v-2zm-4 4v-2h2v2H8z"/>
-        </svg>
-      </button>
-    {:else}
-      <span class="expand-spacer"></span>
-    {/if}
-
-    <!-- Kind icon -->
-    <span class="kind-icon">{kindIcon(node.kind)}</span>
-
-    <!-- Status dot -->
-    <span class="status-dot {statusClass(node)}" title={statusTooltip(node)}></span>
-
-    <!-- Title -->
-    <span class="node-title">{displayName(node)}</span>
-
-    <!-- Spinner for running agents -->
-    {#if running}
-      <span class="spinner">&#x27F3;</span>
-    {/if}
-
-    <!-- Ref badges -->
-    {#each node.refs.slice(0, 3) as ref (ref.id)}
-      <span class="ref-badge" class:pr={ref.ref_type === 'pr'} class:issue={ref.ref_type === 'issue'}>
-        {refBadgeText(ref)}
-      </span>
-    {/each}
-
-    <!-- Status badge for stopped/done -->
-    {#if node.status === 'stopped'}
-      <span class="done-badge">✅</span>
-    {/if}
-
-    <!-- Action buttons (on hover) -->
-    <div class="action-btns">
-      {#if node.status === 'paused' || node.status === 'active'}
-        <button class="action-btn stop-btn" title="Stop (mark done)" onclick={(e) => handleStop(e, node)}>
-          <svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor">
-            <path d="M2 2h20v20H2V2zm2 2v16h16V4H4z"/>
+          <svg
+            class="chevron"
+            class:expanded
+            viewBox="0 0 24 24"
+            width="10"
+            height="10"
+            fill="currentColor"
+          >
+            <path d="M8 5v2h2V5H8zm4 4V7h-2v2h2zm2 2V9h-2v2h2zm0 2h2v-2h-2v2zm-2 2v-2h2v2h-2zm0 0h-2v2h2v-2zm-4 4v-2h2v2H8z"/>
           </svg>
         </button>
+      {:else}
+        <span class="expand-spacer"></span>
       {/if}
-      {#if node.status === 'stopped'}
-        <button class="action-btn reopen-btn" title="Reopen" onclick={(e) => handleReopen(e, node)}>↩</button>
+
+      <span class="status-dot {statusClass(node)}" title={statusTooltip(node)}></span>
+      <span class="node-title">{displayName(node)}</span>
+
+      {#if running}
+        <span class="spinner">&#x27F3;</span>
       {/if}
-      <button class="action-btn fork-btn" title="Fork" onclick={(e) => handleFork(e, node)}>
-        <svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor">
-          <path d="M5 2h2v12h3v3h7v-7h-3V2h8v8h-3v9h-9v3H2v-8h3V2zm15 6V4h-4v4h4zM8 19v-3H4v4h4v-1z"/>
-        </svg>
-      </button>
-      <button class="action-btn archive-btn" title="Archive" onclick={(e) => handleArchive(e, node)}>
-        <svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor">
-          <path d="M4 4h8v2h10v14H2V4h2zm16 4H10V6H4v12h16V8z"/>
-        </svg>
-      </button>
-      <button class="action-btn delete-btn" title="Delete" onclick={(e) => handleDelete(e, node)}>&times;</button>
+
+      {#if hasChildren}
+        <span class="child-count" title="{node.children.length} subthread{node.children.length > 1 ? 's' : ''}">{node.children.length}</span>
+      {/if}
+
+      <!-- Action buttons (on hover) -->
+      <div class="action-btns">
+        {#if node.status === 'paused' || node.status === 'active'}
+          <button class="action-btn stop-btn" title="Stop (mark done)" onclick={(e) => handleStop(e, node)}>
+            <svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor">
+              <path d="M2 2h20v20H2V2zm2 2v16h16V4H4z"/>
+            </svg>
+          </button>
+        {/if}
+        {#if node.status === 'stopped'}
+          <button class="action-btn reopen-btn" title="Reopen" onclick={(e) => handleReopen(e, node)}>↩</button>
+        {/if}
+        <button class="action-btn fork-btn" title="Fork" onclick={(e) => handleFork(e, node)}>
+          <svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor">
+            <path d="M5 2h2v12h3v3h7v-7h-3V2h8v8h-3v9h-9v3H2v-8h3V2zm15 6V4h-4v4h4zM8 19v-3H4v4h4v-1z"/>
+          </svg>
+        </button>
+        <button class="action-btn archive-btn" title="Archive" onclick={(e) => handleArchive(e, node)}>
+          <svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor">
+            <path d="M4 4h8v2h10v14H2V4h2zm16 4H10V6H4v12h16V8z"/>
+          </svg>
+        </button>
+        <button class="action-btn delete-btn" title="Delete" onclick={(e) => handleDelete(e, node)}>&times;</button>
+      </div>
+    </div>
+
+    <!-- Row 2: preview text -->
+    {#if node.last_event_preview}
+      <div class="node-preview">{node.last_event_preview}</div>
+    {/if}
+
+    <!-- Row 3: time + refs + cost -->
+    <div class="node-meta">
+      <span class="meta-time">{formatRelativeTime(node.updated_at)}</span>
+
+      {#each node.refs.slice(0, 3) as ref (ref.id)}
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <span
+          class="ref-link"
+          class:pr={ref.ref_type === 'pr'}
+          class:issue={ref.ref_type === 'issue'}
+          class:clickable={!!ref.url}
+          onclick={(e) => handleRefClick(e, ref)}
+          title={ref.url || refLabel(ref)}
+        >{refLabel(ref)}</span>
+      {/each}
+
+      <span class="meta-spacer"></span>
+
+      {#if costStr}
+        <span class="meta-cost">{costStr}</span>
+      {/if}
     </div>
   </div>
 
@@ -241,14 +264,14 @@
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
       class="fork-trail"
-      style:padding-left="{28 + depth * 16}px"
+      style:padding-left="{22 + depth * 14}px"
       onclick={(e) => handleForkTrailClick(e, node)}
     >
       ↩ from {node.fork_source.display_name || node.fork_source.topic || 'parent'}
     </div>
   {/if}
 
-  <!-- Children -->
+  <!-- Children (collapsible) -->
   {#if hasChildren && expanded}
     {#each node.children as child (child.id)}
       {@render treeNode(child, depth + 1)}
@@ -276,19 +299,17 @@
     flex-direction: column;
   }
 
-  /* ── Tree Node ──────────────────────────────────────────────── */
+  /* ── Tree Node (2-3 line card) ──────────────────────────────── */
 
   .tree-node {
     display: flex;
-    align-items: center;
-    gap: 4px;
-    padding: 5px 8px 5px 12px;
+    flex-direction: column;
+    padding: 6px 8px 5px;
     cursor: pointer;
     border-bottom: var(--gigi-border-width) solid var(--gigi-border-muted);
     transition: background var(--gigi-transition-fast);
     font-family: var(--gigi-font-sans);
     position: relative;
-    min-height: 28px;
   }
 
   .tree-node:hover {
@@ -298,6 +319,19 @@
   .tree-node.selected {
     background: var(--gigi-bg-active);
     border-left: 2px solid var(--gigi-accent-green);
+  }
+
+  .tree-node.stopped {
+    opacity: 0.7;
+  }
+
+  /* ── Row 1: Header ─────────────────────────────────────────── */
+
+  .node-row-1 {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-height: 20px;
   }
 
   /* ── Expand/collapse ────────────────────────────────────────── */
@@ -310,11 +344,11 @@
     border: none;
     cursor: pointer;
     color: var(--gigi-text-muted);
-    padding: 2px;
+    padding: 1px;
     border-radius: var(--gigi-radius-sm);
     flex-shrink: 0;
-    width: 16px;
-    height: 16px;
+    width: 14px;
+    height: 14px;
   }
 
   .expand-toggle:hover {
@@ -331,16 +365,8 @@
   }
 
   .expand-spacer {
-    width: 16px;
+    width: 14px;
     flex-shrink: 0;
-  }
-
-  /* ── Kind icon ──────────────────────────────────────────────── */
-
-  .kind-icon {
-    font-size: 11px;
-    flex-shrink: 0;
-    line-height: 1;
   }
 
   /* ── Status dot ─────────────────────────────────────────────── */
@@ -401,30 +427,89 @@
     to { transform: rotate(360deg); }
   }
 
-  /* ── Ref badges ─────────────────────────────────────────────── */
+  /* ── Child count badge ──────────────────────────────────────── */
 
-  .ref-badge {
+  .child-count {
     font-size: 8px;
+    font-weight: 600;
+    color: var(--gigi-text-muted);
+    background: var(--gigi-bg-tertiary);
+    padding: 0 4px;
+    border-radius: var(--gigi-radius-full);
+    flex-shrink: 0;
+    line-height: 1.5;
+  }
+
+  /* ── Row 2: Preview ─────────────────────────────────────────── */
+
+  .node-preview {
+    font-size: 11px;
+    color: var(--gigi-text-muted);
+    margin-top: 1px;
+    margin-left: 24px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.3;
+  }
+
+  /* ── Row 3: Meta ────────────────────────────────────────────── */
+
+  .node-meta {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 2px;
+    margin-left: 24px;
+    flex-wrap: nowrap;
+    overflow: hidden;
+  }
+
+  .meta-time {
+    font-size: 10px;
+    color: var(--gigi-text-muted);
+    flex-shrink: 0;
+  }
+
+  .meta-spacer {
+    flex: 1;
+  }
+
+  .meta-cost {
+    font-size: 9px;
+    color: var(--gigi-text-muted);
+    flex-shrink: 0;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ── Ref links (clickable) ──────────────────────────────────── */
+
+  .ref-link {
+    font-size: 9px;
     font-weight: 600;
     padding: 0 4px;
     border-radius: var(--gigi-radius-full);
     flex-shrink: 0;
     letter-spacing: 0.02em;
+    text-decoration: none;
   }
 
-  .ref-badge.issue {
+  .ref-link.clickable {
+    cursor: pointer;
+  }
+
+  .ref-link.clickable:hover {
+    text-decoration: underline;
+  }
+
+  .ref-link.issue {
     color: var(--gigi-accent-green);
     background: rgba(63, 185, 80, 0.12);
   }
 
-  .ref-badge.pr {
+  .ref-link.pr {
     color: var(--gigi-accent-purple, #a371f7);
     background: rgba(163, 113, 247, 0.12);
-  }
-
-  .done-badge {
-    font-size: 10px;
-    flex-shrink: 0;
   }
 
   /* ── Fork trail ─────────────────────────────────────────────── */
@@ -432,7 +517,7 @@
   .fork-trail {
     font-size: 10px;
     color: var(--gigi-accent-purple, #a371f7);
-    padding: 1px 8px 3px;
+    padding: 0 8px 3px;
     cursor: pointer;
     transition: color var(--gigi-transition-fast);
   }

@@ -728,6 +728,10 @@ export interface ThreadTreeNode {
   updated_at: string
   refs: ThreadRef[]
   children: ThreadTreeNode[]
+  /** Preview text from the latest thread event */
+  last_event_preview: string | null
+  /** Aggregated cost in USD from thread events with usage data */
+  usage_cost: number | null
   fork_source?: {
     thread_id: string
     display_name: string | null
@@ -765,11 +769,36 @@ export const getThreadTree = async (opts: {
                )
              ) FILTER (WHERE r.id IS NOT NULL),
              '[]'
-           ) AS refs
+           ) AS refs,
+           lep.preview AS last_event_preview,
+           uc.total_cost AS usage_cost
     FROM threads t
     LEFT JOIN thread_refs r ON r.thread_id = t.id
+    LEFT JOIN LATERAL (
+      SELECT LEFT(
+        CASE
+          WHEN e.content IS NULL THEN ''
+          WHEN jsonb_typeof(e.content::jsonb) = 'string' THEN e.content::jsonb #>> '{}'
+          WHEN jsonb_typeof(e.content::jsonb) = 'array' THEN (
+            SELECT string_agg(elem->>'text', '')
+            FROM jsonb_array_elements(e.content::jsonb) elem
+            WHERE elem->>'type' = 'text'
+          )
+          ELSE e.content::text
+        END, 120
+      ) AS preview
+      FROM thread_events e
+      WHERE e.thread_id = t.id AND e.is_compacted = false
+      ORDER BY e.created_at DESC
+      LIMIT 1
+    ) lep ON true
+    LEFT JOIN LATERAL (
+      SELECT COALESCE(SUM((e2.usage::jsonb->>'costUSD')::numeric), 0) AS total_cost
+      FROM thread_events e2
+      WHERE e2.thread_id = t.id AND e2.usage IS NOT NULL
+    ) uc ON true
     ${condition}
-    GROUP BY t.id
+    GROUP BY t.id, lep.preview, uc.total_cost
     ORDER BY t.sort_order ASC, t.updated_at DESC
   `)
 
@@ -789,6 +818,8 @@ export const getThreadTree = async (opts: {
       updated_at: row.updated_at,
       refs: row.refs,
       children: [],
+      last_event_preview: row.last_event_preview || null,
+      usage_cost: row.usage_cost ? Number(row.usage_cost) : null,
     })
   }
 

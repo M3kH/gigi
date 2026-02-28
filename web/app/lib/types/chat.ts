@@ -173,6 +173,10 @@ export interface ThreadTreeNode {
   updated_at: string
   refs: ThreadRef[]
   children: ThreadTreeNode[]
+  /** Preview text from the latest thread event */
+  last_event_preview: string | null
+  /** Aggregated cost in USD from thread events */
+  usage_cost: number | null
   fork_source?: {
     thread_id: string
     display_name: string | null
