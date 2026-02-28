@@ -24,7 +24,7 @@ export interface WebhookPayload {
   pull_request?: { title: string; number: number; head?: { ref: string }; base?: { ref: string }; merged: boolean; user?: { login: string }; html_url: string }
   number?: number
   comment?: { body: string; user?: { login: string }; html_url: string }
-  commits?: Array<{ id: string; message: string }>
+  commits?: Array<{ id: string; message: string; added?: string[]; modified?: string[]; removed?: string[] }>
   pusher?: { login: string }
   sender?: { login: string }
   ref?: string
