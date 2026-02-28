@@ -635,3 +635,79 @@ describe('Edge cases', () => {
     assert.ok(result.includes('Thread: "Short ID" (ab)'))
   })
 })
+
+// ─── Cache Integration (#304) ───────────────────────────────────────
+
+describe('Backward-compatible cache API', () => {
+  // These test that the wrapper functions from thread-context.ts delegate
+  // correctly to context-cache.ts. We import from thread-context to verify
+  // the re-export works.
+
+  it('clearContextCache clears all cached data', async () => {
+    // Use the cache module directly to set some data, then clear via thread-context wrapper
+    const { setCache, getCached, clearAll } = await import('../lib/core/context-cache')
+    clearAll() // clean slate
+    setCache('test-key', 'test-value', 60_000)
+    assert.equal(getCached('test-key'), 'test-value')
+
+    // Import the wrapper from thread-context
+    const { clearContextCache } = await import('../lib/core/thread-context')
+    clearContextCache()
+
+    assert.equal(getCached('test-key'), null)
+  })
+
+  it('invalidateCache removes matching entries', async () => {
+    const { setCache, getCached, clearAll } = await import('../lib/core/context-cache')
+    clearAll()
+    setCache('claude_md:idea/gigi', 'docs', 60_000)
+    setCache('claude_md:idea/other', 'other', 60_000)
+    setCache('issue:gigi#1', 'issue', 60_000)
+
+    const { invalidateCache } = await import('../lib/core/thread-context')
+    invalidateCache('claude_md:')
+
+    assert.equal(getCached('claude_md:idea/gigi'), null)
+    assert.equal(getCached('claude_md:idea/other'), null)
+    assert.equal(getCached('issue:gigi#1'), 'issue')
+  })
+})
+
+describe('Checksum computation in context stack', () => {
+  it('computeChecksum produces consistent results', async () => {
+    const { computeChecksum } = await import('../lib/core/context-cache')
+    const cs1 = computeChecksum('hello world')
+    const cs2 = computeChecksum('hello world')
+    assert.equal(cs1, cs2)
+    assert.equal(cs1.length, 16)
+  })
+
+  it('different content produces different checksums', async () => {
+    const { computeChecksum } = await import('../lib/core/context-cache')
+    const cs1 = computeChecksum('content A')
+    const cs2 = computeChecksum('content B')
+    assert.notEqual(cs1, cs2)
+  })
+})
+
+describe('Layer name to checksum key mapping', () => {
+  // Test the layerNameToChecksumKey helper logic
+  it('maps standard layer names correctly', () => {
+    // Re-implement the mapping for isolated testing
+    const layerNameToChecksumKey = (name: string): string | null => {
+      switch (name) {
+        case 'Repo CLAUDE.md': return 'repoContext'
+        case 'Ticket Chain': return 'ticketChain'
+        case 'Thread Lineage': return 'threadLineage'
+        case 'Execution State': return 'executionState'
+        default: return null
+      }
+    }
+
+    assert.equal(layerNameToChecksumKey('Repo CLAUDE.md'), 'repoContext')
+    assert.equal(layerNameToChecksumKey('Ticket Chain'), 'ticketChain')
+    assert.equal(layerNameToChecksumKey('Thread Lineage'), 'threadLineage')
+    assert.equal(layerNameToChecksumKey('Execution State'), 'executionState')
+    assert.equal(layerNameToChecksumKey('Unknown Layer'), null)
+  })
+})

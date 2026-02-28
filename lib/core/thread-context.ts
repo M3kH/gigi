@@ -1,5 +1,6 @@
 /**
  * Thread Context Stack — 5-layer context injection for threads (Phase 2, Issue #299)
+ * Enhanced with smart caching (Issue #304)
  *
  * Automatically assembles layered context when a thread/sub-thread is active.
  * Each layer adds domain-specific knowledge without carrying the entire codebase.
@@ -10,6 +11,12 @@
  *   3. Ticket Chain      — Parent → current → sibling issues with status
  *   4. Thread Lineage    — Parent thread summary inherited on fork
  *   5. Execution State   — Step-by-step plan progress for task threads
+ *
+ * Cache optimizations (#304):
+ *   - Layer-granular caching with checksums for change detection
+ *   - Session-aware: detect changes since last injection, send delta updates
+ *   - Fork-from-cache: sub-threads inherit parent context cheaply
+ *   - Webhook invalidation: targeted cache busting on events
  *
  * Total budget: ~7K tokens overhead (4K repo + 2K tickets + 1K lineage).
  */
@@ -22,6 +29,23 @@ import {
   type ThreadRef,
   type ThreadLineage,
 } from './threads.js'
+
+import {
+  getCached,
+  setCache,
+  computeChecksum,
+  estimateTokens,
+  recordInjection,
+  detectChanges,
+  cacheContextStack,
+  getCachedContextStack,
+  clearAll,
+  invalidateByPrefix,
+  CLAUDE_MD_TTL,
+  TICKET_TTL,
+  type LayerChecksums,
+  type ChangeDetectionResult,
+} from './context-cache.js'
 
 // ─── Types ──────────────────────────────────────────────────────────
 
@@ -45,6 +69,8 @@ export interface ThreadContextStack {
   totalTokens: number
   /** Combined formatted text for injection into agent context */
   formatted: string
+  /** Checksums for each layer (used for change detection) */
+  checksums?: LayerChecksums
 }
 
 export interface ContextStackOptions {
@@ -60,55 +86,43 @@ export interface ContextStackOptions {
   skipExecutionState?: boolean
 }
 
-// ─── Cache ──────────────────────────────────────────────────────────
-
-interface CacheEntry<T> {
-  value: T
-  expiresAt: number
+/** Options for the cached context builder (#304) */
+export interface CachedContextStackOptions extends ContextStackOptions {
+  /** Session ID — if provided, enables session-aware change detection */
+  sessionId?: string
+  /** If true, force rebuild even if cache is valid */
+  forceRefresh?: boolean
 }
 
-const cache = new Map<string, CacheEntry<string>>()
-
-const CLAUDE_MD_TTL = 5 * 60 * 1000  // 5 minutes
-const TICKET_TTL = 10 * 60 * 1000     // 10 minutes
-
-const getCached = (key: string): string | null => {
-  const entry = cache.get(key)
-  if (!entry) return null
-  if (Date.now() > entry.expiresAt) {
-    cache.delete(key)
-    return null
-  }
-  return entry.value
+/** Result of a cached context stack build */
+export interface CachedContextStackResult {
+  /** The context stack (null if no layers have content) */
+  stack: ThreadContextStack | null
+  /** Whether this was served from cache */
+  fromCache: boolean
+  /** Change detection result (only when sessionId provided and previous injection exists) */
+  changes: ChangeDetectionResult | null
 }
 
-const setCache = (key: string, value: string, ttl: number): void => {
-  cache.set(key, { value, expiresAt: Date.now() + ttl })
-}
+// ─── Backward-Compatible Cache API ──────────────────────────────────
+// These wrap the new context-cache.ts module to maintain backward compat
+// for existing callers (e.g., tests that import from thread-context).
 
 /** Clear all cached context (for testing or invalidation). */
 export const clearContextCache = (): void => {
-  cache.clear()
+  clearAll()
 }
 
 /** Invalidate cache entries matching a prefix (e.g., "claude_md:idea/gigi"). */
 export const invalidateCache = (prefix: string): void => {
-  for (const key of cache.keys()) {
-    if (key.startsWith(prefix)) {
-      cache.delete(key)
-    }
-  }
+  invalidateByPrefix(prefix)
 }
-
-// ─── Token Estimation ───────────────────────────────────────────────
-
-const estimateTokens = (text: string): number => Math.ceil(text.length / 4)
 
 // ─── Layer 2: Repo CLAUDE.md ────────────────────────────────────────
 
 /**
  * Fetch CLAUDE.md from a Gitea repository.
- * Cached with 5-min TTL to avoid re-fetching on every message.
+ * Cached with 5-min TTL and checksum tracking.
  */
 export const fetchClaudeMd = async (repo: string): Promise<string | null> => {
   const cacheKey = `claude_md:${repo}`
@@ -497,6 +511,7 @@ export const buildContextStack = async (
   const refs = await getThreadRefs(threadId)
   const layers: ContextLayer[] = []
   let remainingTokens = maxTokens
+  const checksums: LayerChecksums = {}
 
   // Layer 2: Repo CLAUDE.md
   if (!opts.skipRepoContext) {
@@ -505,6 +520,7 @@ export const buildContextStack = async (
     if (repoLayer) {
       layers.push(repoLayer)
       remainingTokens -= repoLayer.estimatedTokens
+      checksums.repoContext = computeChecksum(repoLayer.content)
     }
   }
 
@@ -515,6 +531,7 @@ export const buildContextStack = async (
     if (ticketLayer) {
       layers.push(ticketLayer)
       remainingTokens -= ticketLayer.estimatedTokens
+      checksums.ticketChain = computeChecksum(ticketLayer.content)
     }
   }
 
@@ -525,6 +542,7 @@ export const buildContextStack = async (
     if (lineageLayer) {
       layers.push(lineageLayer)
       remainingTokens -= lineageLayer.estimatedTokens
+      checksums.threadLineage = computeChecksum(lineageLayer.content)
     }
   }
 
@@ -534,6 +552,7 @@ export const buildContextStack = async (
     const execLayer = await buildExecutionState(thread, execBudget)
     if (execLayer) {
       layers.push(execLayer)
+      checksums.executionState = computeChecksum(execLayer.content)
     }
   }
 
@@ -547,5 +566,99 @@ export const buildContextStack = async (
     layers,
     totalTokens,
     formatted,
+    checksums,
+  }
+}
+
+// ─── Cached Builder (#304) ──────────────────────────────────────────
+
+/**
+ * Build a context stack with caching and session-aware change detection.
+ *
+ * This is the main entry point for #304 optimizations:
+ * - Checks for a cached stack first (avoids rebuilding)
+ * - When sessionId is provided, detects what changed since last injection
+ * - Records injection checksums for future change detection
+ * - Caches the result for subsequent calls
+ *
+ * Usage in router.ts:
+ *   - New session (no sessionId): call with forceRefresh=true, get full stack
+ *   - Resume session: call with sessionId, check changes.hasChanges
+ *     - If changes exist, inject only the delta as a system message
+ *     - If no changes, skip injection entirely (Claude still has the context)
+ */
+export const buildContextStackCached = async (
+  threadId: string,
+  opts: CachedContextStackOptions = {}
+): Promise<CachedContextStackResult> => {
+  const { sessionId, forceRefresh, ...buildOpts } = opts
+
+  // 1. Try cached stack (unless force refresh)
+  if (!forceRefresh) {
+    const cached = getCachedContextStack(threadId)
+    if (cached) {
+      // Reconstruct ThreadContextStack from cached version
+      const stack: ThreadContextStack = {
+        threadId: cached.threadId,
+        layers: cached.layers.map((l, i) => ({
+          layer: i + 2,
+          name: l.name,
+          content: l.content,
+          estimatedTokens: l.estimatedTokens,
+        })),
+        totalTokens: cached.totalTokens,
+        formatted: cached.formatted,
+        checksums: cached.checksums,
+      }
+
+      // If we have a sessionId, check what changed
+      const changes = sessionId
+        ? detectChanges(sessionId, cached.checksums)
+        : null
+
+      return { stack, fromCache: true, changes }
+    }
+  }
+
+  // 2. Build fresh
+  const stack = await buildContextStack(threadId, buildOpts)
+  if (!stack) {
+    return { stack: null, fromCache: false, changes: null }
+  }
+
+  // 3. Cache the result
+  const checksums = stack.checksums ?? {}
+  cacheContextStack({
+    threadId,
+    layers: stack.layers.map(l => ({
+      name: (layerNameToChecksumKey(l.name) || 'repoContext') as keyof LayerChecksums,
+      content: l.content,
+      checksum: computeChecksum(l.content),
+      estimatedTokens: l.estimatedTokens,
+    })),
+    totalTokens: stack.totalTokens,
+    formatted: stack.formatted,
+    checksums,
+  })
+
+  // 4. Session tracking
+  let changes: ChangeDetectionResult | null = null
+  if (sessionId) {
+    changes = detectChanges(sessionId, checksums)
+    // Record this injection for future change detection
+    recordInjection(sessionId, threadId, checksums)
+  }
+
+  return { stack, fromCache: false, changes }
+}
+
+/** Map layer display names to checksum keys */
+const layerNameToChecksumKey = (name: string): keyof LayerChecksums | null => {
+  switch (name) {
+    case 'Repo CLAUDE.md': return 'repoContext'
+    case 'Ticket Chain': return 'ticketChain'
+    case 'Thread Lineage': return 'threadLineage'
+    case 'Execution State': return 'executionState'
+    default: return null
   }
 }

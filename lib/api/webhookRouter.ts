@@ -18,6 +18,7 @@ import {
   getThreadActiveChannels,
 } from '../core/response-routing'
 import { acquireLock } from '../core/conversation-lock'
+import { invalidateForWebhook } from '../core/context-cache'
 
 import type { AgentMessage } from '../core/agent'
 import type { WebhookPayload, WebhookResult } from './webhooks'
@@ -360,14 +361,21 @@ export const routeWebhook = async (event: string, payload: WebhookPayload): Prom
   threadId = result.threadId
 
   // Update thread_ref status when issues/PRs are closed/merged
+  // Also invalidate context caches so stale data isn't re-injected (#304)
+  const repo = payload.repository?.name || ''
   if (event === 'issues' && payload.action === 'closed' && refs.length > 0) {
     for (const ref of refs) {
       try {
         await threads.updateThreadRefStatus(ref.repo, ref.ref_type, ref.number, 'closed')
       } catch { /* ignore */ }
     }
+    invalidateForWebhook('issue_close', repo, { number: payload.issue?.number })
+  }
+  if (event === 'issues' && (payload.action === 'edited' || payload.action === 'label_updated') && refs.length > 0) {
+    invalidateForWebhook('issue_update', repo, { number: payload.issue?.number })
   }
   if (event === 'pull_request' && refs.length > 0) {
+    const prNum = payload.number || payload.pull_request?.number
     const prStatus = payload.pull_request?.merged ? 'merged' : payload.action === 'closed' ? 'closed' : null
     if (prStatus) {
       for (const ref of refs) {
@@ -375,6 +383,17 @@ export const routeWebhook = async (event: string, payload: WebhookPayload): Prom
           await threads.updateThreadRefStatus(ref.repo, ref.ref_type, ref.number, prStatus)
         } catch { /* ignore */ }
       }
+      const eventType = payload.pull_request?.merged ? 'pr_merge' : 'pr_close'
+      invalidateForWebhook(eventType, repo, { number: prNum })
+    }
+  }
+  if (event === 'push' && payload.commits) {
+    const modifiedFiles = payload.commits.flatMap(c => [
+      ...(c.added || []),
+      ...(c.modified || []),
+    ])
+    if (modifiedFiles.length > 0) {
+      invalidateForWebhook('push', repo, { files: modifiedFiles })
     }
   }
 
