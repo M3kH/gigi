@@ -67,8 +67,18 @@ export const giteaTool = {
   },
 }
 
+/**
+ * Unescape literal escape sequences (e.g. backslash-n) that LLMs
+ * commonly produce in JSON tool-call strings.  Without this, Gitea
+ * receives "\\n" as two characters instead of an actual newline.
+ */
+const unescapeText = (s: string | undefined): string | undefined =>
+  s?.replace(/\\n/g, '\n').replace(/\\t/g, '\t')
+
 export const runGitea = async (input: GiteaInput): Promise<unknown> => {
-  const { action, owner, repo, number, title, body, head, base } = input
+  const { action, owner, repo, number, head, base } = input
+  const title = unescapeText(input.title)
+  const body  = unescapeText(input.body)
 
   let result: unknown
   switch (action) {
